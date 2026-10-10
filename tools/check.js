@@ -209,6 +209,12 @@ attempt('debug loadout mid-game', () => {
   sim.onAction('p1', { t: 'god', on: true }); __ok(p.god, 'god toggle failed');
   const q = sim.addPlayer('p2', 'BOB', 'RED', 'sword'); sim.onAction('p2', { t: 'debug', on: true, loadout: { sword: 4 } }); __ok(!q.dbg && !q.god, 'debug must stay dev-only');
 });
+attempt('god mode triple damage', () => {
+  const sim = freshSim(); const p = sim.players.p1; const e = sim.spawnEnemy('skeleton', 'ow', p.x + 2, p.y, { spawnFx: 0 }); e.hp = e.maxHp = 100;
+  p.god = false; sim.damageEnemy(e, 2, null, { pid: 'p1', ignoreIframes: true }); const normal = 100 - e.hp;
+  p.god = true; e.hurt = 0; const before = e.hp; sim.damageEnemy(e, 2, null, { pid: 'p1', ignoreIframes: true });
+  __ok(before - e.hp === normal * 3, 'god mode should deal triple damage');
+});
 // a full minute of play in a dungeon with everything going on
 attempt('dungeon minute', () => {
   const sim = freshSim(); for (const pid of ['p1', 'p2']) { const p = sim.players[pid]; const D = sim.W.levels.d5; sim.teleport(p, 'd5', D.spawn.x, D.spawn.y, -Math.PI / 2); }

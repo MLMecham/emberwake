@@ -4329,6 +4329,7 @@ class Sim {
   // opt: pid (who hit it), silver, pierceShield, ignoreIframes, stunOnly. Returns true if the hit landed.
   damageEnemy(e, dmg, src, opt) {
     const def = enemyDef(e.type); opt = opt || {}; if (e.dead || e.spawnFx > 0) return false;
+    const atk = opt.pid && this.players[opt.pid]; if (atk && atk.god) dmg *= 3; // god mode hits three times as hard
     if (e.dormant) { this.sfx('clink', e.lvl, e.x, e.y); this.wake(e); return false; }
     if (e.hurt > 0 && !opt.ignoreIframes) return false;
     if (def.shield && src && !opt.pierceShield) { // blocks hits from the front
