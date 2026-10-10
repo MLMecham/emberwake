@@ -5,8 +5,22 @@ A first-person, retro pixel-3D adventure: explore the Wilds, clear nine dungeons
 **Play:** open `index.html` in Chrome, Edge or Firefox, or play the hosted version on GitHub Pages.
 
 ## Co-op
-- **Room code / invite link (internet):** Menu → Invite Friends → Open Room. Send the link (`…/#join-ROOMNAME`) or the code `GLD-ROOMNAME`.
+- **Join code (internet):** the host opens Menu → Invite Friends, which shows a 5-character code like `K7QFM`. Friends pick Join a Friend and type it, or click the invite link (`…/#join-K7QFM`).
 - **No internet:** everyone joins the same hotspot or Wi-Fi, then use "No internet? Invite with a webcam" on both sides.
+- **When the host pauses** (opens the menu or switches to another tab), the game pauses for everyone.
+
+### If some friends can't join ("could not connect")
+Co-op connects computers straight to each other. Some home routers, school or work networks, and phone hotspots block that, so it fails for some people. The fix is a **relay** (a TURN server) that passes traffic along when a direct link is blocked. Metered's Open Relay is free up to 20 GB a month, which is plenty for this game.
+
+1. Sign up at https://www.metered.ca/tools/openrelay/ and create an app. Its name is the part before `.metered.live`.
+2. Copy the app's **API key** from the dashboard.
+3. Put both into `src/net/relay.js`:
+   ```js
+   const RELAY = { meteredApp: 'yourappname', meteredKey: 'your-api-key' };
+   ```
+4. Run `python build.py`, then push.
+
+The pause menu shows `DIRECT` or `RELAY` for each connection. That key can only fetch relay credentials, so it's fine to have it in a public repo.
 
 ## Controls
 WASD move · mouse look (click to lock, or hold a button and drag) · click/Space attack · right-click/E item · Q/R/wheel switch item · hold F next to a fallen friend to help them up · M map · Esc menu. Gamepads work too.

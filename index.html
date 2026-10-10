@@ -50,7 +50,7 @@ label.chk.big { font-size:13px; color:var(--gold); }
 details { margin-top:14px; border:2px dashed #3a2f4e; padding:8px 10px; }
 summary { cursor:pointer; font-size:12px; color:var(--dim); }
 summary:hover { color:var(--gold); }
-.roomcode { font-size:28px; color:var(--gold); text-align:center; margin:12px 0 4px; letter-spacing:.12em; }
+.roomcode { font-size:48px; color:var(--gold); text-align:center; margin:8px 0 8px; letter-spacing:.3em; }
 .keys { display:grid; grid-template-columns:auto 1fr; gap:4px 12px; font-size:11px; } .keys b { color:var(--gold); font-weight:normal; }
 /* touch controls */
 #touch { position:fixed; inset:0; z-index:5; display:none; pointer-events:none; }
@@ -95,8 +95,8 @@ summary:hover { color:var(--gold); }
 <div id="joinScreen" class="screen">
   <div class="panel">
     <h2>JOIN A FRIEND</h2>
-    <label for="joinWord">ROOM CODE OR INVITE LINK</label>
-    <div class="row"><input id="joinWord" type="text" placeholder="GLD-EMBERFOX"><button id="joinOnlineBtn" class="primary" style="flex:0 0 120px">JOIN</button></div>
+    <label for="joinWord">YOUR FRIEND'S CODE</label>
+    <div class="row"><input id="joinWord" type="text" placeholder="K7QFM" autocomplete="off" spellcheck="false" style="text-transform:uppercase;font-size:1.6em;letter-spacing:0.25em;text-align:center"><button id="joinOnlineBtn" class="primary" style="flex:0 0 120px">JOIN</button></div>
     <div class="status" id="joinStatus"></div>
     <details id="joinOffline">
       <summary>NO INTERNET? JOIN WITH A WEBCAM</summary>
@@ -165,10 +165,10 @@ summary:hover { color:var(--gold); }
 <div id="inviteScreen" class="screen">
   <div class="panel">
     <h2>INVITE FRIENDS</h2>
-    <label for="onlineWord">ROOM NAME</label>
-    <div class="row"><input id="onlineWord" type="text" maxlength="16"><button id="invOnlineBtn" class="primary" style="flex:0 0 150px">OPEN ROOM</button></div>
     <div id="roomBox" style="display:none">
+      <label>YOUR CODE - FRIENDS TYPE THIS TO JOIN</label>
       <div class="roomcode" id="roomCode"></div>
+      <button id="roomCodeCopy">COPY CODE</button>
       <div id="roomLinkRow">
         <label for="roomLink">INVITE LINK - SEND IT, THEY CLICK IT</label>
         <div class="row"><input id="roomLink" type="text" readonly><button id="roomCopy" style="flex:0 0 120px">COPY LINK</button></div>
@@ -176,6 +176,7 @@ summary:hover { color:var(--gold); }
       <p class="dim" id="roomNote"></p>
     </div>
     <div class="status" id="invStatus"></div>
+    <button id="invRetry" style="display:none">TRY AGAIN</button>
     <details id="invOffline">
       <summary>NO INTERNET? INVITE WITH A WEBCAM</summary>
       <p class="dim">EVERYONE JOINS THE SAME HOTSPOT OR WI-FI (NO INTERNET NEEDED). ONE INVITE PER FRIEND.</p>
@@ -12917,6 +12918,7 @@ function initTextures() {
     else if (t.frames) { TEX[name] = []; for (let f = 0; f < t.frames; f++) TEX[name].push(makeTex((x, y, r) => t.fn(x, y, r, f, ctx), t.seed)); }
     else TEX[name] = makeTex((x, y, r) => t.fn(x, y, r, ctx), t.seed);
   }
+  TEX.cexit = makeTex((x, y) => { const dx = (x - 15.5) / 10, dy = (y - 31) / 26; const d = dx * dx + dy * dy; if (d < 1) return d > 0.8 ? [120, 96, 70] : shade([250, 240, 200], 0.85 + 0.15 * (y / 31)); return ctx.texPx('cwall', x, y); });
   TEX.shardwall = makeTex((x, y) => { const d = Math.abs(x - 16) + Math.abs(y - 16); if (d < 9) return d < 5 ? [255, 230, 120] : [240, 140, 40]; const i = y * TS + x; const v = TEX.brick[i]; return shade([v & 255, (v >> 8) & 255, (v >> 16) & 255], 0.7); });
 }
 
@@ -12960,6 +12962,7 @@ defTile(TL.SHOPWALL, { solid: true, wall: 'shop' });
 defTile(TL.STAIRS, { floor: 'stairs', stairs: true });
 defTile(TL.SHARDGATE, { solid: true, wall: 'shardwall', shardGate: true });
 defTile(TL.BUSHFLOOR, { floor: 'grass' });
+defTile(TL.CEXIT = 27, { solid: true, wall: 'cexit', exitWall: true }); // daylight archway out of a cave
 
 // props drawn as sprites on tiles
 const PROPS = [null, 'tree', 'pine', 'boulder', 'bush', 'cactus', 'grave', 'statue', 'sign', 'flame', 'pedestal'];
@@ -15481,7 +15484,7 @@ function placeCave(W, L, r, rnd, kind, secret) {
 function genCave(W, id, kind, exit, rnd) {
   const w = 13, h = 9; const L = new Level(id, 'cave', w, h); W.levels[id] = L; L.caveKind = kind;
   for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) L.set(x, y, (x === 0 || y === 0 || x === w - 1 || y === h - 1) ? TL.CWALL : TL.CFLOOR);
-  L.set(6, h - 1, TL.EXIT); L.set(6, h - 2, TL.EXIT);
+  L.set(6, h - 1, TL.CEXIT); L.set(6, h - 2, TL.EXIT); // archway in the wall, and the step in front of it takes you out
   L.exit = exit; L.spawn = { x: 6.5, y: h - 2.6, a: -Math.PI / 2 };
   L.props[L.idx(3, 2)] = PR.FLAME; L.props[L.idx(9, 2)] = PR.FLAME;
   const c = Content.caves[kind]; if (!c) return;
@@ -16173,7 +16176,7 @@ class Sim {
     const en = []; for (const e of this.ents) if (e.lvl === p.lvl) en.push(this.entView(e));
     const pl = []; for (const o of Object.values(this.players)) pl.push([o.id, o.lvl, Math.round(o.x * 100) / 100, Math.round(o.y * 100) / 100, Math.round(o.a * 100) / 100, o.color, o.armor, o.cls, o.alive ? 1 : 0, o.atk, o.name, Math.round(o.revive / REVIVE_TIME * 100) / 100, o.hp, o.maxHp, o.reviver || 0]);
     const me = {}; for (const k of ['lvl', 'hp', 'maxHp', 'gems', 'bombs', 'maxBombs', 'arrows', 'sword', 'armor', 'items', 'potions', 'alive', 'cls', 'sel', 'color', 'name', 'dbg', 'god']) me[k] = p[k];
-    return { t: 's', me, pl, en, team: { keys: this.team.keys, maps: this.team.maps, comps: this.team.comps, shards: this.team.shards, done: this.team.done }, mv: this.modVer, over: this.over > 0 };
+    return { t: 's', paused: !!this.paused, pausedBy: this.pausedBy, me, pl, en, team: { keys: this.team.keys, maps: this.team.maps, comps: this.team.comps, shards: this.team.shards, done: this.team.done }, mv: this.modVer, over: this.over > 0 };
   }
   // ---- save ----
   makeSave() {
@@ -16710,6 +16713,50 @@ function readInput(dt) {
   return o;
 }
 
+// ---- src/net/relay.js ----
+// ===== net/relay.js : relay settings for online co-op (room codes / invite links) =====
+// Most players connect directly. Some networks (school or work Wi-Fi, phone hotspots, some home routers) block direct
+// connections, so those players need a relay to pass the game traffic through.
+//
+// To make joining reliable for everyone, set up a free relay (about 2 minutes):
+//   1. Sign up at https://www.metered.ca/tools/openrelay/ (free: 20 GB a month, which is roughly 90 hours of relayed play).
+//   2. In your Metered dashboard, find your app name (the part before .metered.live) and your TURN API key.
+//   3. Paste them below, run `python build.py`, and push.
+const RELAY = {
+  meteredApp: '',   // e.g. 'emberwake'  (from https://emberwake.metered.live)
+  meteredKey: '',   // your TURN credentials API key
+};
+// Always-on fallbacks: public address-discovery (STUN) servers, plus PeerJS's own free relay (slow and often full).
+const FALLBACK_ICE = [
+  { urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302'] },
+  { urls: 'stun:stun.cloudflare.com:3478' },
+  { urls: ['turn:eu-0.turn.peerjs.com:3478', 'turn:us-0.turn.peerjs.com:3478'], username: 'peerjs', credential: 'peerjsp' },
+];
+let _iceCache = null;
+async function iceServers() {
+  if (_iceCache && Date.now() - _iceCache.t < 30 * 60 * 1000) return _iceCache.list;
+  let list = FALLBACK_ICE.slice();
+  if (RELAY.meteredApp && RELAY.meteredKey) {
+    try {
+      const r = await fetch('https://' + RELAY.meteredApp + '.metered.live/api/v1/turn/credentials?apiKey=' + encodeURIComponent(RELAY.meteredKey));
+      if (r.ok) { const servers = await r.json(); if (Array.isArray(servers) && servers.length) list = servers.concat(FALLBACK_ICE); }
+    } catch (e) { console.warn('Relay credentials unavailable, using fallbacks', e); }
+  }
+  _iceCache = { t: Date.now(), list }; return list;
+}
+function relayConfigured() { return !!(RELAY.meteredApp && RELAY.meteredKey); }
+// After connecting, look at which route WebRTC picked: 'DIRECT' (same network or peer-to-peer) or 'RELAY'.
+async function connectionKind(pc) {
+  try {
+    const stats = await pc.getStats(); let pair = null; const cands = {};
+    stats.forEach(s => { if (s.type === 'transport' && s.selectedCandidatePairId) pair = stats.get(s.selectedCandidatePairId); if (s.type === 'local-candidate' || s.type === 'remote-candidate') cands[s.id] = s; });
+    if (!pair) stats.forEach(s => { if (s.type === 'candidate-pair' && (s.selected || s.nominated) && s.state === 'succeeded') pair = pair || s; });
+    if (!pair) return '?';
+    const l = cands[pair.localCandidateId], r = cands[pair.remoteCandidateId];
+    return (l && l.candidateType === 'relay') || (r && r.candidateType === 'relay') ? 'RELAY' : 'DIRECT';
+  } catch (e) { return '?'; }
+}
+
 // ---- src/net/net.js ----
 // ===== net.js : WebRTC co-op with QR / code signaling, optional online short codes =====
 'use strict';
@@ -16826,32 +16873,36 @@ function joinerStart(conn) {
 }
 // ----- ONLINE (internet) short codes via PeerJS cloud -----
 function onlineId(code) { return 'emberwake-gld-' + code.toLowerCase().replace(/[^a-z0-9]/g, ''); }
-function onlineHost(code) {
+async function peerOptions() { return Object.assign({ debug: 0, config: { iceServers: await iceServers() } }, window.EW_PEER_OPTS || {}); }
+async function onlineHost(code) {
+  const opts = await peerOptions();
   return new Promise((res, rej) => {
     if (!window.peerjs) return rej(new Error('Online library missing'));
-    const peer = new peerjs.Peer(onlineId(code), Object.assign({ debug: 0 }, window.EW_PEER_OPTS || {})); NET.peer = peer;
+    const peer = new peerjs.Peer(onlineId(code), opts); NET.peer = peer;
     peer.on('open', () => res(peer));
-    peer.on('error', (e) => rej(new Error(e.type === 'unavailable-id' ? 'That code is taken. Try another word.' : e.type === 'network' || e.type === 'server-error' ? 'No internet. Use the QR method instead.' : String(e.type || e))));
+    peer.on('error', (e) => rej(Object.assign(new Error(e.type === 'unavailable-id' ? 'That code is taken.' : e.type === 'network' || e.type === 'server-error' ? 'No internet. Use the QR method instead.' : String(e.type || e)), { type: e.type })));
     peer.on('connection', (dc) => {
       const conn = new Conn((s) => dc.send(s), () => dc.close());
-      dc.on('open', () => { conn.open = true; hostAttach(conn); });
+      dc.on('open', () => { conn.open = true; hostAttach(conn); setTimeout(async () => { conn.kind = await connectionKind(dc.peerConnection); netStatus(); }, 1500); });
       dc.on('data', (d) => { try { conn.onmsg && conn.onmsg(typeof d === 'string' ? JSON.parse(d) : d); } catch (e) { } });
       dc.on('close', () => { conn.open = false; conn.onclose && conn.onclose(); });
     });
   });
 }
-function onlineJoin(code) {
+async function onlineJoin(code) {
+  const opts = await peerOptions();
   return new Promise((res, rej) => {
     if (!window.peerjs) return rej(new Error('Online library missing'));
-    const peer = new peerjs.Peer(Object.assign({ debug: 0 }, window.EW_PEER_OPTS || {})); NET.peer = peer; let done = false;
+    const peer = new peerjs.Peer(opts); NET.peer = peer; let done = false;
     peer.on('error', (e) => { if (!done) rej(new Error(e.type === 'peer-unavailable' ? 'No game found with that code.' : e.type === 'network' || e.type === 'server-error' ? 'No internet. Use the QR method instead.' : String(e.type || e))); });
     peer.on('open', () => {
       const dc = peer.connect(onlineId(code), { reliable: true, serialization: 'raw' });
       const conn = new Conn((s) => dc.send(s), () => dc.close());
-      dc.on('open', () => { conn.open = true; done = true; res(conn); });
+      dc.on('open', () => { conn.open = true; done = true; res(conn); setTimeout(async () => { NET.kind = await connectionKind(dc.peerConnection); }, 1500); });
       dc.on('data', (d) => { try { conn.onmsg && conn.onmsg(typeof d === 'string' ? JSON.parse(d) : d); } catch (e) { } });
       dc.on('close', () => { conn.open = false; conn.onclose && conn.onclose(); });
-      setTimeout(() => { if (!done) rej(new Error('Timed out. Check the code.')); }, 12000);
+      // The host was found (otherwise we'd have had "no game found"), but no route got through.
+      setTimeout(() => { if (!done) { done = true; try { peer.destroy(); } catch (e) { } NET.peer = null; rej(new Error(relayConfigured() ? 'FOUND THE GAME BUT COULD NOT CONNECT. TRY AGAIN, OR JOIN THE SAME WI-FI/HOTSPOT AS THE HOST.' : 'FOUND THE GAME BUT COULD NOT CONNECT. ONE OF YOUR NETWORKS BLOCKS DIRECT CONNECTIONS. THE HOST CAN FIX THIS BY SETTING UP THE FREE RELAY (SEE README), OR JOIN THE SAME WI-FI/HOTSPOT.')); } }, 20000);
     });
   });
 }
@@ -17120,9 +17171,23 @@ function loop(now) {
     else if (inp.map) { G.state = 'map'; }
   } else if (G.state === 'map') { if (inp.map || inp.pause || inp.confirm) G.state = 'play'; }
   else if (G.state === 'pause' && inp.pause && performance.now() - (G.pauseAt || 0) > 400 && $('pauseScreen').classList.contains('on')) resume();
-  // host simulation
-  const soloPaused = Object.keys(NET.conns).length === 0 && !NET.peer && (G.state === 'pause' || G.state === 'map' || (G.local && G.local.dialog));
-  if (NET.role === 'host' && G.sim && G.state !== 'title' && !soloPaused) {
+  if (NET.role === 'host' && G.sim) hostStep(rdt, now);
+  else if (NET.role === 'client' && NET.hostConn && now - G.lastSend > 50) {
+    G.lastSend = now; const Lc = G.local; NET.hostConn.send({ t: 'ps', lvl: Lc.lvl, x: Math.round(Lc.x * 100) / 100, y: Math.round(Lc.y * 100) / 100, a: Math.round(Lc.a * 100) / 100, atk: Lc.atkVis > 0 ? 1 : 0, sel: Lc.sel });
+  }
+  const hostPaused = NET.role === 'client' && G.snap && G.snap.paused;
+  if (G.state === 'play' && !hostPaused) updateLocal(dt, inp);
+  draw(dt);
+}
+// The host runs the game for everyone. Opening the pause menu pauses the whole party (solo also pauses for map and dialogs).
+function hostPausedNow() {
+  const multi = Object.keys(NET.conns).length > 0 || !!NET.peer;
+  if (G.state === 'pause') return true;
+  return !multi && (G.state === 'map' || (G.local && G.local.dialog));
+}
+function hostStep(rdt, now) {
+  const paused = hostPausedNow(); G.sim.paused = paused && G.state === 'pause'; G.sim.pausedBy = G.profile.name;
+  if (!paused && G.state !== 'title') {
     const Lc = G.local; const mp = G.sim.players[G.myId];
     if (mp && G.state === 'play') G.sim.onPlayerState(G.myId, { lvl: Lc.lvl, x: Lc.x, y: Lc.y, a: Lc.a, atk: Lc.atkVis > 0 ? 1 : 0, sel: Lc.sel });
     // fixed steps that catch up after slow frames, so game time keeps pace with real time
@@ -17131,16 +17196,19 @@ function loop(now) {
     const evs = G.sim.events; G.sim.events = [];
     G.events.push(...evs);
     for (const e of evs) handleEvent(e);
-    G.snap = G.sim.snapshotFor(G.myId);
-    if (now - G.lastBcast > 50) { G.lastBcast = now; hostBroadcast(G.events); G.events = []; }
     if (G.sim.autosave) { G.sim.autosave = false; writeSave(); }
-  } else if (NET.role === 'host' && G.sim) { G.snap = G.sim.snapshotFor(G.myId);
-  } else if (NET.role === 'client' && NET.hostConn && now - G.lastSend > 50) {
-    G.lastSend = now; const Lc = G.local; NET.hostConn.send({ t: 'ps', lvl: Lc.lvl, x: Math.round(Lc.x * 100) / 100, y: Math.round(Lc.y * 100) / 100, a: Math.round(Lc.a * 100) / 100, atk: Lc.atkVis > 0 ? 1 : 0, sel: Lc.sel });
   }
-  if (G.state === 'play') updateLocal(dt, inp);
-  draw(dt);
+  G.snap = G.sim.snapshotFor(G.myId);
+  if (now - G.lastBcast > 50) { G.lastBcast = now; hostBroadcast(G.events); G.events = []; }
 }
+// Browsers stop animating hidden tabs. If the host switches away mid-game, pause everyone, and keep a heartbeat going
+// from a worker (workers aren't throttled) so friends still get the "paused" message and stay connected.
+document.addEventListener('visibilitychange', () => { if (document.hidden && NET.role === 'host' && G.state === 'play' && Object.keys(NET.conns).length) openPause(); });
+try {
+  const hb = new Worker(URL.createObjectURL(new Blob(['setInterval(function(){postMessage(0)},100)'], { type: 'text/javascript' })));
+  let last = performance.now();
+  hb.onmessage = () => { const now = performance.now(); const rdt = Math.min(0.25, (now - last) / 1000); last = now; if (document.hidden && NET.role === 'host' && G.sim && G.state !== 'title') hostStep(rdt, now); };
+} catch (e) { }
 function draw(dt) {
   const Lc = G.local; const snap = G.snap; const L = G.world.levels[Lc.lvl];
   if (!L) return;
@@ -17176,6 +17244,7 @@ function draw(dt) {
   if (Lc.fade < 1) rectA(0, 0, R.W, R.H, rgb(0, 0, 0), 1 - Lc.fade);
   if (snap && snap.over) { textC('THE PARTY HAS FALLEN', R.W / 2, R.H / 2 + 20, rgb(255, 60, 60)); }
   if (G.disconnected) textC('DISCONNECTED - PRESS ESC', R.W / 2, R.H - 40, rgb(255, 100, 100));
+  if (NET.role === 'client' && snap && snap.paused) { rectA(0, R.H / 2 - 18, R.W, 30, rgb(0, 0, 0), 0.7); textC('PAUSED BY ' + (snap.pausedBy || 'HOST'), R.W / 2, R.H / 2 - 12, rgb(255, 220, 120)); textC('WAITING FOR THE HOST TO RESUME', R.W / 2, R.H / 2, rgb(220, 220, 230)); }
   if (G.showFps) text(Math.round(G.fps) + ' FPS', R.W - 50, R.H - 20, rgb(255, 255, 0));
   present();
 }
@@ -17206,7 +17275,9 @@ function updatePauseInfo() {
   const dOn = !!(G.snap && G.snap.me && G.snap.me.dbg); $('pDebug').style.display = dOn ? '' : 'none';
   const dev = isDevName(G.snap && G.snap.me ? G.snap.me.name : G.profile.name); $('pDbgToggle').style.display = dev ? '' : 'none'; $('pDbgToggle').textContent = 'DEBUG: ' + (dOn ? 'ON' : 'OFF');
   if (dOn && !$('pWarps').childElementCount) { const mk = (label, to) => { const b = document.createElement('button'); b.textContent = label; b.onclick = () => { sendAction({ t: 'warp', to }); resume(); }; $('pWarps').appendChild(b); }; mk('WILDS', 'ow'); for (let d = 1; d <= 9; d++) mk('L' + d, 'd' + d); }
-  $('pInfo').textContent = (NET.role === 'host' ? 'HOSTING' : NET.role === 'client' ? 'CONNECTED' : 'SOLO') + ' - ' + n + ' PLAYER' + (n > 1 ? 'S' : '') + (me ? ' - ' + (me.cls === 'monk' ? 'MARTIAL ARTIST' : 'SWORD') : '');
+  const kinds = NET.role === 'host' ? Object.values(NET.conns).map(c => c.kind).filter(Boolean) : NET.kind ? [NET.kind] : [];
+  $('pInfo').title = kinds.length ? 'Connection: ' + kinds.join(', ') : '';
+  $('pInfo').textContent = (NET.role === 'host' ? 'HOSTING' : NET.role === 'client' ? 'CONNECTED' : 'SOLO') + ' - ' + n + ' PLAYER' + (n > 1 ? 'S' : '') + (me ? ' - ' + (me.cls === 'monk' ? 'MARTIAL ARTIST' : 'SWORD') : '') + (kinds.length ? ' - ' + [...new Set(kinds)].join('/') : '');
 }
 const KONAMI = ['ArrowUp', 'ArrowUp', 'ArrowDown', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'ArrowLeft', 'ArrowRight', 'KeyB', 'KeyA'];
 let konamiIdx = 0;
@@ -17259,23 +17330,29 @@ async function hostTakeReply(code) {
   try { await hostAcceptReply(code); el.textContent = 'CONNECTING...'; setTimeout(() => { el.textContent = 'CONNECTED PLAYERS: ' + Object.keys(NET.conns).length + '. TAP NEW INVITE TO ADD ANOTHER.'; }, 1500); sfx('menu'); }
   catch (e) { el.textContent = 'ERROR: ' + e.message; }
 }
-const ROOM_WORDS = ['EMBER', 'FOX', 'WYRM', 'OWL', 'STONE', 'TIDE', 'ASH', 'MOSS', 'IRON', 'STAR', 'BRAMBLE', 'CROW', 'FLINT', 'GALE', 'HOLLOW', 'RAVEN'];
-function randomRoom() { const r = () => ROOM_WORDS[Math.random() * ROOM_WORDS.length | 0]; let a = r(), b = r(); while (b === a) b = r(); return a + b; }
+// Room codes: 5 characters with no look-alikes (no 0/O, 1/I/L). Old GLD- codes and links still work.
+const ROOM_CHARS = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
+function randomRoom() { let c = ''; for (let i = 0; i < 5; i++) c += ROOM_CHARS[Math.random() * ROOM_CHARS.length | 0]; return c; }
 function cleanRoom(w) { w = String(w || '').trim(); const m = w.match(/#join[-=]?([A-Za-z0-9]+)/i); if (m) w = m[1]; return w.replace(/^GLD-?/i, '').replace(/[^A-Za-z0-9]/g, '').toUpperCase().slice(0, 16); }
 function inviteLink(word) { if (!/^https?:/.test(location.protocol)) return null; return location.origin + location.pathname + '#join-' + word; }
 async function hostOnline() {
-  const word = cleanRoom($('onlineWord').value) || randomRoom(); $('onlineWord').value = word; const el = $('invStatus');
-  if (NET.peer && NET.roomWord === word) { showRoom(word); return; }
-  if (NET.peer) { try { NET.peer.destroy(); } catch (e) { } NET.peer = null; }
-  el.textContent = 'OPENING ROOM...';
-  try { await onlineHost(word); NET.roomWord = word; el.textContent = 'ROOM OPEN. PLAYERS: ' + Object.keys(NET.conns).length; showRoom(word); sfx('secret'); }
-  catch (e) { el.textContent = e.message; }
+  const el = $('invStatus');
+  if (NET.peer && NET.roomWord) { showRoom(NET.roomWord); el.textContent = 'PLAYERS CONNECTED: ' + Object.keys(NET.conns).length; return; }
+  $('roomBox').style.display = 'none'; el.textContent = 'MAKING YOUR CODE...';
+  for (let tries = 0; tries < 4; tries++) {
+    const word = randomRoom();
+    if (NET.peer) { try { NET.peer.destroy(); } catch (e) { } NET.peer = null; }
+    try { await onlineHost(word); NET.roomWord = word; el.textContent = 'PLAYERS CONNECTED: ' + Object.keys(NET.conns).length; showRoom(word); sfx('secret'); return; }
+    catch (e) { if (e.type !== 'unavailable-id') { el.textContent = e.message; $('invRetry').style.display = ''; return; } }
+  }
+  el.textContent = 'COULD NOT MAKE A CODE. TRY AGAIN.'; $('invRetry').style.display = '';
 }
 function showRoom(word) {
-  $('roomBox').style.display = 'block'; $('roomCode').textContent = 'GLD-' + word;
+  $('invRetry').style.display = 'none';
+  $('roomBox').style.display = 'block'; $('roomCode').textContent = word;
   const link = inviteLink(word);
   $('roomLinkRow').style.display = link ? '' : 'none'; if (link) $('roomLink').value = link;
-  $('roomNote').textContent = link ? 'OR THEY CAN OPEN THE GAME, PICK JOIN, AND TYPE GLD-' + word + '.' : 'FRIENDS OPEN THEIR COPY OF THE GAME, PICK JOIN A FRIEND, AND TYPE GLD-' + word + '. (CLICKABLE LINKS WORK WHEN THE GAME IS ON A WEBSITE.)';
+  $('roomNote').textContent = 'FRIENDS PICK JOIN A FRIEND AND TYPE THIS CODE.' + (link ? ' OR SEND THEM THE LINK.' : '') + (relayConfigured() ? '' : ' IF A FRIEND SEES "COULD NOT CONNECT", SET UP THE FREE RELAY (SEE README).');
 }
 async function joinScan() {
   const el = $('joinStatus'); $('joinScanWrap').style.display = 'block';
@@ -17292,8 +17369,8 @@ async function joinWithCode(code) {
   } catch (e) { el.textContent = 'ERROR: ' + e.message; }
 }
 async function joinOnline() {
-  const el = $('joinStatus'); const word = cleanRoom($('joinWord').value); if (!word) { el.textContent = 'ENTER THE ROOM CODE YOUR FRIEND SENT'; return; }
-  el.textContent = 'CONNECTING TO GLD-' + word + '...'; audioInit();
+  const el = $('joinStatus'); const word = cleanRoom($('joinWord').value); if (!word) { el.textContent = 'TYPE YOUR FRIEND\'S CODE'; return; }
+  el.textContent = 'CONNECTING TO ' + word + '...'; audioInit();
   try { const conn = await onlineJoin(word); el.textContent = 'CONNECTED! LOADING...'; joinerStart(conn); } catch (e) { el.textContent = e.message; }
 }
 function quitToTitle() {
@@ -17335,7 +17412,7 @@ function bindUI() {
   on('joinOnlineBtn', joinOnline);
   on('joinCopy', () => { $('joinReplyCode').select(); try { navigator.clipboard.writeText($('joinReplyCode').value); showToast('COPIED'); } catch (e) { document.execCommand('copy'); } });
   on('pResume', resume);
-  on('pInvite', () => { showScreen('inviteScreen'); if (!$('onlineWord').value) $('onlineWord').value = NET.roomWord || randomRoom(); if (NET.roomWord) showRoom(NET.roomWord); $('invStatus').textContent = 'PLAYERS CONNECTED: ' + Object.keys(NET.conns).length; });
+  on('pInvite', () => { showScreen('inviteScreen'); hostOnline(); });
   on('roomCopy', () => { const v = $('roomLink').value; try { navigator.clipboard.writeText(v).then(() => showToast('INVITE LINK COPIED'), () => { $('roomLink').select(); }); } catch (e) { $('roomLink').select(); } });
   $('joinWord').onkeydown = (e) => { if (e.key === 'Enter') { audioInit(); joinOnline(); } };
   on('pSave', () => { writeSave(); showToast('GAME SAVED'); });
@@ -17345,7 +17422,7 @@ function bindUI() {
   on('invNew', hostInviteQR);
   on('invScan', hostScanReply);
   on('invPasteBtn', () => { const c = $('invPaste').value.trim(); if (c) hostTakeReply(c); });
-  on('invOnlineBtn', hostOnline);
+  on('invRetry', hostOnline); on('roomCodeCopy', () => { try { navigator.clipboard.writeText(NET.roomWord || '').then(() => showToast('CODE COPIED')); } catch (e) { } });
   on('invCopy', () => { $('invCode').select(); try { navigator.clipboard.writeText($('invCode').value); showToast('COPIED'); } catch (e) { document.execCommand('copy'); } });
   on('winBack', quitToTitle); on('overBack', quitToTitle);
   on('hudPause', () => { if (G.state === 'play') openPause(); });
@@ -17375,7 +17452,7 @@ function boot() {
   window.G = G;
   // invite links: game.html#join-EMBERFOX
   const hm = location.hash.match(/^#join[-=]?([A-Za-z0-9]+)/i);
-  if (hm) { showScreen('joinScreen'); $('joinWord').value = 'GLD-' + cleanRoom(hm[1]); $('joinStatus').textContent = 'PICK YOUR NAME AND COLOR ON THE TITLE SCREEN FIRST IF YOU LIKE, OR PRESS JOIN.'; }
+  if (hm) { showScreen('joinScreen'); $('joinWord').value = cleanRoom(hm[1]); $('joinStatus').textContent = 'PICK YOUR NAME AND COLOR ON THE TITLE SCREEN FIRST IF YOU LIKE, OR PRESS JOIN.'; }
 }
 window.addEventListener('load', boot);
 </script>

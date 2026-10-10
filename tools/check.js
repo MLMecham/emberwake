@@ -151,6 +151,12 @@ attempt('dungeon minute', () => {
 `;
 try { vm.runInContext(tests, ctx, { filename: 'tests.js' }); } catch (e) { failures.push('test harness crashed: ' + e.stack); }
 
+// browser-only files (render, input, net, ui) aren't run here, so at least make sure they parse
+for (const f of ['src/engine/render.js', 'src/engine/audio.js', 'src/engine/input.js', 'src/net/relay.js', 'src/net/net.js', 'src/ui/debug.js', 'src/ui/main.js']) {
+  const fp = path.join(__dirname, '..', f); if (!fs.existsSync(fp)) continue;
+  try { new vm.Script(fs.readFileSync(fp, 'utf8'), { filename: f }); passes++; } catch (e) { failures.push(f + ': syntax error: ' + e.message + '\n' + (e.stack || '').split('\n').slice(0, 3).join('\n')); }
+}
+
 if (failures.length) {
   const uniq = [...new Set(failures)];
   for (let i = 0; i < uniq.length; i++) uniq[i] = where(uniq[i]);

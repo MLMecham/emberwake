@@ -50,7 +50,7 @@ label.chk.big { font-size:13px; color:var(--gold); }
 details { margin-top:14px; border:2px dashed #3a2f4e; padding:8px 10px; }
 summary { cursor:pointer; font-size:12px; color:var(--dim); }
 summary:hover { color:var(--gold); }
-.roomcode { font-size:28px; color:var(--gold); text-align:center; margin:12px 0 4px; letter-spacing:.12em; }
+.roomcode { font-size:48px; color:var(--gold); text-align:center; margin:8px 0 8px; letter-spacing:.3em; }
 .keys { display:grid; grid-template-columns:auto 1fr; gap:4px 12px; font-size:11px; } .keys b { color:var(--gold); font-weight:normal; }
 /* touch controls */
 #touch { position:fixed; inset:0; z-index:5; display:none; pointer-events:none; }
@@ -95,8 +95,8 @@ summary:hover { color:var(--gold); }
 <div id="joinScreen" class="screen">
   <div class="panel">
     <h2>JOIN A FRIEND</h2>
-    <label for="joinWord">ROOM CODE OR INVITE LINK</label>
-    <div class="row"><input id="joinWord" type="text" placeholder="GLD-EMBERFOX"><button id="joinOnlineBtn" class="primary" style="flex:0 0 120px">JOIN</button></div>
+    <label for="joinWord">YOUR FRIEND'S CODE</label>
+    <div class="row"><input id="joinWord" type="text" placeholder="K7QFM" autocomplete="off" spellcheck="false" style="text-transform:uppercase;font-size:1.6em;letter-spacing:0.25em;text-align:center"><button id="joinOnlineBtn" class="primary" style="flex:0 0 120px">JOIN</button></div>
     <div class="status" id="joinStatus"></div>
     <details id="joinOffline">
       <summary>NO INTERNET? JOIN WITH A WEBCAM</summary>
@@ -165,10 +165,10 @@ summary:hover { color:var(--gold); }
 <div id="inviteScreen" class="screen">
   <div class="panel">
     <h2>INVITE FRIENDS</h2>
-    <label for="onlineWord">ROOM NAME</label>
-    <div class="row"><input id="onlineWord" type="text" maxlength="16"><button id="invOnlineBtn" class="primary" style="flex:0 0 150px">OPEN ROOM</button></div>
     <div id="roomBox" style="display:none">
+      <label>YOUR CODE - FRIENDS TYPE THIS TO JOIN</label>
       <div class="roomcode" id="roomCode"></div>
+      <button id="roomCodeCopy">COPY CODE</button>
       <div id="roomLinkRow">
         <label for="roomLink">INVITE LINK - SEND IT, THEY CLICK IT</label>
         <div class="row"><input id="roomLink" type="text" readonly><button id="roomCopy" style="flex:0 0 120px">COPY LINK</button></div>
@@ -176,6 +176,7 @@ summary:hover { color:var(--gold); }
       <p class="dim" id="roomNote"></p>
     </div>
     <div class="status" id="invStatus"></div>
+    <button id="invRetry" style="display:none">TRY AGAIN</button>
     <details id="invOffline">
       <summary>NO INTERNET? INVITE WITH A WEBCAM</summary>
       <p class="dim">EVERYONE JOINS THE SAME HOTSPOT OR WI-FI (NO INTERNET NEEDED). ONE INVITE PER FRIEND.</p>

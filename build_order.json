@@ -60,6 +60,10 @@
       "browser": true
     },
     {
+      "path": "src/net/relay.js",
+      "browser": true
+    },
+    {
       "path": "src/net/net.js",
       "browser": true
     },

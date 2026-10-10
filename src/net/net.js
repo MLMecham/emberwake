@@ -113,32 +113,36 @@ function joinerStart(conn) {
 }
 // ----- ONLINE (internet) short codes via PeerJS cloud -----
 function onlineId(code) { return 'emberwake-gld-' + code.toLowerCase().replace(/[^a-z0-9]/g, ''); }
-function onlineHost(code) {
+async function peerOptions() { return Object.assign({ debug: 0, config: { iceServers: await iceServers() } }, window.EW_PEER_OPTS || {}); }
+async function onlineHost(code) {
+  const opts = await peerOptions();
   return new Promise((res, rej) => {
     if (!window.peerjs) return rej(new Error('Online library missing'));
-    const peer = new peerjs.Peer(onlineId(code), Object.assign({ debug: 0 }, window.EW_PEER_OPTS || {})); NET.peer = peer;
+    const peer = new peerjs.Peer(onlineId(code), opts); NET.peer = peer;
     peer.on('open', () => res(peer));
-    peer.on('error', (e) => rej(new Error(e.type === 'unavailable-id' ? 'That code is taken. Try another word.' : e.type === 'network' || e.type === 'server-error' ? 'No internet. Use the QR method instead.' : String(e.type || e))));
+    peer.on('error', (e) => rej(Object.assign(new Error(e.type === 'unavailable-id' ? 'That code is taken.' : e.type === 'network' || e.type === 'server-error' ? 'No internet. Use the QR method instead.' : String(e.type || e)), { type: e.type })));
     peer.on('connection', (dc) => {
       const conn = new Conn((s) => dc.send(s), () => dc.close());
-      dc.on('open', () => { conn.open = true; hostAttach(conn); });
+      dc.on('open', () => { conn.open = true; hostAttach(conn); setTimeout(async () => { conn.kind = await connectionKind(dc.peerConnection); netStatus(); }, 1500); });
       dc.on('data', (d) => { try { conn.onmsg && conn.onmsg(typeof d === 'string' ? JSON.parse(d) : d); } catch (e) { } });
       dc.on('close', () => { conn.open = false; conn.onclose && conn.onclose(); });
     });
   });
 }
-function onlineJoin(code) {
+async function onlineJoin(code) {
+  const opts = await peerOptions();
   return new Promise((res, rej) => {
     if (!window.peerjs) return rej(new Error('Online library missing'));
-    const peer = new peerjs.Peer(Object.assign({ debug: 0 }, window.EW_PEER_OPTS || {})); NET.peer = peer; let done = false;
+    const peer = new peerjs.Peer(opts); NET.peer = peer; let done = false;
     peer.on('error', (e) => { if (!done) rej(new Error(e.type === 'peer-unavailable' ? 'No game found with that code.' : e.type === 'network' || e.type === 'server-error' ? 'No internet. Use the QR method instead.' : String(e.type || e))); });
     peer.on('open', () => {
       const dc = peer.connect(onlineId(code), { reliable: true, serialization: 'raw' });
       const conn = new Conn((s) => dc.send(s), () => dc.close());
-      dc.on('open', () => { conn.open = true; done = true; res(conn); });
+      dc.on('open', () => { conn.open = true; done = true; res(conn); setTimeout(async () => { NET.kind = await connectionKind(dc.peerConnection); }, 1500); });
       dc.on('data', (d) => { try { conn.onmsg && conn.onmsg(typeof d === 'string' ? JSON.parse(d) : d); } catch (e) { } });
       dc.on('close', () => { conn.open = false; conn.onclose && conn.onclose(); });
-      setTimeout(() => { if (!done) rej(new Error('Timed out. Check the code.')); }, 12000);
+      // The host was found (otherwise we'd have had "no game found"), but no route got through.
+      setTimeout(() => { if (!done) { done = true; try { peer.destroy(); } catch (e) { } NET.peer = null; rej(new Error(relayConfigured() ? 'FOUND THE GAME BUT COULD NOT CONNECT. TRY AGAIN, OR JOIN THE SAME WI-FI/HOTSPOT AS THE HOST.' : 'FOUND THE GAME BUT COULD NOT CONNECT. ONE OF YOUR NETWORKS BLOCKS DIRECT CONNECTIONS. THE HOST CAN FIX THIS BY SETTING UP THE FREE RELAY (SEE README), OR JOIN THE SAME WI-FI/HOTSPOT.')); } }, 20000);
     });
   });
 }

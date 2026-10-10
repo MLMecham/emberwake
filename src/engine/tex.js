@@ -96,6 +96,7 @@ function initTextures() {
     else if (t.frames) { TEX[name] = []; for (let f = 0; f < t.frames; f++) TEX[name].push(makeTex((x, y, r) => t.fn(x, y, r, f, ctx), t.seed)); }
     else TEX[name] = makeTex((x, y, r) => t.fn(x, y, r, ctx), t.seed);
   }
+  TEX.cexit = makeTex((x, y) => { const dx = (x - 15.5) / 10, dy = (y - 31) / 26; const d = dx * dx + dy * dy; if (d < 1) return d > 0.8 ? [120, 96, 70] : shade([250, 240, 200], 0.85 + 0.15 * (y / 31)); return ctx.texPx('cwall', x, y); });
   TEX.shardwall = makeTex((x, y) => { const d = Math.abs(x - 16) + Math.abs(y - 16); if (d < 9) return d < 5 ? [255, 230, 120] : [240, 140, 40]; const i = y * TS + x; const v = TEX.brick[i]; return shade([v & 255, (v >> 8) & 255, (v >> 16) & 255], 0.7); });
 }
 
@@ -139,6 +140,7 @@ defTile(TL.SHOPWALL, { solid: true, wall: 'shop' });
 defTile(TL.STAIRS, { floor: 'stairs', stairs: true });
 defTile(TL.SHARDGATE, { solid: true, wall: 'shardwall', shardGate: true });
 defTile(TL.BUSHFLOOR, { floor: 'grass' });
+defTile(TL.CEXIT = 27, { solid: true, wall: 'cexit', exitWall: true }); // daylight archway out of a cave
 
 // props drawn as sprites on tiles
 const PROPS = [null, 'tree', 'pine', 'boulder', 'bush', 'cactus', 'grave', 'statue', 'sign', 'flame', 'pedestal'];

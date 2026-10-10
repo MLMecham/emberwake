@@ -201,9 +201,23 @@ function loop(now) {
     else if (inp.map) { G.state = 'map'; }
   } else if (G.state === 'map') { if (inp.map || inp.pause || inp.confirm) G.state = 'play'; }
   else if (G.state === 'pause' && inp.pause && performance.now() - (G.pauseAt || 0) > 400 && $('pauseScreen').classList.contains('on')) resume();
-  // host simulation
-  const soloPaused = Object.keys(NET.conns).length === 0 && !NET.peer && (G.state === 'pause' || G.state === 'map' || (G.local && G.local.dialog));
-  if (NET.role === 'host' && G.sim && G.state !== 'title' && !soloPaused) {
+  if (NET.role === 'host' && G.sim) hostStep(rdt, now);
+  else if (NET.role === 'client' && NET.hostConn && now - G.lastSend > 50) {
+    G.lastSend = now; const Lc = G.local; NET.hostConn.send({ t: 'ps', lvl: Lc.lvl, x: Math.round(Lc.x * 100) / 100, y: Math.round(Lc.y * 100) / 100, a: Math.round(Lc.a * 100) / 100, atk: Lc.atkVis > 0 ? 1 : 0, sel: Lc.sel });
+  }
+  const hostPaused = NET.role === 'client' && G.snap && G.snap.paused;
+  if (G.state === 'play' && !hostPaused) updateLocal(dt, inp);
+  draw(dt);
+}
+// The host runs the game for everyone. Opening the pause menu pauses the whole party (solo also pauses for map and dialogs).
+function hostPausedNow() {
+  const multi = Object.keys(NET.conns).length > 0 || !!NET.peer;
+  if (G.state === 'pause') return true;
+  return !multi && (G.state === 'map' || (G.local && G.local.dialog));
+}
+function hostStep(rdt, now) {
+  const paused = hostPausedNow(); G.sim.paused = paused && G.state === 'pause'; G.sim.pausedBy = G.profile.name;
+  if (!paused && G.state !== 'title') {
     const Lc = G.local; const mp = G.sim.players[G.myId];
     if (mp && G.state === 'play') G.sim.onPlayerState(G.myId, { lvl: Lc.lvl, x: Lc.x, y: Lc.y, a: Lc.a, atk: Lc.atkVis > 0 ? 1 : 0, sel: Lc.sel });
     // fixed steps that catch up after slow frames, so game time keeps pace with real time
@@ -212,16 +226,19 @@ function loop(now) {
     const evs = G.sim.events; G.sim.events = [];
     G.events.push(...evs);
     for (const e of evs) handleEvent(e);
-    G.snap = G.sim.snapshotFor(G.myId);
-    if (now - G.lastBcast > 50) { G.lastBcast = now; hostBroadcast(G.events); G.events = []; }
     if (G.sim.autosave) { G.sim.autosave = false; writeSave(); }
-  } else if (NET.role === 'host' && G.sim) { G.snap = G.sim.snapshotFor(G.myId);
-  } else if (NET.role === 'client' && NET.hostConn && now - G.lastSend > 50) {
-    G.lastSend = now; const Lc = G.local; NET.hostConn.send({ t: 'ps', lvl: Lc.lvl, x: Math.round(Lc.x * 100) / 100, y: Math.round(Lc.y * 100) / 100, a: Math.round(Lc.a * 100) / 100, atk: Lc.atkVis > 0 ? 1 : 0, sel: Lc.sel });
   }
-  if (G.state === 'play') updateLocal(dt, inp);
-  draw(dt);
+  G.snap = G.sim.snapshotFor(G.myId);
+  if (now - G.lastBcast > 50) { G.lastBcast = now; hostBroadcast(G.events); G.events = []; }
 }
+// Browsers stop animating hidden tabs. If the host switches away mid-game, pause everyone, and keep a heartbeat going
+// from a worker (workers aren't throttled) so friends still get the "paused" message and stay connected.
+document.addEventListener('visibilitychange', () => { if (document.hidden && NET.role === 'host' && G.state === 'play' && Object.keys(NET.conns).length) openPause(); });
+try {
+  const hb = new Worker(URL.createObjectURL(new Blob(['setInterval(function(){postMessage(0)},100)'], { type: 'text/javascript' })));
+  let last = performance.now();
+  hb.onmessage = () => { const now = performance.now(); const rdt = Math.min(0.25, (now - last) / 1000); last = now; if (document.hidden && NET.role === 'host' && G.sim && G.state !== 'title') hostStep(rdt, now); };
+} catch (e) { }
 function draw(dt) {
   const Lc = G.local; const snap = G.snap; const L = G.world.levels[Lc.lvl];
   if (!L) return;
@@ -257,6 +274,7 @@ function draw(dt) {
   if (Lc.fade < 1) rectA(0, 0, R.W, R.H, rgb(0, 0, 0), 1 - Lc.fade);
   if (snap && snap.over) { textC('THE PARTY HAS FALLEN', R.W / 2, R.H / 2 + 20, rgb(255, 60, 60)); }
   if (G.disconnected) textC('DISCONNECTED - PRESS ESC', R.W / 2, R.H - 40, rgb(255, 100, 100));
+  if (NET.role === 'client' && snap && snap.paused) { rectA(0, R.H / 2 - 18, R.W, 30, rgb(0, 0, 0), 0.7); textC('PAUSED BY ' + (snap.pausedBy || 'HOST'), R.W / 2, R.H / 2 - 12, rgb(255, 220, 120)); textC('WAITING FOR THE HOST TO RESUME', R.W / 2, R.H / 2, rgb(220, 220, 230)); }
   if (G.showFps) text(Math.round(G.fps) + ' FPS', R.W - 50, R.H - 20, rgb(255, 255, 0));
   present();
 }
@@ -287,7 +305,9 @@ function updatePauseInfo() {
   const dOn = !!(G.snap && G.snap.me && G.snap.me.dbg); $('pDebug').style.display = dOn ? '' : 'none';
   const dev = isDevName(G.snap && G.snap.me ? G.snap.me.name : G.profile.name); $('pDbgToggle').style.display = dev ? '' : 'none'; $('pDbgToggle').textContent = 'DEBUG: ' + (dOn ? 'ON' : 'OFF');
   if (dOn && !$('pWarps').childElementCount) { const mk = (label, to) => { const b = document.createElement('button'); b.textContent = label; b.onclick = () => { sendAction({ t: 'warp', to }); resume(); }; $('pWarps').appendChild(b); }; mk('WILDS', 'ow'); for (let d = 1; d <= 9; d++) mk('L' + d, 'd' + d); }
-  $('pInfo').textContent = (NET.role === 'host' ? 'HOSTING' : NET.role === 'client' ? 'CONNECTED' : 'SOLO') + ' - ' + n + ' PLAYER' + (n > 1 ? 'S' : '') + (me ? ' - ' + (me.cls === 'monk' ? 'MARTIAL ARTIST' : 'SWORD') : '');
+  const kinds = NET.role === 'host' ? Object.values(NET.conns).map(c => c.kind).filter(Boolean) : NET.kind ? [NET.kind] : [];
+  $('pInfo').title = kinds.length ? 'Connection: ' + kinds.join(', ') : '';
+  $('pInfo').textContent = (NET.role === 'host' ? 'HOSTING' : NET.role === 'client' ? 'CONNECTED' : 'SOLO') + ' - ' + n + ' PLAYER' + (n > 1 ? 'S' : '') + (me ? ' - ' + (me.cls === 'monk' ? 'MARTIAL ARTIST' : 'SWORD') : '') + (kinds.length ? ' - ' + [...new Set(kinds)].join('/') : '');
 }
 const KONAMI = ['ArrowUp', 'ArrowUp', 'ArrowDown', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'ArrowLeft', 'ArrowRight', 'KeyB', 'KeyA'];
 let konamiIdx = 0;
@@ -340,23 +360,29 @@ async function hostTakeReply(code) {
   try { await hostAcceptReply(code); el.textContent = 'CONNECTING...'; setTimeout(() => { el.textContent = 'CONNECTED PLAYERS: ' + Object.keys(NET.conns).length + '. TAP NEW INVITE TO ADD ANOTHER.'; }, 1500); sfx('menu'); }
   catch (e) { el.textContent = 'ERROR: ' + e.message; }
 }
-const ROOM_WORDS = ['EMBER', 'FOX', 'WYRM', 'OWL', 'STONE', 'TIDE', 'ASH', 'MOSS', 'IRON', 'STAR', 'BRAMBLE', 'CROW', 'FLINT', 'GALE', 'HOLLOW', 'RAVEN'];
-function randomRoom() { const r = () => ROOM_WORDS[Math.random() * ROOM_WORDS.length | 0]; let a = r(), b = r(); while (b === a) b = r(); return a + b; }
+// Room codes: 5 characters with no look-alikes (no 0/O, 1/I/L). Old GLD- codes and links still work.
+const ROOM_CHARS = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
+function randomRoom() { let c = ''; for (let i = 0; i < 5; i++) c += ROOM_CHARS[Math.random() * ROOM_CHARS.length | 0]; return c; }
 function cleanRoom(w) { w = String(w || '').trim(); const m = w.match(/#join[-=]?([A-Za-z0-9]+)/i); if (m) w = m[1]; return w.replace(/^GLD-?/i, '').replace(/[^A-Za-z0-9]/g, '').toUpperCase().slice(0, 16); }
 function inviteLink(word) { if (!/^https?:/.test(location.protocol)) return null; return location.origin + location.pathname + '#join-' + word; }
 async function hostOnline() {
-  const word = cleanRoom($('onlineWord').value) || randomRoom(); $('onlineWord').value = word; const el = $('invStatus');
-  if (NET.peer && NET.roomWord === word) { showRoom(word); return; }
-  if (NET.peer) { try { NET.peer.destroy(); } catch (e) { } NET.peer = null; }
-  el.textContent = 'OPENING ROOM...';
-  try { await onlineHost(word); NET.roomWord = word; el.textContent = 'ROOM OPEN. PLAYERS: ' + Object.keys(NET.conns).length; showRoom(word); sfx('secret'); }
-  catch (e) { el.textContent = e.message; }
+  const el = $('invStatus');
+  if (NET.peer && NET.roomWord) { showRoom(NET.roomWord); el.textContent = 'PLAYERS CONNECTED: ' + Object.keys(NET.conns).length; return; }
+  $('roomBox').style.display = 'none'; el.textContent = 'MAKING YOUR CODE...';
+  for (let tries = 0; tries < 4; tries++) {
+    const word = randomRoom();
+    if (NET.peer) { try { NET.peer.destroy(); } catch (e) { } NET.peer = null; }
+    try { await onlineHost(word); NET.roomWord = word; el.textContent = 'PLAYERS CONNECTED: ' + Object.keys(NET.conns).length; showRoom(word); sfx('secret'); return; }
+    catch (e) { if (e.type !== 'unavailable-id') { el.textContent = e.message; $('invRetry').style.display = ''; return; } }
+  }
+  el.textContent = 'COULD NOT MAKE A CODE. TRY AGAIN.'; $('invRetry').style.display = '';
 }
 function showRoom(word) {
-  $('roomBox').style.display = 'block'; $('roomCode').textContent = 'GLD-' + word;
+  $('invRetry').style.display = 'none';
+  $('roomBox').style.display = 'block'; $('roomCode').textContent = word;
   const link = inviteLink(word);
   $('roomLinkRow').style.display = link ? '' : 'none'; if (link) $('roomLink').value = link;
-  $('roomNote').textContent = link ? 'OR THEY CAN OPEN THE GAME, PICK JOIN, AND TYPE GLD-' + word + '.' : 'FRIENDS OPEN THEIR COPY OF THE GAME, PICK JOIN A FRIEND, AND TYPE GLD-' + word + '. (CLICKABLE LINKS WORK WHEN THE GAME IS ON A WEBSITE.)';
+  $('roomNote').textContent = 'FRIENDS PICK JOIN A FRIEND AND TYPE THIS CODE.' + (link ? ' OR SEND THEM THE LINK.' : '') + (relayConfigured() ? '' : ' IF A FRIEND SEES "COULD NOT CONNECT", SET UP THE FREE RELAY (SEE README).');
 }
 async function joinScan() {
   const el = $('joinStatus'); $('joinScanWrap').style.display = 'block';
@@ -373,8 +399,8 @@ async function joinWithCode(code) {
   } catch (e) { el.textContent = 'ERROR: ' + e.message; }
 }
 async function joinOnline() {
-  const el = $('joinStatus'); const word = cleanRoom($('joinWord').value); if (!word) { el.textContent = 'ENTER THE ROOM CODE YOUR FRIEND SENT'; return; }
-  el.textContent = 'CONNECTING TO GLD-' + word + '...'; audioInit();
+  const el = $('joinStatus'); const word = cleanRoom($('joinWord').value); if (!word) { el.textContent = 'TYPE YOUR FRIEND\'S CODE'; return; }
+  el.textContent = 'CONNECTING TO ' + word + '...'; audioInit();
   try { const conn = await onlineJoin(word); el.textContent = 'CONNECTED! LOADING...'; joinerStart(conn); } catch (e) { el.textContent = e.message; }
 }
 function quitToTitle() {
@@ -416,7 +442,7 @@ function bindUI() {
   on('joinOnlineBtn', joinOnline);
   on('joinCopy', () => { $('joinReplyCode').select(); try { navigator.clipboard.writeText($('joinReplyCode').value); showToast('COPIED'); } catch (e) { document.execCommand('copy'); } });
   on('pResume', resume);
-  on('pInvite', () => { showScreen('inviteScreen'); if (!$('onlineWord').value) $('onlineWord').value = NET.roomWord || randomRoom(); if (NET.roomWord) showRoom(NET.roomWord); $('invStatus').textContent = 'PLAYERS CONNECTED: ' + Object.keys(NET.conns).length; });
+  on('pInvite', () => { showScreen('inviteScreen'); hostOnline(); });
   on('roomCopy', () => { const v = $('roomLink').value; try { navigator.clipboard.writeText(v).then(() => showToast('INVITE LINK COPIED'), () => { $('roomLink').select(); }); } catch (e) { $('roomLink').select(); } });
   $('joinWord').onkeydown = (e) => { if (e.key === 'Enter') { audioInit(); joinOnline(); } };
   on('pSave', () => { writeSave(); showToast('GAME SAVED'); });
@@ -426,7 +452,7 @@ function bindUI() {
   on('invNew', hostInviteQR);
   on('invScan', hostScanReply);
   on('invPasteBtn', () => { const c = $('invPaste').value.trim(); if (c) hostTakeReply(c); });
-  on('invOnlineBtn', hostOnline);
+  on('invRetry', hostOnline); on('roomCodeCopy', () => { try { navigator.clipboard.writeText(NET.roomWord || '').then(() => showToast('CODE COPIED')); } catch (e) { } });
   on('invCopy', () => { $('invCode').select(); try { navigator.clipboard.writeText($('invCode').value); showToast('COPIED'); } catch (e) { document.execCommand('copy'); } });
   on('winBack', quitToTitle); on('overBack', quitToTitle);
   on('hudPause', () => { if (G.state === 'play') openPause(); });
@@ -456,6 +482,6 @@ function boot() {
   window.G = G;
   // invite links: game.html#join-EMBERFOX
   const hm = location.hash.match(/^#join[-=]?([A-Za-z0-9]+)/i);
-  if (hm) { showScreen('joinScreen'); $('joinWord').value = 'GLD-' + cleanRoom(hm[1]); $('joinStatus').textContent = 'PICK YOUR NAME AND COLOR ON THE TITLE SCREEN FIRST IF YOU LIKE, OR PRESS JOIN.'; }
+  if (hm) { showScreen('joinScreen'); $('joinWord').value = cleanRoom(hm[1]); $('joinStatus').textContent = 'PICK YOUR NAME AND COLOR ON THE TITLE SCREEN FIRST IF YOU LIKE, OR PRESS JOIN.'; }
 }
 window.addEventListener('load', boot);

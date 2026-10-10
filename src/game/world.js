@@ -291,7 +291,7 @@ function placeCave(W, L, r, rnd, kind, secret) {
 function genCave(W, id, kind, exit, rnd) {
   const w = 13, h = 9; const L = new Level(id, 'cave', w, h); W.levels[id] = L; L.caveKind = kind;
   for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) L.set(x, y, (x === 0 || y === 0 || x === w - 1 || y === h - 1) ? TL.CWALL : TL.CFLOOR);
-  L.set(6, h - 1, TL.EXIT); L.set(6, h - 2, TL.EXIT);
+  L.set(6, h - 1, TL.CEXIT); L.set(6, h - 2, TL.EXIT); // archway in the wall, and the step in front of it takes you out
   L.exit = exit; L.spawn = { x: 6.5, y: h - 2.6, a: -Math.PI / 2 };
   L.props[L.idx(3, 2)] = PR.FLAME; L.props[L.idx(9, 2)] = PR.FLAME;
   const c = Content.caves[kind]; if (!c) return;
