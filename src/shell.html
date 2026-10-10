@@ -98,20 +98,6 @@ summary:hover { color:var(--gold); }
     <label for="joinWord">YOUR FRIEND'S CODE</label>
     <div class="row"><input id="joinWord" type="text" placeholder="K7QFM" autocomplete="off" spellcheck="false" style="text-transform:uppercase;font-size:1.6em;letter-spacing:0.25em;text-align:center"><button id="joinOnlineBtn" class="primary" style="flex:0 0 120px">JOIN</button></div>
     <div class="status" id="joinStatus"></div>
-    <details id="joinOffline">
-      <summary>NO INTERNET? JOIN WITH A WEBCAM</summary>
-      <p class="dim">GET ON THE SAME HOTSPOT OR WI-FI AS THE HOST. THEY OPEN INVITE &gt; NO INTERNET.</p>
-      <button id="joinScanBtn">SCAN HOST'S QR WITH WEBCAM</button>
-      <div id="joinScanWrap" style="display:none"><video id="joinVideo" muted playsinline></video></div>
-      <label for="joinPaste">OR PASTE THE HOST'S INVITE CODE</label>
-      <textarea id="joinPaste"></textarea><button id="joinPasteBtn">USE CODE</button>
-      <div id="joinReply" style="display:none">
-        <div class="sep"></div>
-        <h2>SHOW THIS TO THE HOST'S WEBCAM</h2>
-        <div class="qrbox"><canvas id="joinQR"></canvas></div>
-        <textarea id="joinReplyCode" readonly></textarea><button id="joinCopy">COPY REPLY CODE</button>
-      </div>
-    </details>
     <div class="sep"></div>
     <button id="joinBack">BACK</button>
   </div>
@@ -178,18 +164,6 @@ summary:hover { color:var(--gold); }
     </div>
     <div class="status" id="invStatus"></div>
     <button id="invRetry" style="display:none">TRY AGAIN</button>
-    <details id="invOffline">
-      <summary>NO INTERNET? INVITE WITH A WEBCAM</summary>
-      <p class="dim">EVERYONE JOINS THE SAME HOTSPOT OR WI-FI (NO INTERNET NEEDED). ONE INVITE PER FRIEND.</p>
-      <button id="invNew">MAKE INVITE QR</button>
-      <div class="status dim" id="invStep"></div>
-      <div class="qrbox"><canvas id="invQR" width="1" height="1"></canvas></div>
-      <textarea id="invCode" readonly></textarea><button id="invCopy">COPY INVITE CODE</button>
-      <button id="invScan">SCAN THEIR REPLY WITH WEBCAM</button>
-      <div id="invScanWrap" style="display:none"><video id="invVideo" muted playsinline></video></div>
-      <label for="invPaste">OR PASTE THEIR REPLY CODE</label>
-      <textarea id="invPaste"></textarea><button id="invPasteBtn">USE REPLY</button>
-    </details>
     <div class="sep"></div>
     <button id="invBack">BACK</button>
   </div>

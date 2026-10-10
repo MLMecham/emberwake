@@ -28,7 +28,7 @@ def bundle(include_browser=True):
 if __name__ == '__main__':
     if len(sys.argv) > 1 and sys.argv[1] == '--list':
         print(json.dumps([r for r, _ in source_files(False)])); sys.exit(0)
-    libs = '\n'.join(read('vendor/' + f) for f in ['qrcode.js', 'jsQR.js', 'peerjs.min.js']).replace('</script>', '<\\/script>')
+    libs = '\n'.join(read('vendor/' + f) for f in ['peerjs.min.js']).replace('</script>', '<\\/script>')
     shell = read('src/shell.html')
     out = shell.replace('<script>/*LIBS*/</script>', '<script>' + libs + '</script>').replace('<script>/*GAME*/</script>', '<script>' + bundle() + '</script>')
     open(os.path.join(here, 'index.html'), 'w', encoding='utf-8', newline='\n').write(out)

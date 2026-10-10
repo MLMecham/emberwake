@@ -6,21 +6,13 @@ A first-person, retro pixel-3D adventure: explore the Wilds, clear nine dungeons
 
 ## Co-op
 - **Join code (internet):** the host opens Menu → Invite Friends, which shows a 5-character code like `K7QFM`. Friends pick Join a Friend and type it, or click the invite link (`…/#join-K7QFM`).
-- **No internet:** everyone joins the same hotspot or Wi-Fi, then use "No internet? Invite with a webcam" on both sides.
+- **Same room:** if the venue Wi-Fi won't connect you, put everyone on one phone hotspot and use the code as usual.
 - **When the host pauses** (opens the menu or switches to another tab), the game pauses for everyone.
 
 ### If some friends can't join ("could not connect")
-Co-op connects computers straight to each other. Some home routers, school or work networks, and phone hotspots block that, so it fails for some people. The fix is a **relay** (a TURN server) that passes traffic along when a direct link is blocked. Metered's Open Relay is free up to 20 GB a month, which is plenty for this game.
+Co-op connects computers straight to each other. Some networks (school, work, venue Wi-Fi, phone data) block that. The game also tries Metered's free public relay, which passes traffic along when a direct link is blocked, but it may not always be up. If a friend can't connect, try a phone hotspot. The pause menu shows `DIRECT` or `RELAY` for each player.
 
-1. Sign up at https://www.metered.ca/tools/openrelay/ and create an app. Its name is the part before `.metered.live`.
-2. Copy the app's **API key** from the dashboard.
-3. Put both into `src/net/relay.js`:
-   ```js
-   const RELAY = { meteredApp: 'yourappname', meteredKey: 'your-api-key' };
-   ```
-4. Run `python build.py`, then push.
-
-The pause menu shows `DIRECT` or `RELAY` for each connection. That key can only fetch relay credentials, so it's fine to have it in a public repo.
+You can add your own relay later by putting a Metered app name and TURN API key into `src/net/relay.js` and rebuilding.
 
 ## Beyond the main quest
 Two mountain passes lead out of the Wilds. West is the **Frozen Reach**: slippery ice, frost imps and snow wolves, and **Rimefang Hollow**, home of the long-necked **Frost Matriarch** (treasure: Frost Arrows, which freeze what they hit). East is the **Cinder Wastes**: lava, vents that blow on a rhythm, and the **Cinder Caldera** with the **Fire Patriarch** (treasure: Magma Boots). Each dragon leaves a relic, the Frost Fang and the Ember Heart. With both, the sealed gate on the edge of the great wood opens to **the Hearth**, where the three-headed **Hearthwyrm** guards the **Dawnblade**.
@@ -53,4 +45,4 @@ New enemies, items, elites, sprites and animations are one file each. Start with
 | `src/core/` | Shared helpers and the content registry |
 | `tools/check.js` | The automated checks |
 | `tools/export_art.js`, `docs/art/` | Animated GIF gallery of every sprite and animation |
-| `vendor/` | qrcode-generator, jsQR, PeerJS |
+| `vendor/` | PeerJS |

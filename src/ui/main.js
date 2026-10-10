@@ -369,27 +369,6 @@ function drawLogo() {
   c.putImageData(img, 0, 0);
 }
 // ---- lobby / invite UI ----
-async function hostInviteQR() {
-  const el = $('invStatus'); el.textContent = 'CREATING INVITE...';
-  try {
-    // ask for the camera first: besides scanning replies, a granted camera lets browsers share
-    // plain local network addresses, which makes hotspot connections far more reliable
-    if (!G.camAsked && navigator.mediaDevices && navigator.mediaDevices.getUserMedia) { G.camAsked = true; try { const s = await navigator.mediaDevices.getUserMedia({ video: true }); s.getTracks().forEach(t => t.stop()); } catch (e) { } }
-    const code = await hostCreateInvite();
-    drawQR($('invQR'), code); $('invCode').value = code; $('invStep').textContent = '1. ON THE OTHER DEVICE: JOIN GAME > SCAN. 2. THEN TAP "SCAN THEIR REPLY" BELOW.';
-    el.textContent = 'INVITE READY';
-  } catch (e) { el.textContent = 'ERROR: ' + e.message; }
-}
-async function hostScanReply() {
-  const el = $('invStatus'); $('invScanWrap').style.display = 'block';
-  try { await startScan($('invVideo'), async (code) => { $('invScanWrap').style.display = 'none'; await hostTakeReply(code); }); el.textContent = 'POINT THE CAMERA AT THEIR REPLY QR'; }
-  catch (e) { el.textContent = 'CAMERA: ' + e.message; $('invScanWrap').style.display = 'none'; }
-}
-async function hostTakeReply(code) {
-  const el = $('invStatus');
-  try { await hostAcceptReply(code); el.textContent = 'CONNECTING...'; setTimeout(() => { el.textContent = 'CONNECTED PLAYERS: ' + Object.keys(NET.conns).length + '. TAP NEW INVITE TO ADD ANOTHER.'; }, 1500); sfx('menu'); }
-  catch (e) { el.textContent = 'ERROR: ' + e.message; }
-}
 // Room codes: 5 characters with no look-alikes (no 0/O, 1/I/L). Old GLD- codes and links still work.
 const ROOM_CHARS = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
 function randomRoom() { let c = ''; for (let i = 0; i < 5; i++) c += ROOM_CHARS[Math.random() * ROOM_CHARS.length | 0]; return c; }
@@ -412,21 +391,7 @@ function showRoom(word) {
   $('roomBox').style.display = 'block'; $('roomCode').textContent = word;
   const link = inviteLink(word);
   $('roomLinkRow').style.display = link ? '' : 'none'; if (link) $('roomLink').value = link;
-  $('roomNote').textContent = 'FRIENDS PICK JOIN A FRIEND AND TYPE THIS CODE.' + (link ? ' OR SEND THEM THE LINK.' : '') + (relayConfigured() ? '' : ' IF A FRIEND SEES "COULD NOT CONNECT", SET UP THE FREE RELAY (SEE README).');
-}
-async function joinScan() {
-  const el = $('joinStatus'); $('joinScanWrap').style.display = 'block';
-  try { await startScan($('joinVideo'), (code) => { $('joinScanWrap').style.display = 'none'; joinWithCode(code); }); el.textContent = 'POINT THE CAMERA AT THE HOST\'S QR'; }
-  catch (e) { el.textContent = 'CAMERA: ' + e.message; $('joinScanWrap').style.display = 'none'; }
-}
-async function joinWithCode(code) {
-  const el = $('joinStatus'); el.textContent = 'MAKING REPLY...'; audioInit();
-  try {
-    const { reply, ready } = await joinFromInvite(code);
-    $('joinReply').style.display = 'block'; drawQR($('joinQR'), reply); $('joinReplyCode').value = reply;
-    el.textContent = 'NOW LET THE HOST SCAN THIS REPLY QR';
-    const conn = await ready; el.textContent = 'CONNECTED! LOADING...'; joinerStart(conn);
-  } catch (e) { el.textContent = 'ERROR: ' + e.message; }
+  $('roomNote').textContent = 'FRIENDS PICK JOIN A FRIEND AND TYPE THIS CODE.' + (link ? ' OR SEND THEM THE LINK.' : '') + ' IF A FRIEND CAN\'T CONNECT, TRY EVERYONE ON ONE PHONE HOTSPOT.';
 }
 async function joinOnline() {
   const el = $('joinStatus'); const word = cleanRoom($('joinWord').value); if (!word) { el.textContent = 'TYPE YOUR FRIEND\'S CODE'; return; }
@@ -434,7 +399,7 @@ async function joinOnline() {
   try { const conn = await onlineJoin(word); el.textContent = 'CONNECTED! LOADING...'; joinerStart(conn); } catch (e) { el.textContent = e.message; }
 }
 function quitToTitle() {
-  writeSave(); stopScan();
+  writeSave();
   for (const pid in NET.conns) NET.conns[pid].close(); NET.conns = {}; if (NET.hostConn) NET.hostConn.close(); NET.hostConn = null; if (NET.peer) { try { NET.peer.destroy(); } catch (e) { } NET.peer = null; }
   NET.role = 'solo'; NET.roomWord = null; G.sim = null; G.world = null; G.local = null; G.snap = null; G.state = 'title'; G.disconnected = false; musicPlay(null); showScreen('titleScreen'); refreshTitle();
 }
@@ -450,7 +415,7 @@ function bindUI() {
   on('btnContinue', () => startGame('adv', true));
   on('btnRogue', () => startGame('rogue', false));
   on('btnRogueCont', () => startGame('rogue', true));
-  on('btnJoin', () => { showScreen('joinScreen'); $('joinReply').style.display = 'none'; $('joinStatus').textContent = ''; setTimeout(() => $('joinWord').focus(), 50); });
+  on('btnJoin', () => { showScreen('joinScreen'); $('joinStatus').textContent = ''; setTimeout(() => $('joinWord').focus(), 50); });
   on('btnHelp', () => showScreen('helpScreen'));
   on('btnDebug', () => { fillDebugUI(); showScreen('debugScreen'); });
   // in-game debug switch (dev names only): remembers the choice for next time too
@@ -468,11 +433,8 @@ function bindUI() {
   on('dbgMonk', () => { unlockMonk(); buildClassPicker(); showToast('SECRET CLASS UNLOCKED'); });
   $('dbgOn').onchange = () => { $('dbgBody').classList.toggle('off', !$('dbgOn').checked); };
   on('helpBack', () => showScreen(G.state === 'title' ? 'titleScreen' : 'pauseScreen'));
-  on('joinBack', () => { stopScan(); showScreen('titleScreen'); });
-  on('joinScanBtn', joinScan);
-  on('joinPasteBtn', () => { const c = $('joinPaste').value.trim(); if (c) joinWithCode(c); });
+  on('joinBack', () => showScreen('titleScreen'));
   on('joinOnlineBtn', joinOnline);
-  on('joinCopy', () => { $('joinReplyCode').select(); try { navigator.clipboard.writeText($('joinReplyCode').value); showToast('COPIED'); } catch (e) { document.execCommand('copy'); } });
   on('pResume', resume);
   on('pInvite', () => { showScreen('inviteScreen'); hostOnline(); });
   on('roomCopy', () => { const v = $('roomLink').value; try { navigator.clipboard.writeText(v).then(() => showToast('INVITE LINK COPIED'), () => { $('roomLink').select(); }); } catch (e) { $('roomLink').select(); } });
@@ -480,12 +442,8 @@ function bindUI() {
   on('pSave', () => { writeSave(); showToast('GAME SAVED'); });
   on('pHelp', () => showScreen('helpScreen'));
   on('pQuit', quitToTitle);
-  on('invBack', () => { stopScan(); openPause(); });
-  on('invNew', hostInviteQR);
-  on('invScan', hostScanReply);
-  on('invPasteBtn', () => { const c = $('invPaste').value.trim(); if (c) hostTakeReply(c); });
+  on('invBack', () => openPause());
   on('invRetry', hostOnline); on('roomCodeCopy', () => { try { navigator.clipboard.writeText(NET.roomWord || '').then(() => showToast('CODE COPIED')); } catch (e) { } });
-  on('invCopy', () => { $('invCode').select(); try { navigator.clipboard.writeText($('invCode').value); showToast('COPIED'); } catch (e) { document.execCommand('copy'); } });
   on('winBack', quitToTitle); on('overBack', quitToTitle);
   on('hudPause', () => { if (G.state === 'play') openPause(); });
   $('sens').oninput = (e) => { IN.sens = +e.target.value; try { localStorage.setItem('emberwake_sens', e.target.value); } catch (er) { } };
