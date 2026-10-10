@@ -74,13 +74,27 @@ function renderWorld(cam, L, ents, players, myId) {
       const f = clamp((hz - y) / (H * 0.8), 0, 1); const c = rgb(lerp(168, 70, f) | 0, lerp(208, 130, f) | 0, lerp(248, 230, f) | 0);
       for (let x = 0; x < W; x++) buf[y * W + x] = c;
     }
-    // distant hills band + clouds by angle
+    // the far edges of the Wilds, fixed to the compass so you can always tell which way you face:
+    // granite peaks with snow to the west, a smoking volcano to the east, the great wood to the north, open sea to the south
+    const u = H / 180; const tri = (v) => 1 - 2 * Math.abs(v - Math.floor(v) - 0.5); const sm = (v) => clamp((v - 0.15) / 0.45, 0, 1);
     for (let x = 0; x < W; x++) {
-      const ang = cam.a + Math.atan((x / W * 2 - 1) * fov);
-      const hh = 8 + Math.sin(ang * 3) * 4 + Math.sin(ang * 7 + 1) * 3 + Math.sin(ang * 13) * 1.5;
-      for (let y = Math.max(0, hz - Math.round(hh)); y < Math.min(H, hz); y++) buf[y * W + x] = rgb(96, 150, 120);
+      const ang = cam.a + Math.atan((x / W * 2 - 1) * fov); const ca = Math.cos(ang), sa = Math.sin(ang);
+      const col = (h, c) => { const y0 = Math.max(0, hz - Math.round(h)); for (let y = y0; y < Math.min(H, hz); y++) buf[y * W + x] = c; return y0; };
+      col((6 + Math.sin(ang * 3) * 3 + Math.sin(ang * 7 + 1) * 2) * u, rgb(110, 160, 140));
+      const wN = sm(-sa); if (wN > 0) col(wN * (13 + 4 * Math.abs(Math.sin(ang * 23)) + 3 * Math.sin(ang * 6)) * u, rgb(46, 96, 70));
+      const wW = sm(-ca);
+      if (wW > 0) { const ph = wW * (20 + 16 * tri(ang * 2.1 + 0.2) + 7 * tri(ang * 5.3)) * u; const top = col(ph, rgb(124, 134, 170)); const snow = Math.round(ph * 0.32); for (let y = Math.max(0, top); y < Math.min(hz, top + snow); y++) buf[y * W + x] = rgb(236, 242, 252); }
+      const wE = sm(ca);
+      if (wE > 0) {
+        const dA = angDiff(ang, 0.05); const cone = Math.max(0, 1 - Math.abs(dA) / 0.42);
+        const ridge = 9 + 6 * tri(ang * 3.7 + 0.6); const vh = Math.min(36, cone * 46); const h = wE * Math.max(ridge, vh) * u;
+        const top = col(h, rgb(88, 64, 72));
+        if (vh > ridge && vh >= 36) { for (let y = Math.max(0, top); y < Math.min(hz, top + 2 * u); y++) buf[y * W + x] = (Math.floor(t * 3 + x * 0.3) & 1) ? rgb(255, 130, 40) : rgb(255, 200, 80); }
+        // smoke drifting up out of the crater
+        if (wE > 0.6) for (let dy = 1; dy < 46 * u; dy++) { const y = top - dy; if (y < 0) break; const off = 0.02 * Math.sin(t * 0.7 + dy * 0.12 / u) + dy * 0.004 / u; const sw = 0.025 + dy * 0.0011 / u; if (Math.abs(dA - off) < sw && ((dy / u + t * 6) % 9) < 6) { const k = y * W + x; const v = buf[k]; buf[k] = rgb(((v & 255) + 110) >> 1, (((v >> 8) & 255) + 100) >> 1, (((v >> 16) & 255) + 100) >> 1); } }
+      }
       const cl = Math.sin(ang * 5 + t * 0.03) + Math.sin(ang * 11) * 0.5;
-      if (cl > 0.9) { const cy = hz - 40 - Math.round(Math.sin(ang * 2) * 8); for (let y = cy; y < cy + Math.round((cl - 0.9) * 14); y++) if (y >= 0 && y < hz) buf[y * W + x] = rgb(250, 250, 255); }
+      if (cl > 0.9) { const cy = hz - 48 * u - Math.round(Math.sin(ang * 2) * 8); for (let y = cy; y < cy + Math.round((cl - 0.9) * 14); y++) if (y >= 0 && y < hz) buf[y * W + x] = rgb(250, 250, 255); }
     }
   }
   // --- floor & ceiling casting ---
@@ -98,9 +112,11 @@ function renderWorld(cam, L, ents, players, myId) {
       const cx = Math.floor(fx), cy = Math.floor(fy);
       let c;
       if (floorRow) {
-        const tile = (cx < 0 || cy < 0 || cx >= L.w || cy >= L.h) ? (outdoor ? TL.GRASS : TL.DFLOOR) : L.tiles[cy * L.w + cx];
-        const ti = TINFO[tile]; let tex = texFor(ti.floor || 'grass', L) || TEX.grass; if (Array.isArray(tex)) tex = tex[wf];
-        const tx = ((fx - cx) * TS) | 0, ty = ((fy - cy) * TS) | 0; c = tex[(ty & 31) * TS + (tx & 31)];
+        const tile = (cx < 0 || cy < 0 || cx >= L.w || cy >= L.h) ? (outdoor ? (cy >= L.h ? TL.OCEAN : TL.GRASS) : TL.DFLOOR) : L.tiles[cy * L.w + cx];
+        const ti = TINFO[tile]; const oob = outdoor && cy >= L.h; let tex = oob ? TEX.ocean : (texFor(ti.floor || 'grass', L) || TEX.grass);
+        let sx = fx, sy = fy; if (ti.ocean) { sx += Math.sin(fy * 1.7 + t * 2.6) * 0.18; sy += Math.sin(fx * 1.3 + t * 2.1) * 0.22; } // heaving swell
+        if (Array.isArray(tex)) tex = tex[ti.ocean ? (Math.floor(t * 7 + fx * 0.3) & 3) : wf];
+        const tx = ((sx - Math.floor(sx)) * TS) | 0, ty = ((sy - Math.floor(sy)) * TS) | 0; c = tex[(ty & 31) * TS + (tx & 31)];
       } else {
         const tx = ((fx - cx) * TS) | 0, ty = ((fy - cy) * TS) | 0; c = shadeC(ceilTex[(ty & 31) * TS + (tx & 31)], 0.45);
       }
@@ -109,6 +125,35 @@ function renderWorld(cam, L, ents, players, myId) {
     }
   }
   // --- walls ---
+  // Each column finds the nearest wall; outdoors it keeps looking past short walls for a tall one (peaks, the great wood,
+  // gate towers) and draws that one's top above the near wall, so landmarks show over trees.
+  const maxSteps = outdoor ? 150 : 64; const triW = (v) => 1 - 2 * Math.abs(v - Math.floor(v) - 0.5);
+  const drawCol = (x, tile, side, pd, rdx, rdy, mx, my, yLimit) => {
+    const ti = TINFO[tile]; const dist = Math.max(0.05, pd);
+    const lh = H / dist; const bot = hz + eye * lh;
+    let wx = side === 0 ? cam.y + pd * rdy : cam.x + pd * rdx; const along = wx; wx -= Math.floor(wx);
+    let tx = (wx * TS) | 0; if ((side === 0 && rdx > 0) || (side === 1 && rdy < 0)) tx = TS - 1 - tx;
+    let hcol = 1;
+    if (ti.tall) {
+      hcol = ti.tall;
+      if (ti.jag === 'peak') hcol *= 0.55 + 0.3 * triW(along * 0.23) + 0.15 * triW(along * 0.71 + 0.4);
+      else if (ti.jag === 'trees') hcol *= 0.8 + 0.2 * Math.sqrt(Math.abs(Math.sin(along * 1.7)));
+      else if (ti.jag === 'battlement' && ((tx >> 3) & 1)) hcol += 0.18;
+    }
+    const top = bot - hcol * lh;
+    const th = L.towerTheme && L.towerTheme[my * L.w + mx]; const tex = (th && TEX[TINFO[tile].wall + '@' + th]) || texFor(ti.wall, L) || TEX.brick;
+    const lf = (dark ? darkLight(cam.x + rdx * pd, cam.y + rdy * pd, dist) : lightFor(kind, dist)) * (side ? 0.78 : 1);
+    const fogF = outdoor ? (ti.tall ? clamp((dist - 14) / 40, 0, 0.6) : clamp((dist - 9) / 9, 0, 0.85)) : 0;
+    const y0 = Math.max(0, Math.round(top)), y1 = Math.min(H, Math.round(bot), yLimit);
+    const snowLine = hcol - 0.5 - 0.3 * triW(along * 1.3);
+    for (let y = y0; y < y1; y++) {
+      const z = (bot - y) / lh; const ty = ((1 - (z - Math.floor(z))) * TS) | 0; let c = tex[(ty & 31) * TS + tx];
+      if (ti.snow && z > snowLine) c = ((tx + ty) & 7) ? rgb(236, 242, 252) : rgb(200, 210, 230);
+      c = shadeC(c, lf); if (fogF > 0) c = fogC(c, fogF, fogR, fogG, fogB);
+      buf[y * W + x] = c;
+    }
+    return Math.max(0, Math.round(top));
+  };
   for (let x = 0; x < W; x++) {
     const camX = 2 * x / W - 1; const rdx = dirX + plX * camX, rdy = dirY + plY * camX;
     let mx = Math.floor(cam.x), my = Math.floor(cam.y);
@@ -116,26 +161,20 @@ function renderWorld(cam, L, ents, players, myId) {
     let stepX, stepY, sdx, sdy;
     if (rdx < 0) { stepX = -1; sdx = (cam.x - mx) * ddx; } else { stepX = 1; sdx = (mx + 1 - cam.x) * ddx; }
     if (rdy < 0) { stepY = -1; sdy = (cam.y - my) * ddy; } else { stepY = 1; sdy = (my + 1 - cam.y) * ddy; }
-    let side = 0, hit = 0, tile = 0, n = 0;
-    while (!hit && n++ < 64) {
+    let side = 0, n = 0; let near = null, far = null;
+    while (n++ < maxSteps) {
       if (sdx < sdy) { sdx += ddx; mx += stepX; side = 0; } else { sdy += ddy; my += stepY; side = 1; }
-      if (mx < 0 || my < 0 || mx >= L.w || my >= L.h) { hit = 1; tile = outdoor ? TL.TREEWALL : TL.BRICK; break; }
-      tile = L.tiles[my * L.w + mx]; if (TINFO[tile].wall) hit = 1;
+      if (mx < 0 || my < 0 || mx >= L.w || my >= L.h) { if (!near && !outdoor) near = { tile: TL.BRICK, side, pd: side === 0 ? sdx - ddx : sdy - ddy, mx, my }; break; }
+      const tile = L.tiles[my * L.w + mx]; const ti = TINFO[tile];
+      if (!ti.wall) continue;
+      const hit = { tile, side, pd: side === 0 ? sdx - ddx : sdy - ddy, mx, my };
+      if (!near) { near = hit; if (ti.tall || !outdoor) break; }
+      else if (ti.tall) { far = hit; break; }
     }
-    const pd = side === 0 ? sdx - ddx : sdy - ddy; const dist = Math.max(0.05, pd);
-    R.zbuf[x] = hit ? dist : 1e9;
-    if (!hit) continue;
-    const lh = H / dist; const top = Math.round(hz - (1 - eye) * lh), bot = Math.round(hz + eye * lh);
-    let wx = side === 0 ? cam.y + pd * rdy : cam.x + pd * rdx; wx -= Math.floor(wx);
-    let tx = (wx * TS) | 0; if ((side === 0 && rdx > 0) || (side === 1 && rdy < 0)) tx = TS - 1 - tx;
-    const tex = texFor(TINFO[tile].wall, L) || TEX.brick;
-    let lf = (dark ? darkLight(cam.x + rdx * pd, cam.y + rdy * pd, dist) : lightFor(kind, dist)) * (side ? 0.78 : 1); const fogF = outdoor ? clamp((dist - 9) / 9, 0, 0.85) : 0;
-    const y0 = Math.max(0, top), y1 = Math.min(H, bot); const span = bot - top;
-    for (let y = y0; y < y1; y++) {
-      const ty = (((y - top) / span) * TS) | 0; let c = tex[(ty & 31) * TS + tx];
-      c = shadeC(c, lf); if (fogF > 0) c = fogC(c, fogF, fogR, fogG, fogB);
-      buf[y * W + x] = c;
-    }
+    R.zbuf[x] = near ? Math.max(0.05, near.pd) : 1e9;
+    if (!near) continue;
+    const nearTop = drawCol(x, near.tile, near.side, near.pd, rdx, rdy, near.mx, near.my, H);
+    if (far) drawCol(x, far.tile, far.side, far.pd, rdx, rdy, far.mx, far.my, nearTop);
   }
   // --- sprites ---
   const sprites = [];
@@ -229,9 +268,66 @@ function drawViewmodel(st) {
   }
   // sword class: shield on left, sword on right
   const sw = st.swing; const k = sw != null && sw < 0.25 ? sw / 0.25 : -1;
-  // shield
-  const shx = W * 0.14 + bx * 0.5, shy = H - 40 + by;
-  rect(shx - 18, shy - 22, 36, 50, rgb(20, 18, 28)); rect(shx - 16, shy - 20, 32, 46, rgb(140, 90, 46)); rect(shx - 16, shy - 20, 32, 4, rgb(200, 200, 210)); rect(shx - 2, shy - 14, 4, 30, rgb(200, 200, 210)); rect(shx - 10, shy - 2, 20, 4, rgb(200, 200, 210));
+  // shield, seen from behind: the upper arm comes up from the bottom-left, bends at the elbow, and the forearm lies
+  // across the back of the shield through a strap, with the fist closed on an upright grip near the far edge.
+  // Standing still it comes up bigger (ready to block); running it swings low with your stride; a block knocks it back.
+  {
+    const mk = st.moveK, ready = 1 - mk; const bk = st.blockT > 0 ? Math.sin(Math.min(1, st.blockT / 0.32) * Math.PI) : 0;
+    const sc = 1 + ready * 0.2 - mk * 0.05 - bk * 0.08;
+    const sway = Math.sin(st.bob) * 7 * mk, lift = Math.abs(Math.cos(st.bob)) * 6 * mk;
+    const shx = W * 0.22 + ready * W * 0.03 + sway + bk * 7 + (Math.random() - 0.5) * bk * 4;
+    const shy = H - 40 - ready * 8 + lift + mk * 6 + bk * 10;
+    const sw = Math.round(50 * sc), sh = Math.round(58 * sc); const x0 = Math.round(shx - sw / 2), y0 = Math.round(shy - sh / 2);
+    const rim = bk > 0.3 ? rgb(255, 255, 255) : rgb(176, 178, 194), rimD = rgb(96, 98, 116), wood = rgb(116, 76, 40), woodD = rgb(78, 50, 26), woodH = rgb(140, 94, 52);
+    const halfW = (j) => { const f = j / sh; if (j < 2) return sw / 2 - (2 - j); return f < 0.42 ? sw / 2 : (sw / 2) * (1 - Math.pow((f - 0.42) / 0.58, 1.7)); }; // round top corners, sides curving into the point
+    for (let j = 0; j < sh; j++) {
+      const hw = halfW(j); const xl = Math.round(shx - hw), xr = Math.round(shx + hw); if (xr <= xl) continue;
+      rect(xl, y0 + j, xr - xl, 1, rgb(20, 18, 28));
+      if (xr - xl > 4 && j > 1 && j < sh - 2) {
+        rect(xl + 1, y0 + j, xr - xl - 2, 1, rim); rect(xl + 1, y0 + j, 1, 1, rimD);
+        if (j > 3 && j < sh - 4 && xr - xl > 8) for (let x = xl + 3; x < xr - 3; x++) { const plank = ((x - x0) % 9) === 0; px(x, y0 + j, plank ? woodD : (x < shx - hw * 0.4 ? woodH : wood)); }
+      }
+    }
+    if (st.blockT > 0) for (let i = 0; i < 6; i++) { const a = Math.random() * TAU, r = sw * 0.6 + Math.random() * 6; px(shx + Math.cos(a) * r, shy - sh * 0.1 + Math.sin(a) * r * 0.8, rgb(255, 240, 160)); }
+    const aw = 13 * sc; // arm thickness
+    const fy = y0 + sh * 0.4;                         // forearm height
+    const elx = x0 - sw * 0.32, ely = fy + aw * 0.2;  // elbow, just off the shield's left edge
+    const gx = x0 + sw * 0.72;                        // the grip, toward the far edge
+    const shoulderX = elx - aw * 0.4, shoulderY = H + 16;
+    // the grip bar (behind the fist)
+    rect(gx - 2, fy - aw * 0.95, 5, aw * 1.9, woodD); rect(gx - 2, fy - aw * 0.95, 1, aw * 1.9, woodH);
+    // the whole arm is one smooth curve (shoulder -> elbow bend -> forearm), painted with a round brush:
+    // dark outline, sleeve, then a soft highlight along the top
+    // no elbow in view: the forearm sweeps up from the bottom-left corner and levels out across the shield (per the sketch)
+    const P0x = x0 - sw * 0.75, P0y = H + aw * 1.2, P1x = x0 + sw * 0.08, P1y = fy + aw * 0.55, P2x = gx - aw * 0.3, P2y = fy - aw * 0.1;
+    const bez = (t) => { const u = 1 - t; return [u * u * P0x + 2 * u * t * P1x + t * t * P2x, u * u * P0y + 2 * u * t * P1y + t * t * P2y]; };
+    const steps = 70, rr = (t) => (aw / 2) * (1.55 - 0.7 * t); // wide near you, narrowing toward the wrist
+    // we see the UNDERSIDE of the forearm: shadow along its top edge, the sleeve ends in a cuff,
+    // and the bare inner wrist leads into fingers curled around the grip toward us
+    const cuffT = 0.86; const skinL = c32(hexToRgb('#f8d4b0'));
+    const brush = (t0, t1, grow, c, dy, scale) => { for (let i = Math.round(t0 * steps); i <= Math.round(t1 * steps); i++) { const t = i / steps; const [bx2, by2] = bez(t); const r = (scale ? rr(t) * scale : rr(t)) + grow; disc(Math.round(bx2), Math.round(by2 + dy * rr(t)), Math.max(1, Math.round(r)), c); } };
+    brush(0, 1, 1.5, rgb(20, 18, 28), 0);                 // outline
+    brush(0, cuffT, 0, sleeve, 0);                          // sleeve
+    brush(0, cuffT, 0, sleeveD, -0.62, 0.4);                // shadow on the top edge (the side facing away)
+    if (tier >= 1) brush(0, cuffT, 0, sleeveH, 0.3, 0.22);  // metal sheen on the underside
+    brush(cuffT - 0.04, 1, 0, skin, 0); brush(cuffT, 1, 0, skinL, 0.25, 0.4); // inner wrist
+    { const [cx2, cy2] = bez(cuffT - 0.04); const r = rr(cuffT); rect(Math.round(cx2) - 1, Math.round(cy2 - r + 1), 3, Math.round(r * 2 - 1), sleeveD); }
+    // hand: the grip bar shows above and below; four fingers wrap around it in front, tips curling back toward the wrist
+    const fr = Math.round(aw * 0.55); const fcx = Math.round(gx - fr * 0.1), fcy = Math.round(fy - aw * 0.1);
+    rect(gx - 2, fcy - fr * 2.1, 5, fr * 4.2, woodD); rect(gx - 2, fcy - fr * 2.1, 1, fr * 4.2, woodH); frame(gx - 3, fcy - fr * 2.1 - 1, 7, fr * 4.2 + 2, rgb(20, 18, 28));
+    const fh2 = Math.max(3, Math.round(fr * 0.52)), fwid = Math.round(fr * 1.35);
+    for (let k = 0; k < 4; k++) {
+      const y = Math.round(fcy - fh2 * 2 + k * fh2), x = Math.round(gx - fwid * 0.45);
+      for (let yy = 0; yy < fh2; yy++) for (let xx = 0; xx < fwid; xx++) { const ex = (xx - fwid / 2) / (fwid / 2), ey = (yy - fh2 / 2 + 0.5) / (fh2 / 2); const e = ex * ex * 0.6 + ey * ey; if (e > 1.05) continue; px(x + xx, y + yy, e > 0.7 ? (yy >= fh2 - 1 ? rgb(20, 18, 28) : skinD) : (ey < -0.2 ? skinL : skin)); }
+      px(x + 1, y + (fh2 >> 1), rgb(236, 200, 180)); // fingertip
+    }
+    { const y = Math.round(fcy - fh2 * 2) - 2; rect(Math.round(gx - fwid * 0.2), y, Math.round(fwid * 0.55), 3, skinD); rect(Math.round(gx - fwid * 0.2), y, Math.round(fwid * 0.55), 1, rgb(20, 18, 28)); } // thumb over the top
+    // the strap loop the forearm passes through, on the left part of the shield
+    { const t = 0.72; const [sx2, sy2] = bez(t); const r = rr(t); const lw = Math.max(4, Math.round(5 * sc)), lh = Math.round(r * 2 + 6);
+      const lx = Math.round(sx2 - lw / 2), ly = Math.round(sy2 - lh / 2);
+      for (let j = 0; j < lh; j++) { const e = Math.abs(j - lh / 2) / (lh / 2); const inset = e > 0.8 ? 1 : 0; rect(lx + inset, ly + j, lw - inset * 2, 1, rgb(70, 44, 24)); px(lx + inset, ly + j, rgb(120, 80, 44)); }
+      frame(lx, ly, lw, lh, rgb(20, 18, 28)); px(lx + (lw >> 1), Math.round(sy2), rgb(220, 200, 80)); }
+  }
   if (me.sword > 0) {
     let ang, hx, hy;
     if (k >= 0) { ang = lerp(-0.4, -2.6, k); hx = lerp(W * 0.78, W * 0.42, k) + bx; hy = lerp(H - 14, H - 30, Math.sin(k * Math.PI)) + by; }
@@ -301,10 +397,18 @@ function mmColor(t, pr) {
     case TL.CAVE: return rgb(0, 0, 0); case TL.GATE: case TL.SHARDGATE: return rgb(255, 80, 80); case TL.PATH: return rgb(200, 170, 110); case TL.SAND: return rgb(220, 200, 130);
     case TL.BRIDGE: return rgb(150, 100, 50); case TL.BRICK: case TL.BRICK_BOMB: return rgb(50, 56, 100); case TL.LOCKED: return rgb(230, 200, 60); case TL.SHUTTER: return rgb(180, 180, 200);
     case TL.LAVA: return rgb(240, 90, 30); case TL.STAIRS: return rgb(0, 0, 0);
+    case TL.OCEAN: return rgb(30, 64, 160); case TL.PEAKS: return rgb(150, 156, 180); case TL.FIREPEAKS: return rgb(110, 60, 60); case TL.BIGWOOD: return rgb(14, 50, 24); case TL.TOWER: return rgb(255, 80, 80);
     case TL.DFLOOR: case TL.OPENDOOR: return rgb(110, 116, 160); case TL.CWALL: return rgb(60, 46, 40);
     default: return rgb(80, 160, 60);
   }
 }
+// Where a player is on the Wilds map: their spot outdoors, or the way into the cave or dungeon they're in (inside: true).
+function owSpot(world, p) {
+  if (p[1] === 'ow') return { x: p[2], y: p[3], inside: false };
+  const L = world.levels[p[1]]; if (!L || !L.exit || L.exit.lvl !== 'ow') return null;
+  return { x: L.exit.x, y: L.exit.y - 1.1, inside: true };
+}
+function caveLabel(L) { const c = Content.caves[L.caveKind]; return (c && c.name) || 'CAVE'; }
 function drawMinimap(st, x0, y0, w, h) {
   const L = st.level; const me = st.me; const cam = st.cam;
   rect(x0 - 1, y0 - 1, w + 2, h + 2, rgb(0, 0, 0)); frame(x0 - 2, y0 - 2, w + 4, h + 4, rgb(200, 180, 120));
@@ -323,20 +427,24 @@ function drawMinimap(st, x0, y0, w, h) {
     text('L' + L.dnum, x0 + 1, y0 + h - 8, rgb(255, 255, 255));
     return;
   }
-  // tile radar (north-up), 2px per tile
-  const sc = 2; const tw = w / sc, th = h / sc; const sx = Math.floor(cam.x - tw / 2), sy = Math.floor(cam.y - th / 2);
-  const seen = st.seen;
+  // tile radar (north-up), 2px per tile. Inside a cave or shop it shows the Wilds around the way in, with you blinking there.
+  const inCave = L.kind === 'cave' && L.exit && st.world;
+  const Lr = inCave ? st.world.levels.ow : L; const ctr = inCave ? L.exit : cam;
+  const sc = 2; const tw = w / sc, th = h / sc; const sx = Math.floor(ctr.x - tw / 2), sy = Math.floor(ctr.y - th / 2);
+  const seen = inCave ? st.seenOW : st.seen;
   for (let j = 0; j < th; j++) for (let i = 0; i < tw; i++) {
-    const tx = sx + i, ty = sy + j; if (tx < 0 || ty < 0 || tx >= L.w || ty >= L.h) continue; const idx = ty * L.w + tx;
+    const tx = sx + i, ty = sy + j; if (tx < 0 || ty < 0 || tx >= Lr.w || ty >= Lr.h) continue; const idx = ty * Lr.w + tx;
     if (!seen[idx]) continue;
-    rect(x0 + i * sc, y0 + j * sc, sc, sc, mmColor(L.tiles[idx], L.props[idx]));
+    rect(x0 + i * sc, y0 + j * sc, sc, sc, mmColor(Lr.tiles[idx], Lr.props[idx]));
   }
   for (const p of st.players) {
-    if (p[1] !== L.id) continue; const c = p[0] === st.myId ? rgb(255, 255, 255) : c32(hexToRgb((PCOLORS.find(c => c.name === p[5]) || PCOLORS[0]).c));
-    const mx = x0 + (p[2] - sx) * sc, my = y0 + (p[3] - sy) * sc; if (mx < x0 || my < y0 || mx > x0 + w || my > y0 + h) continue;
-    rect(mx - 1, my - 1, 3, 3, c); if (p[0] === st.myId) { rect(mx + Math.cos(p[4]) * 3, my + Math.sin(p[4]) * 3, 1, 1, rgb(255, 255, 0)); rect(mx + Math.cos(p[4]) * 4, my + Math.sin(p[4]) * 4, 1, 1, rgb(255, 255, 0)); }
+    const pos = inCave ? owSpot(st.world, p) : p[1] === L.id ? { x: p[2], y: p[3], inside: false } : null; if (!pos) continue;
+    const c = p[0] === st.myId ? rgb(255, 255, 255) : c32(hexToRgb((PCOLORS.find(c => c.name === p[5]) || PCOLORS[0]).c));
+    const mx = x0 + (pos.x - sx) * sc, my = y0 + (pos.y - sy) * sc; if (mx < x0 || my < y0 || mx > x0 + w || my > y0 + h) continue;
+    if (pos.inside && !(Math.floor(R.time * 3) & 1)) continue;
+    rect(mx - 1, my - 1, 3, 3, c); if (p[0] === st.myId && !pos.inside) { rect(mx + Math.cos(p[4]) * 3, my + Math.sin(p[4]) * 3, 1, 1, rgb(255, 255, 0)); rect(mx + Math.cos(p[4]) * 4, my + Math.sin(p[4]) * 4, 1, 1, rgb(255, 255, 0)); }
   }
-  if (L.kind === 'ow') { const r = owRegionAt(L, cam.x, cam.y); text(String.fromCharCode(65 + r.rx) + (r.ry + 1), x0 + 1, y0 + h - 8, rgb(255, 255, 255)); }
+  if (Lr.kind === 'ow') { const r = owRegionAt(Lr, ctr.x, ctr.y); text(String.fromCharCode(65 + r.rx) + (r.ry + 1) + (inCave ? ' ' + caveLabel(L) : ''), x0 + 1, y0 + h - 8, rgb(255, 255, 255)); }
 }
 function drawBigMap(st) {
   const W = R.W, H = R.H; const L = st.level;
@@ -359,10 +467,14 @@ function drawBigMap(st) {
   const Lo = st.world.levels.ow; const seen = st.seenOW;
   const sc = Math.max(1, Math.min(Math.floor((W - 8) / Lo.w), Math.floor((H - 24) / Lo.h)));
   const x0 = Math.round(W / 2 - Lo.w * sc / 2), y0 = 16;
-  textC('THE WILDS', W / 2, 4, rgb(255, 220, 120));
+  textC(L.kind === 'cave' ? 'THE WILDS - YOU ARE IN: ' + caveLabel(L) : 'THE WILDS', W / 2, 4, rgb(255, 220, 120));
   for (let y = 0; y < Lo.h; y++) for (let x = 0; x < Lo.w; x++) { const i = y * Lo.w + x; if (!seen[i]) continue; rect(x0 + x * sc, y0 + y * sc, sc, sc, mmColor(Lo.tiles[i], Lo.props[i])); }
   for (let d = 1; d <= 9; d++) { const g = st.world.dungeons[d]; if (!g || !seen[g.y * Lo.w + g.x]) continue; const done = st.team.done.includes(d); text(String(d), x0 + g.x * sc - 2, y0 + g.y * sc - 8, done ? rgb(120, 255, 120) : rgb(255, 120, 80)); }
-  for (const p of st.players) { if (p[1] !== 'ow') continue; const c = p[0] === st.myId ? rgb(255, 255, 255) : c32(hexToRgb((PCOLORS.find(c => c.name === p[5]) || PCOLORS[0]).c)); rect(x0 + p[2] * sc - 2, y0 + p[3] * sc - 2, 4, 4, c); }
+  for (const p of st.players) {
+    const pos = owSpot(st.world, p); if (!pos) continue; const c = p[0] === st.myId ? rgb(255, 255, 255) : c32(hexToRgb((PCOLORS.find(c => c.name === p[5]) || PCOLORS[0]).c));
+    const bx = x0 + pos.x * sc, by = y0 + pos.y * sc;
+    if (pos.inside) { if (Math.floor(R.time * 3) & 1) frame(bx - 3, by - 3, 7, 7, c); rect(bx - 1, by - 1, 3, 3, c); } else rect(bx - 2, by - 2, 4, 4, c);
+  }
   text('SHARDS ' + st.team.shards.length + '/8', 6, H - 10, rgb(255, 180, 40));
 }
 function present() { R.ctx.putImageData(R.img, 0, 0); }

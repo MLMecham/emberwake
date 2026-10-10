@@ -46,7 +46,9 @@ function sprShearRows(s, y0, y1, dx) { const o = sprCopy(s); for (let y = y0; y 
 function sprStep(s, y0, dl, dr) { const o = sprCopy(s); for (let y = y0; y < s.h; y++) for (let x = 0; x < s.w; x++) o.px[y * s.w + x] = 0; for (let y = y0; y < s.h; y++) for (let x = 0; x < s.w; x++) { const d = x < s.w / 2 ? dl : dr; const ty = y + d; if (ty >= y0 - 1 && ty < s.h) { const c = sprGet(s, x, y); if (c) o.px[ty * s.w + x] = c; } } return o; }
 function sprShiftCols(s, x0, x1, dy) { const o = sprCopy(s); for (let x = x0; x <= x1; x++) { for (let y = 0; y < s.h; y++) o.px[y * s.w + x] = 0; for (let y = 0; y < s.h; y++) { const c = sprGet(s, x, y); const ty = y + dy; if (c && ty >= 0 && ty < s.h) o.px[ty * s.w + x] = c; } } return o; }
 function sprBob(s, dy) { return sprShiftCols(s, 0, s.w - 1, dy); }
-const SPRITE_KIT = { squash: sprSquash, shearRows: sprShearRows, step: sprStep, shiftCols: sprShiftCols, bob: sprBob, mirror: (s) => mirrorSpr(s), copy: sprCopy, fromRows: (rows, pal) => buildSprite(rows, pal) };
+// rotate around the center (nearest pixel), for spinning things
+function sprRotate(s, a) { const o = { w: s.w, h: s.h, px: new Uint32Array(s.px.length) }; const c = Math.cos(a), si = Math.sin(a), cx = (s.w - 1) / 2, cy = (s.h - 1) / 2; for (let y = 0; y < s.h; y++) for (let x = 0; x < s.w; x++) { const dx = x - cx, dy = y - cy; const sx = Math.round(cx + dx * c + dy * si), sy = Math.round(cy - dx * si + dy * c); o.px[y * s.w + x] = sprGet(s, sx, sy); } return o; }
+const SPRITE_KIT = { rotate: sprRotate, squash: sprSquash, shearRows: sprShearRows, step: sprStep, shiftCols: sprShiftCols, bob: sprBob, mirror: (s) => mirrorSpr(s), copy: sprCopy, fromRows: (rows, pal) => buildSprite(rows, pal) };
 function initAnims() {
   for (const id in Content.anims) {
     const a = Content.anims[id]; const base = SPR[id]; if (!base) continue;

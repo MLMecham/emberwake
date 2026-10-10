@@ -2,7 +2,7 @@
 // Only the host runs this. Clients send their position and actions; the host sends back snapshots.
 'use strict';
 // Enemy, item, projectile and elite definitions live in src/content and are looked up through core/registry.js.
-const SAVE_VERSION = 2;
+const SAVE_VERSION = 3;
 // Bring an old save up to date. v1 -> v2: dungeons were redrawn as shapes, so dungeon tile changes, cleared rooms,
 // keys and maps from v1 no longer fit; overworld progress, items and shards are kept. Tile/prop ids are remapped by name.
 function migrateSave(s) {
@@ -11,6 +11,13 @@ function migrateSave(s) {
     for (const lvl of Object.keys(s.mods)) if (lvl[0] === 'd') delete s.mods[lvl];
     for (const t of ['cleared', 'taken']) for (const k of Object.keys(s.team[t] || {})) if (k[0] === 'd') delete s.team[t][k];
     s.team.keys = {}; s.team.maps = {}; s.team.comps = {};
+  }
+  // v2 -> v3: the Wilds were redrawn (start in the middle, sea/peaks/great wood at the edges, gate towers), so overworld
+  // changes and cave contents no longer line up. Dungeon progress, items and shards are kept; everyone starts at the new spawn.
+  if ((s.v || 1) < 3) {
+    for (const lvl of Object.keys(s.mods)) if (lvl === 'ow' || (lvl[0] === 'c' && lvl !== 'c0')) delete s.mods[lvl];
+    for (const t of ['cleared', 'taken']) for (const k of Object.keys(s.team[t] || {})) if (k.startsWith('ow:') || (k[0] === 'c' && !k.startsWith('c0:'))) delete s.team[t][k];
+    for (const c in (s.players || {})) { const pl = s.players[c]; if (pl.lvl === 'ow' || (pl.lvl && pl.lvl[0] === 'c')) pl.respawn = true; }
   }
   if (s.tileNames) for (const lvl in s.mods) for (const i in s.mods[lvl]) { const m = s.mods[lvl][i]; const tn = s.tileNames[m[0]]; if (tn && TL[tn] != null) m[0] = TL[tn]; const pn = s.propNames && s.propNames[m[1]]; if (pn) { const pi = PROPS.indexOf(pn); if (pi >= 0) m[1] = pi; } }
   return s;
@@ -47,6 +54,7 @@ class Sim {
       }
       const host = Object.values(this.players)[0];
       const sp = host && host.alive ? host : null;
+      if (saved && saved.respawn) { const L = this.W.levels.ow; p.lvl = 'ow'; p.x = L.spawn.x; p.y = L.spawn.y; p.a = L.spawn.a; delete p.respawn; }
       if (!saved) { const L = this.W.levels[sp ? sp.lvl : 'ow']; p.lvl = L.id; p.x = sp ? sp.x : L.spawn.x; p.y = sp ? sp.y : L.spawn.y; p.a = sp ? sp.a : L.spawn.a; }
       this.players[id] = p;
       this.ev({ t: 'msg', text: name + ' JOINED THE QUEST!' });
@@ -474,7 +482,7 @@ class Sim {
         if (dist2(p.x, p.y, e.x, e.y) < 0.16) {
           // sword-class shield blocks weak front projectiles when not attacking
           const toP = Math.atan2(e.y - p.y, e.x - p.x);
-          if (p.cls !== 'monk' && def.blockable && Math.abs(angDiff(p.a, toP)) < 0.7) { e.dead = true; this.sfx('clink', e.lvl); return; }
+          if (p.cls !== 'monk' && def.blockable && Math.abs(angDiff(p.a, toP)) < 0.7) { e.dead = true; this.sfx('clink', e.lvl); this.ev({ t: 'block', pid: p.id }); return; }
           this.hurtPlayer(p, e.dmg, e); e.dead = true; return;
         }
       }

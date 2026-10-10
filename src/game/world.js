@@ -17,7 +17,7 @@ class Level {
     x = Math.floor(x); y = Math.floor(y);
     if (x < 0 || y < 0 || x >= this.w || y >= this.h) return true;
     const t = this.tiles[y * this.w + x]; const ti = TINFO[t];
-    if (ti.water && opts && opts.raft) return false;
+    if (ti.water && !ti.ocean && opts && opts.raft) return false;
     // sealed-room doors are one-way: teammates can come in, nobody leaves until the room is clear
     if (t === TL.SHUTTER && opts && opts.mx != null && this.kind === 'dungeon') {
       const rid = this.sealRoom && this.sealRoom[y * this.w + x];
@@ -51,12 +51,14 @@ function genOverworld(W, rnd) {
   const w = RW * RSX + 1, h = RH * RSY + 1;
   const L = new Level('ow', 'ow', w, h); W.levels.ow = L; L.regions = [];
   // biomes: by coarse noise + position bias
-  const startR = { x: Math.floor(RW / 2), y: RH - 1 };
+  // start near the middle of the map, so every direction has something to find
+  const startR = { x: Math.floor(RW / 2) - (rnd() < 0.5 ? 1 : 0), y: Math.floor(RH / 2) };
   const bn = []; for (let i = 0; i < 4; i++) bn.push(rnd());
   for (let ry = 0; ry < RH; ry++) for (let rx = 0; rx < RW; rx++) {
     let b;
     const v = Math.sin(rx * 0.9 + bn[0] * 6) + Math.cos(ry * 1.1 + bn[1] * 6) + (rnd() - 0.5) * 0.9;
-    if (ry === 0 || (ry === 1 && rnd() < 0.4)) b = 'mountain';
+    if ((rx === 0 || rx === RW - 1) && rnd() < 0.45) b = 'mountain'; // foothills of the edge ranges
+    else if (ry === 0 && rnd() < 0.5) b = 'forest'; // the edge of the great wood
     else if (v > 1.0) b = 'forest'; else if (v < -1.1) b = 'lake'; else if (rx >= RW - 2 && ry >= 3 && rnd() < 0.6) b = 'desert';
     else if (rx <= 1 && ry >= 2 && ry <= 4 && rnd() < 0.5) b = 'graveyard'; else b = rnd() < 0.55 ? 'plains' : rnd() < 0.5 ? 'forest' : 'desert';
     if (rx === startR.x && ry === startR.y) b = 'plains';
@@ -97,8 +99,13 @@ function genOverworld(W, rnd) {
     if (y % RSY === 0) continue;
     L.set(x, y, borderTile(a, b));
   }
+  // the edges of the Wilds: the great wood (north), granite peaks (west), fire peaks (east), the sea (south)
+  for (let x = 0; x < w; x++) { L.set(x, 0, TL.BIGWOOD); L.set(x, h - 1, TL.OCEAN); }
+  for (let y = 1; y < h - 1; y++) { L.set(0, y, TL.PEAKS); L.set(w - 1, y, TL.FIREPEAKS); }
   // interiors
   for (const reg of L.regions) fillRegion(L, reg, rnd);
+  // a beach along the sea
+  for (let x = 1; x < w - 1; x++) { const t = L.get(x, h - 2); if (t === TL.GRASS || t === TL.FLOWERS || t === TL.PATH) L.set(x, h - 2, TL.SAND); }
   // openings
   const openings = []; // per region list of door points (inside tile)
   L.regions.forEach(r => r.doors = []);
@@ -261,6 +268,9 @@ function placeGate(W, L, r, rnd, d) {
   if (!p) return;
   const [px, py] = p;
   if (d === 9) L.set(px, py, TL.SHARDGATE);
+  // a tall tower behind the gate, in the dungeon's own colors, so you can spot it from far away
+  L.towerTheme = L.towerTheme || {};
+  for (let x = px - 2; x <= px + 2; x++) { L.set(x, py - 1, TL.TOWER); L.towerTheme[L.idx(x, py - 1)] = 'd' + d; }
   L.props[L.idx(px - 2, py + 1)] = PR.STATUE; L.props[L.idx(px + 2, py + 1)] = PR.STATUE;
   L.portals[L.idx(px, py)] = { to: 'd' + d };
   r.features.push({ type: 'dungeon', d, x: px, y: py });

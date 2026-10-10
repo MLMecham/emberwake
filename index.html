@@ -155,7 +155,8 @@ summary:hover { color:var(--gold); }
     <button id="pInvite">INVITE PLAYERS (CO-OP)</button>
     <button id="pSave">SAVE</button>
     <label>LOOK SENSITIVITY</label><input id="sens" type="range" min="0.3" max="2.5" step="0.1" value="1">
-    <label>VOLUME</label><input id="vol" type="range" min="0" max="1" step="0.05" value="0.5">
+    <label>SOUND EFFECTS</label><input id="vol" type="range" min="0" max="1" step="0.05" value="0.6">
+    <label>MUSIC</label><input id="mvol" type="range" min="0" max="1" step="0.05" value="0.6">
     <label><input id="invy" type="checkbox"> INVERT LOOK Y</label>
     <button id="pHelp">HOW TO PLAY</button>
     <button id="pQuit">SAVE &amp; QUIT TO TITLE</button>
@@ -12746,7 +12747,9 @@ function sprShearRows(s, y0, y1, dx) { const o = sprCopy(s); for (let y = y0; y 
 function sprStep(s, y0, dl, dr) { const o = sprCopy(s); for (let y = y0; y < s.h; y++) for (let x = 0; x < s.w; x++) o.px[y * s.w + x] = 0; for (let y = y0; y < s.h; y++) for (let x = 0; x < s.w; x++) { const d = x < s.w / 2 ? dl : dr; const ty = y + d; if (ty >= y0 - 1 && ty < s.h) { const c = sprGet(s, x, y); if (c) o.px[ty * s.w + x] = c; } } return o; }
 function sprShiftCols(s, x0, x1, dy) { const o = sprCopy(s); for (let x = x0; x <= x1; x++) { for (let y = 0; y < s.h; y++) o.px[y * s.w + x] = 0; for (let y = 0; y < s.h; y++) { const c = sprGet(s, x, y); const ty = y + dy; if (c && ty >= 0 && ty < s.h) o.px[ty * s.w + x] = c; } } return o; }
 function sprBob(s, dy) { return sprShiftCols(s, 0, s.w - 1, dy); }
-const SPRITE_KIT = { squash: sprSquash, shearRows: sprShearRows, step: sprStep, shiftCols: sprShiftCols, bob: sprBob, mirror: (s) => mirrorSpr(s), copy: sprCopy, fromRows: (rows, pal) => buildSprite(rows, pal) };
+// rotate around the center (nearest pixel), for spinning things
+function sprRotate(s, a) { const o = { w: s.w, h: s.h, px: new Uint32Array(s.px.length) }; const c = Math.cos(a), si = Math.sin(a), cx = (s.w - 1) / 2, cy = (s.h - 1) / 2; for (let y = 0; y < s.h; y++) for (let x = 0; x < s.w; x++) { const dx = x - cx, dy = y - cy; const sx = Math.round(cx + dx * c + dy * si), sy = Math.round(cy - dx * si + dy * c); o.px[y * s.w + x] = sprGet(s, sx, sy); } return o; }
+const SPRITE_KIT = { rotate: sprRotate, squash: sprSquash, shearRows: sprShearRows, step: sprStep, shiftCols: sprShiftCols, bob: sprBob, mirror: (s) => mirrorSpr(s), copy: sprCopy, fromRows: (rows, pal) => buildSprite(rows, pal) };
 function initAnims() {
   for (const id in Content.anims) {
     const a = Content.anims[id]; const base = SPR[id]; if (!base) continue;
@@ -12908,6 +12911,12 @@ function initTextures() {
     const edge = (y % 8) === 0 || (x % 8) === 0; return vary(edge ? [70, 70, 90] : [120, 124, 146], x, y, 0.2);
   });
 
+  // world-edge walls: granite peaks (west), basalt with glowing cracks (east), deep ocean (south)
+  TEX.mountain = makeTex((x, y) => { const strata = Math.sin(y * 0.55 + Math.sin(x * 0.3) * 1.4); let c = strata > 0.6 ? [150, 156, 176] : strata < -0.5 ? [92, 96, 116] : [122, 128, 148]; if (n8(x, y >> 1) > 0.9) c = [70, 72, 90]; return vary(c, x, y, 0.18); }, 13);
+  TEX.volcrock = makeTex((x, y) => { let c = n8(x >> 2, y >> 2) > 0.55 ? [58, 46, 50] : [76, 60, 62]; const cr = Math.abs(((x * 0.7 + y * 0.45 + Math.sin(y * 0.4) * 4) % 13) - 6.5); if (cr < 0.6 && n4(x >> 3, y >> 3) > 0.35) c = [255, 120 + (y & 3) * 20, 40]; return vary(c, x, y, 0.2); }, 17);
+  // the southern sea: dark, choppy, whitecaps everywhere; 'surf' is the breaking foam right off the beach
+  TEX.ocean = []; for (let f = 0; f < 4; f++) TEX.ocean.push(makeTex((x, y) => { const ph = f * Math.PI / 2; const w = Math.sin(x * 0.45 + ph + Math.sin(y * 0.35 + ph) * 2.2) + Math.sin(y * 0.6 - ph * 1.5 + x * 0.2) * 0.7; let c = [22, 52, 120]; if (w > 1.35) c = [236, 244, 255]; else if (w > 1.0) c = [130, 170, 220]; else if (w > 0.4) c = [34, 76, 160]; else if (w < -0.9) c = [14, 34, 86]; return vary(c, x, y, 0.1); }));
+  TEX.surf = []; for (let f = 0; f < 4; f++) TEX.surf.push(makeTex((x, y) => { const ph = f * Math.PI / 2; const w = Math.sin(x * 0.5 + ph + Math.sin(y * 0.5) * 1.5) + Math.sin(y * 0.9 + ph * 2) * 0.8; let c = [40, 92, 180]; if (w > 0.6) c = [240, 248, 255]; else if (w > 0.1) c = [170, 205, 240]; return vary(c, x, y, 0.1); }));
   TEX.cwall = makeTex((x, y) => vary(n8(x >> 2, y >> 2) > 0.5 ? [60, 46, 40] : [80, 62, 52], x, y, 0.3), 9);
   TEX.cwall_bomb = makeTex((x, y) => { let c = n8(x >> 2, y >> 2) > 0.5 ? [60, 46, 40] : [80, 62, 52]; if (Math.abs((x - 16) - Math.sin(y * 0.6) * 3) < 0.8 && y > 6 && y < 28) c = [30, 22, 18]; return vary(c, x, y, 0.3); }, 9);
   TEX.shop = makeTex((x, y) => { let c = [120, 80, 44]; if ((y & 7) === 0) c = [70, 44, 24]; if (y < 4) c = [200, 60, 40]; return vary(c, x, y, 0.1); });
@@ -12963,6 +12972,13 @@ defTile(TL.STAIRS, { floor: 'stairs', stairs: true });
 defTile(TL.SHARDGATE, { solid: true, wall: 'shardwall', shardGate: true });
 defTile(TL.BUSHFLOOR, { floor: 'grass' });
 defTile(TL.CEXIT = 27, { solid: true, wall: 'cexit', exitWall: true }); // daylight archway out of a cave
+// The edges of the Wilds, and the tall towers over dungeon gates. tall: wall height in tiles (seen over shorter walls),
+// jag: how the top edge is cut ('peak' ridge, 'trees' canopy, 'battlement'), snow: white caps on the high parts.
+defTile(TL.OCEAN = 28, { solid: true, floor: 'surf', water: true, ocean: true, low: true }); // rough sea: the raft can't cross it
+defTile(TL.PEAKS = 29, { solid: true, wall: 'mountain', tall: 3.4, jag: 'peak', snow: true });
+defTile(TL.FIREPEAKS = 30, { solid: true, wall: 'volcrock', tall: 2.8, jag: 'peak' });
+defTile(TL.BIGWOOD = 31, { solid: true, wall: 'treewall', tall: 2.6, jag: 'trees' });
+defTile(TL.TOWER = 32, { solid: true, wall: 'brick', tall: 2.3, jag: 'battlement' });
 
 // props drawn as sprites on tiles
 const PROPS = [null, 'tree', 'pine', 'boulder', 'bush', 'cactus', 'grave', 'statue', 'sign', 'flame', 'pedestal'];
@@ -14034,22 +14050,22 @@ const AI = {
 // ---- src/content/caves.js ----
 (function () {
 // ===== content/caves.js : what's inside each kind of cave =====
-// npc: sprite id. text: what they say. stock: items on the counter, each { x (column 1-11), item, price }.
+// name: shown on the map while you're inside. npc: sprite id. text: what they say. stock: items on the counter, each { x (column 1-11), item, price }.
 //   gift: free.  needHearts: requires that many hearts.  choose: picking one removes the others with the same tag.
 //   unique: the martial artist can't take it.
 // Which caves appear on the map is the CAVE_MIX list in game/world.js.
 'use strict';
-defineCave('sword0', { npc: 'oldman', text: 'THE DARK IS LONG, WAYFARER. STEEL IS BETTER COMPANY THAN COURAGE ALONE.', stock: [{ x: 6, item: 'sword1', price: 0, gift: true }] });
-defineCave('sword1', { npc: 'oldman', text: 'PROVE YOUR HEART IS STRONG... FIVE HEARTS, AND THIS BLADE IS YOURS.', stock: [{ x: 6, item: 'sword2', price: 0, gift: true, needHearts: 5 }] });
-defineCave('sword2', { npc: 'oldman', text: 'ONLY A HERO OF TWELVE HEARTS MAY LIFT THE MYTHRIL EDGE.', stock: [{ x: 6, item: 'sword3', price: 0, gift: true, needHearts: 12 }] });
-defineCave('shop1', { npc: 'merchant', text: 'BUY SOMETHIN\' WILL YA!', stock: [{ x: 3, item: 'bombs', price: 20 }, { x: 6, item: 'candle', price: 60 }, { x: 9, item: 'heart', price: 10 }] });
-defineCave('shop2', { npc: 'merchant', text: 'FINEST GOODS THIS SIDE OF THE RIVER.', stock: [{ x: 3, item: 'arrows', price: 30 }, { x: 6, item: 'bombs', price: 25 }, { x: 9, item: 'potion', price: 50 }] });
-defineCave('armor', { npc: 'merchant', text: 'LINKED STEEL RINGS, SEWN RIGHT INTO YOUR TUNIC. SHINY, EH?', stock: [{ x: 4, item: 'chain', price: 160 }, { x: 8, item: 'potion', price: 60 }] });
-defineCave('potion', { npc: 'oldman', text: 'DRINK WHEN THE DARK CLOSES IN.', stock: [{ x: 4, item: 'potion', price: 40 }, { x: 8, item: 'potion2', price: 68 }] });
-defineCave('heart', { npc: 'oldman', text: 'TAKE ANY ONE YOU WANT.', stock: [{ x: 4, item: 'hcont', price: 0, gift: true, choose: true }, { x: 8, item: 'potion', price: 0, gift: true, choose: true }] });
-defineCave('gift', { npc: 'merchant', text: 'IT\'S A SECRET TO EVERYONE... TAKE THIS.', stock: [{ x: 6, item: ['gems30', 'gems50', 'gems100'], price: 0, gift: true }] });
-defineCave('hint', { npc: 'oldman', text: null /* a random line from the hints below */, stock: [] });
-defineCave('dojo', { npc: 'master', text: 'HOH! A STEEL SWORD? THE STRONGEST WEAPON IS ATTACHED TO YOUR WRISTS. STEP ONTO THE MAT... IF YOU DARE.', stock: [{ x: 6, item: 'fists', price: 0, gift: true, unique: true }] });
+defineCave('sword0', { name: 'OLD MAN', npc: 'oldman', text: 'THE DARK IS LONG, WAYFARER. STEEL IS BETTER COMPANY THAN COURAGE ALONE.', stock: [{ x: 6, item: 'sword1', price: 0, gift: true }] });
+defineCave('sword1', { name: 'OLD MAN', npc: 'oldman', text: 'PROVE YOUR HEART IS STRONG... FIVE HEARTS, AND THIS BLADE IS YOURS.', stock: [{ x: 6, item: 'sword2', price: 0, gift: true, needHearts: 5 }] });
+defineCave('sword2', { name: 'OLD MAN', npc: 'oldman', text: 'ONLY A HERO OF TWELVE HEARTS MAY LIFT THE MYTHRIL EDGE.', stock: [{ x: 6, item: 'sword3', price: 0, gift: true, needHearts: 12 }] });
+defineCave('shop1', { name: 'SHOP', npc: 'merchant', text: 'BUY SOMETHIN\' WILL YA!', stock: [{ x: 3, item: 'bombs', price: 20 }, { x: 6, item: 'candle', price: 60 }, { x: 9, item: 'heart', price: 10 }] });
+defineCave('shop2', { name: 'SHOP', npc: 'merchant', text: 'FINEST GOODS THIS SIDE OF THE RIVER.', stock: [{ x: 3, item: 'arrows', price: 30 }, { x: 6, item: 'bombs', price: 25 }, { x: 9, item: 'potion', price: 50 }] });
+defineCave('armor', { name: 'ARMORY', npc: 'merchant', text: 'LINKED STEEL RINGS, SEWN RIGHT INTO YOUR TUNIC. SHINY, EH?', stock: [{ x: 4, item: 'chain', price: 160 }, { x: 8, item: 'potion', price: 60 }] });
+defineCave('potion', { name: 'POTION SHOP', npc: 'oldman', text: 'DRINK WHEN THE DARK CLOSES IN.', stock: [{ x: 4, item: 'potion', price: 40 }, { x: 8, item: 'potion2', price: 68 }] });
+defineCave('heart', { name: 'SECRET CAVE', npc: 'oldman', text: 'TAKE ANY ONE YOU WANT.', stock: [{ x: 4, item: 'hcont', price: 0, gift: true, choose: true }, { x: 8, item: 'potion', price: 0, gift: true, choose: true }] });
+defineCave('gift', { name: 'SECRET CAVE', npc: 'merchant', text: 'IT\'S A SECRET TO EVERYONE... TAKE THIS.', stock: [{ x: 6, item: ['gems30', 'gems50', 'gems100'], price: 0, gift: true }] });
+defineCave('hint', { name: 'OLD MAN', npc: 'oldman', text: null /* a random line from the hints below */, stock: [] });
+defineCave('dojo', { name: 'DOJO', npc: 'master', text: 'HOH! A STEEL SWORD? THE STRONGEST WEAPON IS ATTACHED TO YOUR WRISTS. STEP ONTO THE MAT... IF YOU DARE.', stock: [{ x: 6, item: 'fists', price: 0, gift: true, unique: true }] });
 defineHints([
   'GHOSTS FEAR NO WALL. BUT THEY FEAR STEEL ALL THE SAME.',
   'CRACKED STONE HIDES MORE THAN DUST. CARRY BOMBS.',
@@ -14963,7 +14979,7 @@ defineItem({
   use(sim, p) {
     if (sim.ents.some(e => e.k === 'boomer' && e.pid === p.id)) return; // one at a time
     const disc = p.cls === 'monk';
-    sim.spawn({ k: 'boomer', lvl: p.lvl, x: p.x, y: p.y, a: p.a, pid: p.id, out: true, t: 0, spr: disc ? 'disc' : 'boomerang', sc: 0.6, z: 0.15, disc, hitSet: {} });
+    sim.spawn({ k: 'boomer', lvl: p.lvl, x: p.x, y: p.y, a: p.a, pid: p.id, out: true, t: 0, spr: disc ? 'disc_spin' : 'boomerang_spin', sc: 0.6, z: 0.15, disc, hitSet: {} });
     sim.sfx('boomer', p.lvl);
   },
 });
@@ -14989,6 +15005,8 @@ defineEntity('boomer', {
     }
   },
 });
+// in flight it spins: 8 frames of the item art turned 45 degrees at a time
+for (const id of ['boomerang', 'disc']) { defineSpriteVariant(id + '_spin', id, {}); defineAnim(id + '_spin', 20, (s, kit) => [0, 1, 2, 3, 4, 5, 6, 7].map(i => kit.rotate(s, i * Math.PI / 4))); }
 
 })();
 // ---- src/content/items/bow.js ----
@@ -15210,7 +15228,7 @@ class Level {
     x = Math.floor(x); y = Math.floor(y);
     if (x < 0 || y < 0 || x >= this.w || y >= this.h) return true;
     const t = this.tiles[y * this.w + x]; const ti = TINFO[t];
-    if (ti.water && opts && opts.raft) return false;
+    if (ti.water && !ti.ocean && opts && opts.raft) return false;
     // sealed-room doors are one-way: teammates can come in, nobody leaves until the room is clear
     if (t === TL.SHUTTER && opts && opts.mx != null && this.kind === 'dungeon') {
       const rid = this.sealRoom && this.sealRoom[y * this.w + x];
@@ -15244,12 +15262,14 @@ function genOverworld(W, rnd) {
   const w = RW * RSX + 1, h = RH * RSY + 1;
   const L = new Level('ow', 'ow', w, h); W.levels.ow = L; L.regions = [];
   // biomes: by coarse noise + position bias
-  const startR = { x: Math.floor(RW / 2), y: RH - 1 };
+  // start near the middle of the map, so every direction has something to find
+  const startR = { x: Math.floor(RW / 2) - (rnd() < 0.5 ? 1 : 0), y: Math.floor(RH / 2) };
   const bn = []; for (let i = 0; i < 4; i++) bn.push(rnd());
   for (let ry = 0; ry < RH; ry++) for (let rx = 0; rx < RW; rx++) {
     let b;
     const v = Math.sin(rx * 0.9 + bn[0] * 6) + Math.cos(ry * 1.1 + bn[1] * 6) + (rnd() - 0.5) * 0.9;
-    if (ry === 0 || (ry === 1 && rnd() < 0.4)) b = 'mountain';
+    if ((rx === 0 || rx === RW - 1) && rnd() < 0.45) b = 'mountain'; // foothills of the edge ranges
+    else if (ry === 0 && rnd() < 0.5) b = 'forest'; // the edge of the great wood
     else if (v > 1.0) b = 'forest'; else if (v < -1.1) b = 'lake'; else if (rx >= RW - 2 && ry >= 3 && rnd() < 0.6) b = 'desert';
     else if (rx <= 1 && ry >= 2 && ry <= 4 && rnd() < 0.5) b = 'graveyard'; else b = rnd() < 0.55 ? 'plains' : rnd() < 0.5 ? 'forest' : 'desert';
     if (rx === startR.x && ry === startR.y) b = 'plains';
@@ -15290,8 +15310,13 @@ function genOverworld(W, rnd) {
     if (y % RSY === 0) continue;
     L.set(x, y, borderTile(a, b));
   }
+  // the edges of the Wilds: the great wood (north), granite peaks (west), fire peaks (east), the sea (south)
+  for (let x = 0; x < w; x++) { L.set(x, 0, TL.BIGWOOD); L.set(x, h - 1, TL.OCEAN); }
+  for (let y = 1; y < h - 1; y++) { L.set(0, y, TL.PEAKS); L.set(w - 1, y, TL.FIREPEAKS); }
   // interiors
   for (const reg of L.regions) fillRegion(L, reg, rnd);
+  // a beach along the sea
+  for (let x = 1; x < w - 1; x++) { const t = L.get(x, h - 2); if (t === TL.GRASS || t === TL.FLOWERS || t === TL.PATH) L.set(x, h - 2, TL.SAND); }
   // openings
   const openings = []; // per region list of door points (inside tile)
   L.regions.forEach(r => r.doors = []);
@@ -15454,6 +15479,9 @@ function placeGate(W, L, r, rnd, d) {
   if (!p) return;
   const [px, py] = p;
   if (d === 9) L.set(px, py, TL.SHARDGATE);
+  // a tall tower behind the gate, in the dungeon's own colors, so you can spot it from far away
+  L.towerTheme = L.towerTheme || {};
+  for (let x = px - 2; x <= px + 2; x++) { L.set(x, py - 1, TL.TOWER); L.towerTheme[L.idx(x, py - 1)] = 'd' + d; }
   L.props[L.idx(px - 2, py + 1)] = PR.STATUE; L.props[L.idx(px + 2, py + 1)] = PR.STATUE;
   L.portals[L.idx(px, py)] = { to: 'd' + d };
   r.features.push({ type: 'dungeon', d, x: px, y: py });
@@ -15606,7 +15634,7 @@ function roomBounds(L, room) {
 // Only the host runs this. Clients send their position and actions; the host sends back snapshots.
 'use strict';
 // Enemy, item, projectile and elite definitions live in src/content and are looked up through core/registry.js.
-const SAVE_VERSION = 2;
+const SAVE_VERSION = 3;
 // Bring an old save up to date. v1 -> v2: dungeons were redrawn as shapes, so dungeon tile changes, cleared rooms,
 // keys and maps from v1 no longer fit; overworld progress, items and shards are kept. Tile/prop ids are remapped by name.
 function migrateSave(s) {
@@ -15615,6 +15643,13 @@ function migrateSave(s) {
     for (const lvl of Object.keys(s.mods)) if (lvl[0] === 'd') delete s.mods[lvl];
     for (const t of ['cleared', 'taken']) for (const k of Object.keys(s.team[t] || {})) if (k[0] === 'd') delete s.team[t][k];
     s.team.keys = {}; s.team.maps = {}; s.team.comps = {};
+  }
+  // v2 -> v3: the Wilds were redrawn (start in the middle, sea/peaks/great wood at the edges, gate towers), so overworld
+  // changes and cave contents no longer line up. Dungeon progress, items and shards are kept; everyone starts at the new spawn.
+  if ((s.v || 1) < 3) {
+    for (const lvl of Object.keys(s.mods)) if (lvl === 'ow' || (lvl[0] === 'c' && lvl !== 'c0')) delete s.mods[lvl];
+    for (const t of ['cleared', 'taken']) for (const k of Object.keys(s.team[t] || {})) if (k.startsWith('ow:') || (k[0] === 'c' && !k.startsWith('c0:'))) delete s.team[t][k];
+    for (const c in (s.players || {})) { const pl = s.players[c]; if (pl.lvl === 'ow' || (pl.lvl && pl.lvl[0] === 'c')) pl.respawn = true; }
   }
   if (s.tileNames) for (const lvl in s.mods) for (const i in s.mods[lvl]) { const m = s.mods[lvl][i]; const tn = s.tileNames[m[0]]; if (tn && TL[tn] != null) m[0] = TL[tn]; const pn = s.propNames && s.propNames[m[1]]; if (pn) { const pi = PROPS.indexOf(pn); if (pi >= 0) m[1] = pi; } }
   return s;
@@ -15651,6 +15686,7 @@ class Sim {
       }
       const host = Object.values(this.players)[0];
       const sp = host && host.alive ? host : null;
+      if (saved && saved.respawn) { const L = this.W.levels.ow; p.lvl = 'ow'; p.x = L.spawn.x; p.y = L.spawn.y; p.a = L.spawn.a; delete p.respawn; }
       if (!saved) { const L = this.W.levels[sp ? sp.lvl : 'ow']; p.lvl = L.id; p.x = sp ? sp.x : L.spawn.x; p.y = sp ? sp.y : L.spawn.y; p.a = sp ? sp.a : L.spawn.a; }
       this.players[id] = p;
       this.ev({ t: 'msg', text: name + ' JOINED THE QUEST!' });
@@ -16078,7 +16114,7 @@ class Sim {
         if (dist2(p.x, p.y, e.x, e.y) < 0.16) {
           // sword-class shield blocks weak front projectiles when not attacking
           const toP = Math.atan2(e.y - p.y, e.x - p.x);
-          if (p.cls !== 'monk' && def.blockable && Math.abs(angDiff(p.a, toP)) < 0.7) { e.dead = true; this.sfx('clink', e.lvl); return; }
+          if (p.cls !== 'monk' && def.blockable && Math.abs(angDiff(p.a, toP)) < 0.7) { e.dead = true; this.sfx('clink', e.lvl); this.ev({ t: 'block', pid: p.id }); return; }
           this.hurtPlayer(p, e.dmg, e); e.dead = true; return;
         }
       }
@@ -16273,13 +16309,27 @@ function renderWorld(cam, L, ents, players, myId) {
       const f = clamp((hz - y) / (H * 0.8), 0, 1); const c = rgb(lerp(168, 70, f) | 0, lerp(208, 130, f) | 0, lerp(248, 230, f) | 0);
       for (let x = 0; x < W; x++) buf[y * W + x] = c;
     }
-    // distant hills band + clouds by angle
+    // the far edges of the Wilds, fixed to the compass so you can always tell which way you face:
+    // granite peaks with snow to the west, a smoking volcano to the east, the great wood to the north, open sea to the south
+    const u = H / 180; const tri = (v) => 1 - 2 * Math.abs(v - Math.floor(v) - 0.5); const sm = (v) => clamp((v - 0.15) / 0.45, 0, 1);
     for (let x = 0; x < W; x++) {
-      const ang = cam.a + Math.atan((x / W * 2 - 1) * fov);
-      const hh = 8 + Math.sin(ang * 3) * 4 + Math.sin(ang * 7 + 1) * 3 + Math.sin(ang * 13) * 1.5;
-      for (let y = Math.max(0, hz - Math.round(hh)); y < Math.min(H, hz); y++) buf[y * W + x] = rgb(96, 150, 120);
+      const ang = cam.a + Math.atan((x / W * 2 - 1) * fov); const ca = Math.cos(ang), sa = Math.sin(ang);
+      const col = (h, c) => { const y0 = Math.max(0, hz - Math.round(h)); for (let y = y0; y < Math.min(H, hz); y++) buf[y * W + x] = c; return y0; };
+      col((6 + Math.sin(ang * 3) * 3 + Math.sin(ang * 7 + 1) * 2) * u, rgb(110, 160, 140));
+      const wN = sm(-sa); if (wN > 0) col(wN * (13 + 4 * Math.abs(Math.sin(ang * 23)) + 3 * Math.sin(ang * 6)) * u, rgb(46, 96, 70));
+      const wW = sm(-ca);
+      if (wW > 0) { const ph = wW * (20 + 16 * tri(ang * 2.1 + 0.2) + 7 * tri(ang * 5.3)) * u; const top = col(ph, rgb(124, 134, 170)); const snow = Math.round(ph * 0.32); for (let y = Math.max(0, top); y < Math.min(hz, top + snow); y++) buf[y * W + x] = rgb(236, 242, 252); }
+      const wE = sm(ca);
+      if (wE > 0) {
+        const dA = angDiff(ang, 0.05); const cone = Math.max(0, 1 - Math.abs(dA) / 0.42);
+        const ridge = 9 + 6 * tri(ang * 3.7 + 0.6); const vh = Math.min(36, cone * 46); const h = wE * Math.max(ridge, vh) * u;
+        const top = col(h, rgb(88, 64, 72));
+        if (vh > ridge && vh >= 36) { for (let y = Math.max(0, top); y < Math.min(hz, top + 2 * u); y++) buf[y * W + x] = (Math.floor(t * 3 + x * 0.3) & 1) ? rgb(255, 130, 40) : rgb(255, 200, 80); }
+        // smoke drifting up out of the crater
+        if (wE > 0.6) for (let dy = 1; dy < 46 * u; dy++) { const y = top - dy; if (y < 0) break; const off = 0.02 * Math.sin(t * 0.7 + dy * 0.12 / u) + dy * 0.004 / u; const sw = 0.025 + dy * 0.0011 / u; if (Math.abs(dA - off) < sw && ((dy / u + t * 6) % 9) < 6) { const k = y * W + x; const v = buf[k]; buf[k] = rgb(((v & 255) + 110) >> 1, (((v >> 8) & 255) + 100) >> 1, (((v >> 16) & 255) + 100) >> 1); } }
+      }
       const cl = Math.sin(ang * 5 + t * 0.03) + Math.sin(ang * 11) * 0.5;
-      if (cl > 0.9) { const cy = hz - 40 - Math.round(Math.sin(ang * 2) * 8); for (let y = cy; y < cy + Math.round((cl - 0.9) * 14); y++) if (y >= 0 && y < hz) buf[y * W + x] = rgb(250, 250, 255); }
+      if (cl > 0.9) { const cy = hz - 48 * u - Math.round(Math.sin(ang * 2) * 8); for (let y = cy; y < cy + Math.round((cl - 0.9) * 14); y++) if (y >= 0 && y < hz) buf[y * W + x] = rgb(250, 250, 255); }
     }
   }
   // --- floor & ceiling casting ---
@@ -16297,9 +16347,11 @@ function renderWorld(cam, L, ents, players, myId) {
       const cx = Math.floor(fx), cy = Math.floor(fy);
       let c;
       if (floorRow) {
-        const tile = (cx < 0 || cy < 0 || cx >= L.w || cy >= L.h) ? (outdoor ? TL.GRASS : TL.DFLOOR) : L.tiles[cy * L.w + cx];
-        const ti = TINFO[tile]; let tex = texFor(ti.floor || 'grass', L) || TEX.grass; if (Array.isArray(tex)) tex = tex[wf];
-        const tx = ((fx - cx) * TS) | 0, ty = ((fy - cy) * TS) | 0; c = tex[(ty & 31) * TS + (tx & 31)];
+        const tile = (cx < 0 || cy < 0 || cx >= L.w || cy >= L.h) ? (outdoor ? (cy >= L.h ? TL.OCEAN : TL.GRASS) : TL.DFLOOR) : L.tiles[cy * L.w + cx];
+        const ti = TINFO[tile]; const oob = outdoor && cy >= L.h; let tex = oob ? TEX.ocean : (texFor(ti.floor || 'grass', L) || TEX.grass);
+        let sx = fx, sy = fy; if (ti.ocean) { sx += Math.sin(fy * 1.7 + t * 2.6) * 0.18; sy += Math.sin(fx * 1.3 + t * 2.1) * 0.22; } // heaving swell
+        if (Array.isArray(tex)) tex = tex[ti.ocean ? (Math.floor(t * 7 + fx * 0.3) & 3) : wf];
+        const tx = ((sx - Math.floor(sx)) * TS) | 0, ty = ((sy - Math.floor(sy)) * TS) | 0; c = tex[(ty & 31) * TS + (tx & 31)];
       } else {
         const tx = ((fx - cx) * TS) | 0, ty = ((fy - cy) * TS) | 0; c = shadeC(ceilTex[(ty & 31) * TS + (tx & 31)], 0.45);
       }
@@ -16308,6 +16360,35 @@ function renderWorld(cam, L, ents, players, myId) {
     }
   }
   // --- walls ---
+  // Each column finds the nearest wall; outdoors it keeps looking past short walls for a tall one (peaks, the great wood,
+  // gate towers) and draws that one's top above the near wall, so landmarks show over trees.
+  const maxSteps = outdoor ? 150 : 64; const triW = (v) => 1 - 2 * Math.abs(v - Math.floor(v) - 0.5);
+  const drawCol = (x, tile, side, pd, rdx, rdy, mx, my, yLimit) => {
+    const ti = TINFO[tile]; const dist = Math.max(0.05, pd);
+    const lh = H / dist; const bot = hz + eye * lh;
+    let wx = side === 0 ? cam.y + pd * rdy : cam.x + pd * rdx; const along = wx; wx -= Math.floor(wx);
+    let tx = (wx * TS) | 0; if ((side === 0 && rdx > 0) || (side === 1 && rdy < 0)) tx = TS - 1 - tx;
+    let hcol = 1;
+    if (ti.tall) {
+      hcol = ti.tall;
+      if (ti.jag === 'peak') hcol *= 0.55 + 0.3 * triW(along * 0.23) + 0.15 * triW(along * 0.71 + 0.4);
+      else if (ti.jag === 'trees') hcol *= 0.8 + 0.2 * Math.sqrt(Math.abs(Math.sin(along * 1.7)));
+      else if (ti.jag === 'battlement' && ((tx >> 3) & 1)) hcol += 0.18;
+    }
+    const top = bot - hcol * lh;
+    const th = L.towerTheme && L.towerTheme[my * L.w + mx]; const tex = (th && TEX[TINFO[tile].wall + '@' + th]) || texFor(ti.wall, L) || TEX.brick;
+    const lf = (dark ? darkLight(cam.x + rdx * pd, cam.y + rdy * pd, dist) : lightFor(kind, dist)) * (side ? 0.78 : 1);
+    const fogF = outdoor ? (ti.tall ? clamp((dist - 14) / 40, 0, 0.6) : clamp((dist - 9) / 9, 0, 0.85)) : 0;
+    const y0 = Math.max(0, Math.round(top)), y1 = Math.min(H, Math.round(bot), yLimit);
+    const snowLine = hcol - 0.5 - 0.3 * triW(along * 1.3);
+    for (let y = y0; y < y1; y++) {
+      const z = (bot - y) / lh; const ty = ((1 - (z - Math.floor(z))) * TS) | 0; let c = tex[(ty & 31) * TS + tx];
+      if (ti.snow && z > snowLine) c = ((tx + ty) & 7) ? rgb(236, 242, 252) : rgb(200, 210, 230);
+      c = shadeC(c, lf); if (fogF > 0) c = fogC(c, fogF, fogR, fogG, fogB);
+      buf[y * W + x] = c;
+    }
+    return Math.max(0, Math.round(top));
+  };
   for (let x = 0; x < W; x++) {
     const camX = 2 * x / W - 1; const rdx = dirX + plX * camX, rdy = dirY + plY * camX;
     let mx = Math.floor(cam.x), my = Math.floor(cam.y);
@@ -16315,26 +16396,20 @@ function renderWorld(cam, L, ents, players, myId) {
     let stepX, stepY, sdx, sdy;
     if (rdx < 0) { stepX = -1; sdx = (cam.x - mx) * ddx; } else { stepX = 1; sdx = (mx + 1 - cam.x) * ddx; }
     if (rdy < 0) { stepY = -1; sdy = (cam.y - my) * ddy; } else { stepY = 1; sdy = (my + 1 - cam.y) * ddy; }
-    let side = 0, hit = 0, tile = 0, n = 0;
-    while (!hit && n++ < 64) {
+    let side = 0, n = 0; let near = null, far = null;
+    while (n++ < maxSteps) {
       if (sdx < sdy) { sdx += ddx; mx += stepX; side = 0; } else { sdy += ddy; my += stepY; side = 1; }
-      if (mx < 0 || my < 0 || mx >= L.w || my >= L.h) { hit = 1; tile = outdoor ? TL.TREEWALL : TL.BRICK; break; }
-      tile = L.tiles[my * L.w + mx]; if (TINFO[tile].wall) hit = 1;
+      if (mx < 0 || my < 0 || mx >= L.w || my >= L.h) { if (!near && !outdoor) near = { tile: TL.BRICK, side, pd: side === 0 ? sdx - ddx : sdy - ddy, mx, my }; break; }
+      const tile = L.tiles[my * L.w + mx]; const ti = TINFO[tile];
+      if (!ti.wall) continue;
+      const hit = { tile, side, pd: side === 0 ? sdx - ddx : sdy - ddy, mx, my };
+      if (!near) { near = hit; if (ti.tall || !outdoor) break; }
+      else if (ti.tall) { far = hit; break; }
     }
-    const pd = side === 0 ? sdx - ddx : sdy - ddy; const dist = Math.max(0.05, pd);
-    R.zbuf[x] = hit ? dist : 1e9;
-    if (!hit) continue;
-    const lh = H / dist; const top = Math.round(hz - (1 - eye) * lh), bot = Math.round(hz + eye * lh);
-    let wx = side === 0 ? cam.y + pd * rdy : cam.x + pd * rdx; wx -= Math.floor(wx);
-    let tx = (wx * TS) | 0; if ((side === 0 && rdx > 0) || (side === 1 && rdy < 0)) tx = TS - 1 - tx;
-    const tex = texFor(TINFO[tile].wall, L) || TEX.brick;
-    let lf = (dark ? darkLight(cam.x + rdx * pd, cam.y + rdy * pd, dist) : lightFor(kind, dist)) * (side ? 0.78 : 1); const fogF = outdoor ? clamp((dist - 9) / 9, 0, 0.85) : 0;
-    const y0 = Math.max(0, top), y1 = Math.min(H, bot); const span = bot - top;
-    for (let y = y0; y < y1; y++) {
-      const ty = (((y - top) / span) * TS) | 0; let c = tex[(ty & 31) * TS + tx];
-      c = shadeC(c, lf); if (fogF > 0) c = fogC(c, fogF, fogR, fogG, fogB);
-      buf[y * W + x] = c;
-    }
+    R.zbuf[x] = near ? Math.max(0.05, near.pd) : 1e9;
+    if (!near) continue;
+    const nearTop = drawCol(x, near.tile, near.side, near.pd, rdx, rdy, near.mx, near.my, H);
+    if (far) drawCol(x, far.tile, far.side, far.pd, rdx, rdy, far.mx, far.my, nearTop);
   }
   // --- sprites ---
   const sprites = [];
@@ -16428,9 +16503,66 @@ function drawViewmodel(st) {
   }
   // sword class: shield on left, sword on right
   const sw = st.swing; const k = sw != null && sw < 0.25 ? sw / 0.25 : -1;
-  // shield
-  const shx = W * 0.14 + bx * 0.5, shy = H - 40 + by;
-  rect(shx - 18, shy - 22, 36, 50, rgb(20, 18, 28)); rect(shx - 16, shy - 20, 32, 46, rgb(140, 90, 46)); rect(shx - 16, shy - 20, 32, 4, rgb(200, 200, 210)); rect(shx - 2, shy - 14, 4, 30, rgb(200, 200, 210)); rect(shx - 10, shy - 2, 20, 4, rgb(200, 200, 210));
+  // shield, seen from behind: the upper arm comes up from the bottom-left, bends at the elbow, and the forearm lies
+  // across the back of the shield through a strap, with the fist closed on an upright grip near the far edge.
+  // Standing still it comes up bigger (ready to block); running it swings low with your stride; a block knocks it back.
+  {
+    const mk = st.moveK, ready = 1 - mk; const bk = st.blockT > 0 ? Math.sin(Math.min(1, st.blockT / 0.32) * Math.PI) : 0;
+    const sc = 1 + ready * 0.2 - mk * 0.05 - bk * 0.08;
+    const sway = Math.sin(st.bob) * 7 * mk, lift = Math.abs(Math.cos(st.bob)) * 6 * mk;
+    const shx = W * 0.22 + ready * W * 0.03 + sway + bk * 7 + (Math.random() - 0.5) * bk * 4;
+    const shy = H - 40 - ready * 8 + lift + mk * 6 + bk * 10;
+    const sw = Math.round(50 * sc), sh = Math.round(58 * sc); const x0 = Math.round(shx - sw / 2), y0 = Math.round(shy - sh / 2);
+    const rim = bk > 0.3 ? rgb(255, 255, 255) : rgb(176, 178, 194), rimD = rgb(96, 98, 116), wood = rgb(116, 76, 40), woodD = rgb(78, 50, 26), woodH = rgb(140, 94, 52);
+    const halfW = (j) => { const f = j / sh; if (j < 2) return sw / 2 - (2 - j); return f < 0.42 ? sw / 2 : (sw / 2) * (1 - Math.pow((f - 0.42) / 0.58, 1.7)); }; // round top corners, sides curving into the point
+    for (let j = 0; j < sh; j++) {
+      const hw = halfW(j); const xl = Math.round(shx - hw), xr = Math.round(shx + hw); if (xr <= xl) continue;
+      rect(xl, y0 + j, xr - xl, 1, rgb(20, 18, 28));
+      if (xr - xl > 4 && j > 1 && j < sh - 2) {
+        rect(xl + 1, y0 + j, xr - xl - 2, 1, rim); rect(xl + 1, y0 + j, 1, 1, rimD);
+        if (j > 3 && j < sh - 4 && xr - xl > 8) for (let x = xl + 3; x < xr - 3; x++) { const plank = ((x - x0) % 9) === 0; px(x, y0 + j, plank ? woodD : (x < shx - hw * 0.4 ? woodH : wood)); }
+      }
+    }
+    if (st.blockT > 0) for (let i = 0; i < 6; i++) { const a = Math.random() * TAU, r = sw * 0.6 + Math.random() * 6; px(shx + Math.cos(a) * r, shy - sh * 0.1 + Math.sin(a) * r * 0.8, rgb(255, 240, 160)); }
+    const aw = 13 * sc; // arm thickness
+    const fy = y0 + sh * 0.4;                         // forearm height
+    const elx = x0 - sw * 0.32, ely = fy + aw * 0.2;  // elbow, just off the shield's left edge
+    const gx = x0 + sw * 0.72;                        // the grip, toward the far edge
+    const shoulderX = elx - aw * 0.4, shoulderY = H + 16;
+    // the grip bar (behind the fist)
+    rect(gx - 2, fy - aw * 0.95, 5, aw * 1.9, woodD); rect(gx - 2, fy - aw * 0.95, 1, aw * 1.9, woodH);
+    // the whole arm is one smooth curve (shoulder -> elbow bend -> forearm), painted with a round brush:
+    // dark outline, sleeve, then a soft highlight along the top
+    // no elbow in view: the forearm sweeps up from the bottom-left corner and levels out across the shield (per the sketch)
+    const P0x = x0 - sw * 0.75, P0y = H + aw * 1.2, P1x = x0 + sw * 0.08, P1y = fy + aw * 0.55, P2x = gx - aw * 0.3, P2y = fy - aw * 0.1;
+    const bez = (t) => { const u = 1 - t; return [u * u * P0x + 2 * u * t * P1x + t * t * P2x, u * u * P0y + 2 * u * t * P1y + t * t * P2y]; };
+    const steps = 70, rr = (t) => (aw / 2) * (1.55 - 0.7 * t); // wide near you, narrowing toward the wrist
+    // we see the UNDERSIDE of the forearm: shadow along its top edge, the sleeve ends in a cuff,
+    // and the bare inner wrist leads into fingers curled around the grip toward us
+    const cuffT = 0.86; const skinL = c32(hexToRgb('#f8d4b0'));
+    const brush = (t0, t1, grow, c, dy, scale) => { for (let i = Math.round(t0 * steps); i <= Math.round(t1 * steps); i++) { const t = i / steps; const [bx2, by2] = bez(t); const r = (scale ? rr(t) * scale : rr(t)) + grow; disc(Math.round(bx2), Math.round(by2 + dy * rr(t)), Math.max(1, Math.round(r)), c); } };
+    brush(0, 1, 1.5, rgb(20, 18, 28), 0);                 // outline
+    brush(0, cuffT, 0, sleeve, 0);                          // sleeve
+    brush(0, cuffT, 0, sleeveD, -0.62, 0.4);                // shadow on the top edge (the side facing away)
+    if (tier >= 1) brush(0, cuffT, 0, sleeveH, 0.3, 0.22);  // metal sheen on the underside
+    brush(cuffT - 0.04, 1, 0, skin, 0); brush(cuffT, 1, 0, skinL, 0.25, 0.4); // inner wrist
+    { const [cx2, cy2] = bez(cuffT - 0.04); const r = rr(cuffT); rect(Math.round(cx2) - 1, Math.round(cy2 - r + 1), 3, Math.round(r * 2 - 1), sleeveD); }
+    // hand: the grip bar shows above and below; four fingers wrap around it in front, tips curling back toward the wrist
+    const fr = Math.round(aw * 0.55); const fcx = Math.round(gx - fr * 0.1), fcy = Math.round(fy - aw * 0.1);
+    rect(gx - 2, fcy - fr * 2.1, 5, fr * 4.2, woodD); rect(gx - 2, fcy - fr * 2.1, 1, fr * 4.2, woodH); frame(gx - 3, fcy - fr * 2.1 - 1, 7, fr * 4.2 + 2, rgb(20, 18, 28));
+    const fh2 = Math.max(3, Math.round(fr * 0.52)), fwid = Math.round(fr * 1.35);
+    for (let k = 0; k < 4; k++) {
+      const y = Math.round(fcy - fh2 * 2 + k * fh2), x = Math.round(gx - fwid * 0.45);
+      for (let yy = 0; yy < fh2; yy++) for (let xx = 0; xx < fwid; xx++) { const ex = (xx - fwid / 2) / (fwid / 2), ey = (yy - fh2 / 2 + 0.5) / (fh2 / 2); const e = ex * ex * 0.6 + ey * ey; if (e > 1.05) continue; px(x + xx, y + yy, e > 0.7 ? (yy >= fh2 - 1 ? rgb(20, 18, 28) : skinD) : (ey < -0.2 ? skinL : skin)); }
+      px(x + 1, y + (fh2 >> 1), rgb(236, 200, 180)); // fingertip
+    }
+    { const y = Math.round(fcy - fh2 * 2) - 2; rect(Math.round(gx - fwid * 0.2), y, Math.round(fwid * 0.55), 3, skinD); rect(Math.round(gx - fwid * 0.2), y, Math.round(fwid * 0.55), 1, rgb(20, 18, 28)); } // thumb over the top
+    // the strap loop the forearm passes through, on the left part of the shield
+    { const t = 0.72; const [sx2, sy2] = bez(t); const r = rr(t); const lw = Math.max(4, Math.round(5 * sc)), lh = Math.round(r * 2 + 6);
+      const lx = Math.round(sx2 - lw / 2), ly = Math.round(sy2 - lh / 2);
+      for (let j = 0; j < lh; j++) { const e = Math.abs(j - lh / 2) / (lh / 2); const inset = e > 0.8 ? 1 : 0; rect(lx + inset, ly + j, lw - inset * 2, 1, rgb(70, 44, 24)); px(lx + inset, ly + j, rgb(120, 80, 44)); }
+      frame(lx, ly, lw, lh, rgb(20, 18, 28)); px(lx + (lw >> 1), Math.round(sy2), rgb(220, 200, 80)); }
+  }
   if (me.sword > 0) {
     let ang, hx, hy;
     if (k >= 0) { ang = lerp(-0.4, -2.6, k); hx = lerp(W * 0.78, W * 0.42, k) + bx; hy = lerp(H - 14, H - 30, Math.sin(k * Math.PI)) + by; }
@@ -16500,10 +16632,18 @@ function mmColor(t, pr) {
     case TL.CAVE: return rgb(0, 0, 0); case TL.GATE: case TL.SHARDGATE: return rgb(255, 80, 80); case TL.PATH: return rgb(200, 170, 110); case TL.SAND: return rgb(220, 200, 130);
     case TL.BRIDGE: return rgb(150, 100, 50); case TL.BRICK: case TL.BRICK_BOMB: return rgb(50, 56, 100); case TL.LOCKED: return rgb(230, 200, 60); case TL.SHUTTER: return rgb(180, 180, 200);
     case TL.LAVA: return rgb(240, 90, 30); case TL.STAIRS: return rgb(0, 0, 0);
+    case TL.OCEAN: return rgb(30, 64, 160); case TL.PEAKS: return rgb(150, 156, 180); case TL.FIREPEAKS: return rgb(110, 60, 60); case TL.BIGWOOD: return rgb(14, 50, 24); case TL.TOWER: return rgb(255, 80, 80);
     case TL.DFLOOR: case TL.OPENDOOR: return rgb(110, 116, 160); case TL.CWALL: return rgb(60, 46, 40);
     default: return rgb(80, 160, 60);
   }
 }
+// Where a player is on the Wilds map: their spot outdoors, or the way into the cave or dungeon they're in (inside: true).
+function owSpot(world, p) {
+  if (p[1] === 'ow') return { x: p[2], y: p[3], inside: false };
+  const L = world.levels[p[1]]; if (!L || !L.exit || L.exit.lvl !== 'ow') return null;
+  return { x: L.exit.x, y: L.exit.y - 1.1, inside: true };
+}
+function caveLabel(L) { const c = Content.caves[L.caveKind]; return (c && c.name) || 'CAVE'; }
 function drawMinimap(st, x0, y0, w, h) {
   const L = st.level; const me = st.me; const cam = st.cam;
   rect(x0 - 1, y0 - 1, w + 2, h + 2, rgb(0, 0, 0)); frame(x0 - 2, y0 - 2, w + 4, h + 4, rgb(200, 180, 120));
@@ -16522,20 +16662,24 @@ function drawMinimap(st, x0, y0, w, h) {
     text('L' + L.dnum, x0 + 1, y0 + h - 8, rgb(255, 255, 255));
     return;
   }
-  // tile radar (north-up), 2px per tile
-  const sc = 2; const tw = w / sc, th = h / sc; const sx = Math.floor(cam.x - tw / 2), sy = Math.floor(cam.y - th / 2);
-  const seen = st.seen;
+  // tile radar (north-up), 2px per tile. Inside a cave or shop it shows the Wilds around the way in, with you blinking there.
+  const inCave = L.kind === 'cave' && L.exit && st.world;
+  const Lr = inCave ? st.world.levels.ow : L; const ctr = inCave ? L.exit : cam;
+  const sc = 2; const tw = w / sc, th = h / sc; const sx = Math.floor(ctr.x - tw / 2), sy = Math.floor(ctr.y - th / 2);
+  const seen = inCave ? st.seenOW : st.seen;
   for (let j = 0; j < th; j++) for (let i = 0; i < tw; i++) {
-    const tx = sx + i, ty = sy + j; if (tx < 0 || ty < 0 || tx >= L.w || ty >= L.h) continue; const idx = ty * L.w + tx;
+    const tx = sx + i, ty = sy + j; if (tx < 0 || ty < 0 || tx >= Lr.w || ty >= Lr.h) continue; const idx = ty * Lr.w + tx;
     if (!seen[idx]) continue;
-    rect(x0 + i * sc, y0 + j * sc, sc, sc, mmColor(L.tiles[idx], L.props[idx]));
+    rect(x0 + i * sc, y0 + j * sc, sc, sc, mmColor(Lr.tiles[idx], Lr.props[idx]));
   }
   for (const p of st.players) {
-    if (p[1] !== L.id) continue; const c = p[0] === st.myId ? rgb(255, 255, 255) : c32(hexToRgb((PCOLORS.find(c => c.name === p[5]) || PCOLORS[0]).c));
-    const mx = x0 + (p[2] - sx) * sc, my = y0 + (p[3] - sy) * sc; if (mx < x0 || my < y0 || mx > x0 + w || my > y0 + h) continue;
-    rect(mx - 1, my - 1, 3, 3, c); if (p[0] === st.myId) { rect(mx + Math.cos(p[4]) * 3, my + Math.sin(p[4]) * 3, 1, 1, rgb(255, 255, 0)); rect(mx + Math.cos(p[4]) * 4, my + Math.sin(p[4]) * 4, 1, 1, rgb(255, 255, 0)); }
+    const pos = inCave ? owSpot(st.world, p) : p[1] === L.id ? { x: p[2], y: p[3], inside: false } : null; if (!pos) continue;
+    const c = p[0] === st.myId ? rgb(255, 255, 255) : c32(hexToRgb((PCOLORS.find(c => c.name === p[5]) || PCOLORS[0]).c));
+    const mx = x0 + (pos.x - sx) * sc, my = y0 + (pos.y - sy) * sc; if (mx < x0 || my < y0 || mx > x0 + w || my > y0 + h) continue;
+    if (pos.inside && !(Math.floor(R.time * 3) & 1)) continue;
+    rect(mx - 1, my - 1, 3, 3, c); if (p[0] === st.myId && !pos.inside) { rect(mx + Math.cos(p[4]) * 3, my + Math.sin(p[4]) * 3, 1, 1, rgb(255, 255, 0)); rect(mx + Math.cos(p[4]) * 4, my + Math.sin(p[4]) * 4, 1, 1, rgb(255, 255, 0)); }
   }
-  if (L.kind === 'ow') { const r = owRegionAt(L, cam.x, cam.y); text(String.fromCharCode(65 + r.rx) + (r.ry + 1), x0 + 1, y0 + h - 8, rgb(255, 255, 255)); }
+  if (Lr.kind === 'ow') { const r = owRegionAt(Lr, ctr.x, ctr.y); text(String.fromCharCode(65 + r.rx) + (r.ry + 1) + (inCave ? ' ' + caveLabel(L) : ''), x0 + 1, y0 + h - 8, rgb(255, 255, 255)); }
 }
 function drawBigMap(st) {
   const W = R.W, H = R.H; const L = st.level;
@@ -16558,10 +16702,14 @@ function drawBigMap(st) {
   const Lo = st.world.levels.ow; const seen = st.seenOW;
   const sc = Math.max(1, Math.min(Math.floor((W - 8) / Lo.w), Math.floor((H - 24) / Lo.h)));
   const x0 = Math.round(W / 2 - Lo.w * sc / 2), y0 = 16;
-  textC('THE WILDS', W / 2, 4, rgb(255, 220, 120));
+  textC(L.kind === 'cave' ? 'THE WILDS - YOU ARE IN: ' + caveLabel(L) : 'THE WILDS', W / 2, 4, rgb(255, 220, 120));
   for (let y = 0; y < Lo.h; y++) for (let x = 0; x < Lo.w; x++) { const i = y * Lo.w + x; if (!seen[i]) continue; rect(x0 + x * sc, y0 + y * sc, sc, sc, mmColor(Lo.tiles[i], Lo.props[i])); }
   for (let d = 1; d <= 9; d++) { const g = st.world.dungeons[d]; if (!g || !seen[g.y * Lo.w + g.x]) continue; const done = st.team.done.includes(d); text(String(d), x0 + g.x * sc - 2, y0 + g.y * sc - 8, done ? rgb(120, 255, 120) : rgb(255, 120, 80)); }
-  for (const p of st.players) { if (p[1] !== 'ow') continue; const c = p[0] === st.myId ? rgb(255, 255, 255) : c32(hexToRgb((PCOLORS.find(c => c.name === p[5]) || PCOLORS[0]).c)); rect(x0 + p[2] * sc - 2, y0 + p[3] * sc - 2, 4, 4, c); }
+  for (const p of st.players) {
+    const pos = owSpot(st.world, p); if (!pos) continue; const c = p[0] === st.myId ? rgb(255, 255, 255) : c32(hexToRgb((PCOLORS.find(c => c.name === p[5]) || PCOLORS[0]).c));
+    const bx = x0 + pos.x * sc, by = y0 + pos.y * sc;
+    if (pos.inside) { if (Math.floor(R.time * 3) & 1) frame(bx - 3, by - 3, 7, 7, c); rect(bx - 1, by - 1, 3, 3, c); } else rect(bx - 2, by - 2, 4, 4, c);
+  }
   text('SHARDS ' + st.team.shards.length + '/8', 6, H - 10, rgb(255, 180, 40));
 }
 function present() { R.ctx.putImageData(R.img, 0, 0); }
@@ -16569,12 +16717,16 @@ function present() { R.ctx.putImageData(R.img, 0, 0); }
 // ---- src/engine/audio.js ----
 // ===== audio.js : tiny chiptune synth =====
 'use strict';
-const AU = { ctx: null, master: null, music: null, musicGain: null, track: null, step: 0, nextT: 0, on: true, vol: 0.5 };
+// Two volume knobs: sound effects (sfxVol) and music (musicVol), both 0..1 from the pause menu sliders.
+const AU = { ctx: null, master: null, music: null, musicGain: null, sfxGain: null, track: null, step: 0, nextT: 0, on: true, sfxVol: 0.6, musicVol: 0.6 };
+const MUSIC_BASE = 0.6; // how loud music is at full slider (it used to be 0.22)
+function audioSetVolumes() { if (!AU.ctx) return; AU.sfxGain.gain.value = AU.sfxVol; AU.musicGain.gain.value = AU.musicVol * MUSIC_BASE; }
 function audioInit() {
   if (AU.ctx) { if (AU.ctx.state === 'suspended') AU.ctx.resume(); return; }
   try { AU.ctx = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { return; }
-  AU.master = AU.ctx.createGain(); AU.master.gain.value = AU.vol; AU.master.connect(AU.ctx.destination);
-  AU.musicGain = AU.ctx.createGain(); AU.musicGain.gain.value = 0.22; AU.musicGain.connect(AU.master);
+  AU.master = AU.ctx.createGain(); AU.master.gain.value = 1; AU.master.connect(AU.ctx.destination);
+  AU.sfxGain = AU.ctx.createGain(); AU.sfxGain.connect(AU.master);
+  AU.musicGain = AU.ctx.createGain(); AU.musicGain.connect(AU.master); audioSetVolumes();
   // noise buffer
   const len = AU.ctx.sampleRate * 0.5; AU.noise = AU.ctx.createBuffer(1, len, AU.ctx.sampleRate); const d = AU.noise.getChannelData(0); for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
 }
@@ -16583,12 +16735,12 @@ function tone(freq, dur, type, vol, slide, when, dest) {
   const o = AU.ctx.createOscillator(), g = AU.ctx.createGain(); o.type = type || 'square'; o.frequency.setValueAtTime(freq, t);
   if (slide) o.frequency.exponentialRampToValueAtTime(Math.max(20, slide), t + dur);
   g.gain.setValueAtTime(vol || 0.2, t); g.gain.exponentialRampToValueAtTime(0.001, t + dur);
-  o.connect(g); g.connect(dest || AU.master); o.start(t); o.stop(t + dur + 0.02);
+  o.connect(g); g.connect(dest || AU.sfxGain); o.start(t); o.stop(t + dur + 0.02);
 }
-function noise(dur, vol, freq, when) {
+function noise(dur, vol, freq, when, dest) {
   if (!AU.ctx) return; const t = when || AU.ctx.currentTime; const s = AU.ctx.createBufferSource(); s.buffer = AU.noise;
   const f = AU.ctx.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = freq || 2000; const g = AU.ctx.createGain();
-  g.gain.setValueAtTime(vol || 0.3, t); g.gain.exponentialRampToValueAtTime(0.001, t + dur); s.connect(f); f.connect(g); g.connect(AU.master); s.start(t); s.stop(t + dur);
+  g.gain.setValueAtTime(vol || 0.3, t); g.gain.exponentialRampToValueAtTime(0.001, t + dur); s.connect(f); f.connect(g); g.connect(dest || AU.sfxGain); s.start(t); s.stop(t + dur);
 }
 function seq(notes, step, type, vol) { if (!AU.ctx) return; const t = AU.ctx.currentTime; notes.forEach((n, i) => { if (n) tone(n, step * 1.1, type || 'square', vol || 0.15, null, t + i * step); }); }
 function sfx(name, vol) {
@@ -16633,23 +16785,35 @@ function sfx(name, vol) {
 }
 // ---- music: original procedural loops ----
 const N = (s) => { const m = { C: 0, D: 2, E: 4, F: 5, G: 7, A: 9, B: 11 }; return 440 * Math.pow(2, (m[s[0]] + (s[1] === '#' ? 1 : 0) + (parseInt(s[s.length - 1]) - 4) * 12 - 9) / 12); };
+// lead / bass: notes per half-beat ('.' = rest). Optional: arp (a third voice), drums: 'k' kick, 's' snare, 'h' hat, '.' rest.
 const TRACKS = {
-  ow: { bpm: 132, lead: 'E5 . G5 A5 B5 . A5 G5 E5 . D5 E5 G5 . . . A5 . B5 C6 D6 . C6 B5 A5 . G5 A5 B5 . . . E5 . G5 A5 B5 . D6 . E6 . D6 B5 A5 . G5 A5 B5 . A5 G5 E5 . D5 E5 E5 . . . . . . .', bass: 'E3 E3 B3 E3 C3 C3 G3 C3 D3 D3 A3 D3 B2 B2 F#3 B2' },
-  dungeon: { bpm: 100, lead: 'A4 . C5 . E5 . D#5 . D5 . . . C5 . B4 . A4 . C5 . F5 . E5 . D5 . . . . . . . G#4 . B4 . D5 . C5 . B4 . A4 . G#4 . E4 . . . . . . . . . . . . . . . . .', bass: 'A2 A2 A2 A2 F2 F2 F2 F2 E2 E2 E2 E2 E2 E2 G#2 G#2' },
+  ow: { bpm: 132, lead: 'E5 . G5 A5 B5 . A5 G5 E5 . D5 E5 G5 . . . A5 . B5 C6 D6 . C6 B5 A5 . G5 A5 B5 . . . E5 . G5 A5 B5 . D6 . E6 . D6 B5 A5 . G5 A5 B5 . A5 G5 E5 . D5 E5 E5 . . . . . . .', bass: 'E3 E3 B3 E3 C3 C3 G3 C3 D3 D3 A3 D3 B2 B2 F#3 B2', drums: 'k . h . s . h . k . k . s . h .' },
+  // dungeons 1-4: a creeping minor walk; 5-8 (the deep ones) get their own darker theme
+  dungeon: { bpm: 100, lead: 'A4 . C5 . E5 . D#5 . D5 . . . C5 . B4 . A4 . C5 . F5 . E5 . D5 . . . . . . . G#4 . B4 . D5 . C5 . B4 . A4 . G#4 . E4 . . . . . . . . . . . . . . . . .', bass: 'A2 A2 A2 A2 F2 F2 F2 F2 E2 E2 E2 E2 E2 E2 G#2 G#2', arp: 'A3 C4 E4 C4 A3 C4 E4 C4 F3 A3 C4 A3 F3 A3 C4 A3 E3 G#3 B3 G#3 E3 G#3 B3 G#3 E3 G#3 B3 G#3 E3 G#3 B3 D4', drums: 'k . . . . . h . k . . . s . . .' },
+  deep: { bpm: 92, lead: 'D5 . . . F5 . E5 . C#5 . . . . . . . D5 . . . A5 . G5 . F5 . E5 . . . . . A#4 . . . D5 . C5 . A4 . . . F4 . . . G4 . . . A4 . . . C#5 . . . . . . .', bass: 'D2 D2 D2 D2 A#1 A#1 A#1 A#1 G1 G1 G1 G1 A1 A1 A1 A1', arp: 'D4 F4 A4 F4 D4 F4 A4 F4 A#3 D4 F4 D4 A#3 D4 F4 D4 G3 A#3 D4 A#3 G3 A#3 D4 A#3 A3 C#4 E4 C#4 A3 C#4 E4 G4', drums: 'k . . . h . . . k . k . s . . h' },
   cave: { bpm: 90, lead: 'C5 . E5 . G5 . E5 . F5 . A5 . G5 . . . E5 . G5 . C6 . B5 . A5 . G5 . . . . .', bass: 'C3 C3 F3 F3 G3 G3 C3 C3' },
-  boss: { bpm: 160, lead: 'E5 E5 . E5 F5 E5 D#5 E5 . . B4 . C5 . D#5 . E5 E5 . E5 G5 F#5 F5 E5 . . B4 . A4 . B4 .', bass: 'E2 E2 E3 E2 E2 E3 E2 E3 C2 C2 C3 C2 B1 B1 B2 B1' },
-  final: { bpm: 120, lead: 'D5 . F5 . A5 . G#5 . A5 . . . D6 . C6 . A5 . F5 . G5 . A5 . D5 . . . . . . .', bass: 'D2 D2 D3 D2 A#1 A#1 A#2 A#1 C2 C2 C3 C2 A1 A1 A2 A1' },
+  boss: { bpm: 168, lead: 'E5 E5 . E5 F5 E5 D#5 E5 . . B4 . C5 . D#5 . E5 E5 . E5 G5 F#5 F5 E5 . . B4 . A4 . B4 .', bass: 'E2 E2 E3 E2 E2 E3 E2 E3 C2 C2 C3 C2 B1 B1 B2 B1', arp: 'E4 G4 B4 E5 E4 G4 B4 E5 E4 G4 B4 E5 E4 G4 B4 E5 C4 E4 G4 C5 C4 E4 G4 C5 B3 D#4 F#4 B4 B3 D#4 F#4 B4', drums: 'k h s h k k s h k h s h k k s s' },
+  final: { bpm: 126, lead: 'D5 . F5 . A5 . G#5 . A5 . . . D6 . C6 . A5 . F5 . G5 . A5 . D5 . . . . . . .', bass: 'D2 D2 D3 D2 A#1 A#1 A#2 A#1 C2 C2 C3 C2 A1 A1 A2 A1', arp: 'D4 F4 A4 D5 D4 F4 A4 D5 A#3 D4 F4 A#4 A#3 D4 F4 A#4 C4 E4 G4 C5 C4 E4 G4 C5 A3 C#4 E4 A4 A3 C#4 E4 G4', drums: 'k . s . k k s . k . s . k k s h' },
 };
 function musicPlay(name) {
   if (AU.trackName === name) return; AU.trackName = name; AU.track = TRACKS[name] || null; AU.step = 0; if (AU.ctx) AU.nextT = AU.ctx.currentTime + 0.1;
 }
+function drum(kind, t) {
+  const g = AU.musicGain;
+  if (kind === 'k') { tone(150, 0.14, 'sine', 0.5, 40, t, g); }
+  else if (kind === 's') { noise(0.12, 0.16, 2600, t, g); tone(220, 0.06, 'triangle', 0.08, 120, t, g); }
+  else if (kind === 'h') { noise(0.03, 0.05, 9000, t, g); }
+}
 function musicTick() {
   if (!AU.ctx || !AU.track || !AU.on) return; const tr = AU.track; const stepDur = 60 / tr.bpm / 2;
   const lead = tr._l || (tr._l = tr.lead.split(' ')), bass = tr._b || (tr._b = tr.bass.split(' '));
+  const arp = tr.arp ? (tr._a || (tr._a = tr.arp.split(' '))) : null, drums = tr.drums ? (tr._d || (tr._d = tr.drums.split(' '))) : null;
   while (AU.nextT < AU.ctx.currentTime + 0.25) {
     const l = lead[AU.step % lead.length]; if (l && l !== '.') tone(N(l), stepDur * 1.8, 'square', 0.09, null, AU.nextT, AU.musicGain);
     if (AU.step % 2 === 0) { const b = bass[(AU.step / 2) % bass.length]; if (b && b !== '.') tone(N(b), stepDur * 1.6, 'triangle', 0.22, null, AU.nextT, AU.musicGain); }
-    if (AU.step % 4 === 2) { const s = AU.ctx.createBufferSource(); s.buffer = AU.noise; const g = AU.ctx.createGain(); g.gain.setValueAtTime(0.04, AU.nextT); g.gain.exponentialRampToValueAtTime(0.001, AU.nextT + 0.05); s.connect(g); g.connect(AU.musicGain); s.start(AU.nextT); s.stop(AU.nextT + 0.06); }
+    if (arp) { const a = arp[AU.step % arp.length]; if (a && a !== '.') tone(N(a), stepDur * 0.9, 'square', 0.035, null, AU.nextT, AU.musicGain); }
+    if (drums) { const d = drums[AU.step % drums.length]; if (d && d !== '.') drum(d, AU.nextT); }
+    else if (AU.step % 4 === 2) noise(0.05, 0.04, 6000, AU.nextT, AU.musicGain);
     AU.step++; AU.nextT += stepDur;
   }
 }
@@ -17036,6 +17200,7 @@ function handleEvent(e) {
     case 'hint': if (e.pid === me) pushMsg(e.text, 2); break;
     case 'sfx': if (e.lvl && e.lvl !== Lc.lvl) break; { let v = 1; if (e.x != null) v = clamp(1.3 - Math.sqrt(dist2(e.x, e.y, Lc.x, Lc.y)) / 14, 0.1, 1); sfx(e.s, v); } break;
     case 'hurt': if (e.pid === me) { Lc.kx = e.kx; Lc.ky = e.ky; Lc.flash = 0.25; Lc.flashC = rgb(255, 40, 40); Lc.shake = 0.2; sfx('hurt'); if (navigator.vibrate) try { navigator.vibrate(60); } catch (er) { } } break;
+    case 'block': if (e.pid === me) { Lc.blockT = 0.32; } break;
     case 'tp': if (e.pid === me) { Lc.lvl = e.lvl; Lc.x = e.x; Lc.y = e.y; Lc.a = e.a; Lc.fade = 0; Lc.pitch = 0; G.smooth = {}; Lc.npcTalked = {}; } break;
     case 'title': if (e.pid === me) Lc.title = { text: e.text, sub: e.sub, t: 3 }; break;
     case 'dialog': if (e.pid === me) showDialog(e.text); break;
@@ -17089,11 +17254,14 @@ function updateLocal(dt, inp) {
   if (Lc.dashT > 0) { Lc.dashT -= dt; const da = Lc.a + (Lc.dashDir || 0); mvx = Math.cos(da) * 15; mvy = Math.sin(da) * 15; }
   mvx += Lc.kx; mvy += Lc.ky; Lc.kx *= Math.pow(0.0005, dt); Lc.ky *= Math.pow(0.0005, dt); if (Math.abs(Lc.kx) < 0.1) Lc.kx = 0; if (Math.abs(Lc.ky) < 0.1) Lc.ky = 0;
   const moving = Math.abs(inp.fwd) + Math.abs(inp.str) > 0.1; if (moving) Lc.bob += dt * spd * 2.6;
+  Lc.moveK = lerp(Lc.moveK || 0, moving ? 1 : 0, Math.min(1, dt * 8)); if (Lc.blockT > 0) Lc.blockT -= dt;
   const raft = !!me.items.raft; const rad = 0.22; const sop = { raft, mx: Lc.x, my: Lc.y };
   const solid = (x, y) => { for (const [ox, oy] of [[-rad, -rad], [rad, -rad], [-rad, rad], [rad, rad]]) if (L.solidAt(x + ox, y + oy, sop)) return true; return false; };
   const nx = Lc.x + mvx * dt, ny = Lc.y + mvy * dt; let blockedX = false, blockedY = false;
   if (!solid(nx, Lc.y)) Lc.x = nx; else blockedX = true;
   if (!solid(Lc.x, ny)) Lc.y = ny; else blockedY = true;
+  // the southern sea is too rough to sail
+  if ((blockedX || blockedY) && moving && L.kind === 'ow' && R.time - (Lc.seaMsgAt || -99) > 6) { const ax = Math.floor(Lc.x + Math.cos(Lc.a) * 0.7), ay = Math.floor(Lc.y + Math.sin(Lc.a) * 0.7); if (TINFO[L.get(ax, ay)].ocean) { Lc.seaMsgAt = R.time; pushMsg(raft ? 'THE SEA IS FAR TOO ROUGH FOR A RAFT.' : 'ROUGH WATER. NOTHING COULD SAIL THIS.', 3); } }
   // bump interactions
   Lc.bumpT -= dt;
   if ((blockedX || blockedY) && moving && Lc.bumpT <= 0) {
@@ -17121,10 +17289,18 @@ function updateLocal(dt, inp) {
   }
   // NPC auto-talk & sign
   for (const e of (snap.en || [])) { if (e[9] && dist2(e[2], e[3], Lc.x, Lc.y) < 6 && !Lc.npcTalked[e[0]]) { Lc.npcTalked[e[0]] = true; showDialog(e[9]); } }
-  if (inp.interactP || (inp.atkP && me.sword === 0 && !monk)) {
-    const sx = Math.floor(Lc.x + Math.cos(Lc.a) * 0.9), sy = Math.floor(Lc.y + Math.sin(Lc.a) * 0.9); const si = sy * L.w + sx;
-    if (L.props[si] === PR.SIGN && L.signText && L.signText[si]) showDialog(L.signText[si]);
+  // things you can press F on: the nearest sign or person you're facing gets an on-screen prompt
+  Lc.prompt = null;
+  { let best = 2.6;
+    for (let dy = -2; dy <= 2; dy++) for (let dx = -2; dx <= 2; dx++) {
+      const sx = Math.floor(Lc.x) + dx, sy = Math.floor(Lc.y) + dy; if (sx < 0 || sy < 0 || sx >= L.w || sy >= L.h) continue; const si = sy * L.w + sx;
+      if (L.props[si] !== PR.SIGN || !L.signText || !L.signText[si]) continue;
+      const d2 = dist2(sx + 0.5, sy + 0.5, Lc.x, Lc.y); const face = Math.abs(angDiff(Lc.a, Math.atan2(sy + 0.5 - Lc.y, sx + 0.5 - Lc.x)));
+      if (d2 < best && face < 1.1) { best = d2; Lc.prompt = { label: 'F: READ', text: L.signText[si] }; }
+    }
+    for (const e of (snap.en || [])) if (e[9]) { const d2 = dist2(e[2], e[3], Lc.x, Lc.y); if (d2 < 7 && d2 < best + 1) { best = d2; Lc.prompt = { label: 'F: TALK', text: e[9] }; } }
   }
+  if (Lc.prompt && (inp.interactP || (inp.atkP && me.sword === 0 && !monk)) && !Lc.dialog) showDialog(Lc.prompt.text);
   // revive teammates
   Lc.reviveTarget = (snap.pl || []).find(p => p[0] !== G.myId && !p[8] && p[1] === Lc.lvl && dist2(p[2], p[3], Lc.x, Lc.y) < REVIVE_R2) || null;
   if (inp.interact && Lc.reviveTarget) { const nw = performance.now(); if (nw - (Lc.reviveSent || 0) > 100) { Lc.reviveSent = nw; sendAction({ t: 'revive' }); } }
@@ -17147,7 +17323,7 @@ function updateLocal(dt, inp) {
   // low hp beep
   if (me.hp <= 4 && me.hp > 0) { Lc.lowT -= dt; if (Lc.lowT <= 0) { Lc.lowT = 0.5; sfx('lowhp'); } }
   // music
-  let track = L.kind === 'ow' ? 'ow' : L.kind === 'cave' ? 'cave' : 'dungeon';
+  let track = L.kind === 'ow' ? 'ow' : L.kind === 'cave' ? 'cave' : (L.dnum >= 5 && L.dnum <= 8 ? 'deep' : 'dungeon');
   if (L.kind === 'dungeon') { const r = dungeonRoomAt(L, Lc.x, Lc.y); if (r && r.boss && snap.en.some(e => e[8] >= 0)) track = L.dnum === 9 ? 'final' : 'boss'; }
   musicPlay(track);
 }
@@ -17227,12 +17403,13 @@ function draw(dt) {
   // pow words
   for (const p of Lc.pow) { const sc = projectPt(cam, p.x, p.y); if (sc) { const c = p.big ? rgb(255, 230, 60) : rgb(255, 255, 255); text(p.word, sc.x - p.word.length * 3, sc.y - 30 - p.t * 30, Math.floor(p.t * 20) & 1 ? c : rgb(255, 80, 40)); } }
   const bossE = ents.find(e => e[8] >= 0);
-  const st = { me, bob: Lc.bob, swing: Lc.swing, punch: Lc.punch, charge: Lc.charge, useFlash: Lc.useFlash, useSpr: Lc.useSpr, level: L, cam, players: snap ? snap.pl : [], myId: G.myId, team: snap ? snap.team : { keys: {}, maps: {}, comps: {}, shards: [], done: [] }, seen: G.seen[L.id] || new Uint8Array(L.w * L.h), seenOW: G.seen.ow || new Uint8Array(1), seenRooms: G.seenRooms, selItem: Lc.sel, pitch: Lc.pitch, lvlKind: L.kind, bossHp: bossE ? bossE[8] : -1, world: G.world };
+  const st = { me, bob: Lc.bob, moveK: Lc.moveK || 0, blockT: Lc.blockT || 0, swing: Lc.swing, punch: Lc.punch, charge: Lc.charge, useFlash: Lc.useFlash, useSpr: Lc.useSpr, level: L, cam, players: snap ? snap.pl : [], myId: G.myId, team: snap ? snap.team : { keys: {}, maps: {}, comps: {}, shards: [], done: [] }, seen: G.seen[L.id] || new Uint8Array(L.w * L.h), seenOW: G.seen.ow || new Uint8Array(1), seenRooms: G.seenRooms, selItem: Lc.sel, pitch: Lc.pitch, lvlKind: L.kind, bossHp: bossE ? bossE[8] : -1, world: G.world };
   if (me && !down) drawViewmodel(st);
   if (me && me.cls === 'monk' && me.armor > 0 && !down) { const ac = me.armor === 2 ? rgb(255, 248, 200) : rgb(100, 190, 255); for (let i = 0; i < 18; i++) { const side = Math.random() < 0.5; const x = side ? (Math.random() < 0.5 ? Math.random() * 10 : R.W - Math.random() * 10) : Math.random() * R.W; const y = side ? Math.random() * R.H : R.H - Math.random() * 8; px(x, y, ac); } }
   if (Lc.dashT > 0) rectA(0, 0, R.W, R.H, rgb(200, 240, 255), 0.15);
   if (down) { rectA(0, 0, R.W, R.H, rgb(40, 40, 60), 0.5); const multi = snap.pl.length > 1; textC(multi ? 'YOU ARE DOWN!' : 'YOU HAVE FALLEN...', R.W / 2, R.H / 2 - 20, rgb(255, 80, 80)); textC(multi ? 'A TEAMMATE CAN HOLD F NEXT TO YOU TO HELP YOU UP' : 'RISING AGAIN...', R.W / 2, R.H / 2 - 8, rgb(230, 230, 230)); const myP = snap.pl.find(p => p[0] === G.myId); if (myP && myP[11] > 0) { rect(R.W / 2 - 40, R.H / 2 + 6, 80, 5, rgb(30, 30, 30)); rect(R.W / 2 - 40, R.H / 2 + 6, 80 * clamp(myP[11], 0, 1), 5, rgb(80, 255, 120)); } }
   drawHUD(st);
+  if (Lc.prompt && !Lc.reviveTarget && !Lc.dialog && me && me.alive && G.state === 'play') { const label = Lc.prompt.label; const y = R.H / 2 + 22; const w = label.length * 6 + 12; rectA(R.W / 2 - w / 2, y - 4, w, 15, rgb(0, 0, 0), 0.6); frame(R.W / 2 - w / 2, y - 4, w, 15, rgb(255, 220, 120)); textC(label, R.W / 2, y, rgb(255, 230, 150)); }
   if (Lc.reviveTarget && me && me.alive) { const t = Lc.reviveTarget; const c = c32(hexToRgb((PCOLORS.find(c => c.name === t[5]) || PCOLORS[0]).c)); const y = R.H / 2 + 22; const label = 'HOLD F: HELP UP ' + t[10]; rectA(R.W / 2 - label.length * 3 - 6, y - 4, label.length * 6 + 12, 22, rgb(0, 0, 0), 0.6); textC(label, R.W / 2, y, c); rect(R.W / 2 - 40, y + 10, 80, 4, rgb(40, 40, 40)); rect(R.W / 2 - 40, y + 10, 80 * clamp(t[11], 0, 1), 4, rgb(90, 255, 130)); }
   // messages
   let my = 52; for (const m of G.msgs) { const lines = wrapText(m.text, Math.floor((R.W - 100) / 6)); for (const ln of lines) { textC(ln, R.W / 2, my, rgb(255, 255, 255)); my += 9; } }
@@ -17427,9 +17604,10 @@ function bindUI() {
   on('winBack', quitToTitle); on('overBack', quitToTitle);
   on('hudPause', () => { if (G.state === 'play') openPause(); });
   $('sens').oninput = (e) => { IN.sens = +e.target.value; try { localStorage.setItem('emberwake_sens', e.target.value); } catch (er) { } };
-  $('vol').oninput = (e) => { AU.vol = +e.target.value; if (AU.master) AU.master.gain.value = AU.vol; try { localStorage.setItem('emberwake_vol', e.target.value); } catch (er) { } };
+  $('vol').oninput = (e) => { AU.sfxVol = +e.target.value; audioSetVolumes(); try { localStorage.setItem('emberwake_sfxvol', e.target.value); } catch (er) { } sfx('gem'); };
+  $('mvol').oninput = (e) => { AU.musicVol = +e.target.value; audioSetVolumes(); try { localStorage.setItem('emberwake_musvol', e.target.value); } catch (er) { } };
   $('invy').onchange = (e) => { IN.invertY = e.target.checked; };
-  try { const s = localStorage.getItem('emberwake_sens'); if (s) { IN.sens = +s; $('sens').value = s; } const v = localStorage.getItem('emberwake_vol'); if (v) { AU.vol = +v; $('vol').value = v; } } catch (e) { }
+  try { const s = localStorage.getItem('emberwake_sens'); if (s) { IN.sens = +s; $('sens').value = s; } const v = localStorage.getItem('emberwake_sfxvol'); if (v) { AU.sfxVol = +v; $('vol').value = v; } const mv = localStorage.getItem('emberwake_musvol'); if (mv) { AU.musicVol = +mv; $('mvol').value = mv; } } catch (e) { }
 }
 function boot() {
   initSprites(); initAnims(); initTextures(); loadProfile();

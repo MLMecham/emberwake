@@ -66,6 +66,7 @@ function handleEvent(e) {
     case 'hint': if (e.pid === me) pushMsg(e.text, 2); break;
     case 'sfx': if (e.lvl && e.lvl !== Lc.lvl) break; { let v = 1; if (e.x != null) v = clamp(1.3 - Math.sqrt(dist2(e.x, e.y, Lc.x, Lc.y)) / 14, 0.1, 1); sfx(e.s, v); } break;
     case 'hurt': if (e.pid === me) { Lc.kx = e.kx; Lc.ky = e.ky; Lc.flash = 0.25; Lc.flashC = rgb(255, 40, 40); Lc.shake = 0.2; sfx('hurt'); if (navigator.vibrate) try { navigator.vibrate(60); } catch (er) { } } break;
+    case 'block': if (e.pid === me) { Lc.blockT = 0.32; } break;
     case 'tp': if (e.pid === me) { Lc.lvl = e.lvl; Lc.x = e.x; Lc.y = e.y; Lc.a = e.a; Lc.fade = 0; Lc.pitch = 0; G.smooth = {}; Lc.npcTalked = {}; } break;
     case 'title': if (e.pid === me) Lc.title = { text: e.text, sub: e.sub, t: 3 }; break;
     case 'dialog': if (e.pid === me) showDialog(e.text); break;
@@ -119,11 +120,14 @@ function updateLocal(dt, inp) {
   if (Lc.dashT > 0) { Lc.dashT -= dt; const da = Lc.a + (Lc.dashDir || 0); mvx = Math.cos(da) * 15; mvy = Math.sin(da) * 15; }
   mvx += Lc.kx; mvy += Lc.ky; Lc.kx *= Math.pow(0.0005, dt); Lc.ky *= Math.pow(0.0005, dt); if (Math.abs(Lc.kx) < 0.1) Lc.kx = 0; if (Math.abs(Lc.ky) < 0.1) Lc.ky = 0;
   const moving = Math.abs(inp.fwd) + Math.abs(inp.str) > 0.1; if (moving) Lc.bob += dt * spd * 2.6;
+  Lc.moveK = lerp(Lc.moveK || 0, moving ? 1 : 0, Math.min(1, dt * 8)); if (Lc.blockT > 0) Lc.blockT -= dt;
   const raft = !!me.items.raft; const rad = 0.22; const sop = { raft, mx: Lc.x, my: Lc.y };
   const solid = (x, y) => { for (const [ox, oy] of [[-rad, -rad], [rad, -rad], [-rad, rad], [rad, rad]]) if (L.solidAt(x + ox, y + oy, sop)) return true; return false; };
   const nx = Lc.x + mvx * dt, ny = Lc.y + mvy * dt; let blockedX = false, blockedY = false;
   if (!solid(nx, Lc.y)) Lc.x = nx; else blockedX = true;
   if (!solid(Lc.x, ny)) Lc.y = ny; else blockedY = true;
+  // the southern sea is too rough to sail
+  if ((blockedX || blockedY) && moving && L.kind === 'ow' && R.time - (Lc.seaMsgAt || -99) > 6) { const ax = Math.floor(Lc.x + Math.cos(Lc.a) * 0.7), ay = Math.floor(Lc.y + Math.sin(Lc.a) * 0.7); if (TINFO[L.get(ax, ay)].ocean) { Lc.seaMsgAt = R.time; pushMsg(raft ? 'THE SEA IS FAR TOO ROUGH FOR A RAFT.' : 'ROUGH WATER. NOTHING COULD SAIL THIS.', 3); } }
   // bump interactions
   Lc.bumpT -= dt;
   if ((blockedX || blockedY) && moving && Lc.bumpT <= 0) {
@@ -151,10 +155,18 @@ function updateLocal(dt, inp) {
   }
   // NPC auto-talk & sign
   for (const e of (snap.en || [])) { if (e[9] && dist2(e[2], e[3], Lc.x, Lc.y) < 6 && !Lc.npcTalked[e[0]]) { Lc.npcTalked[e[0]] = true; showDialog(e[9]); } }
-  if (inp.interactP || (inp.atkP && me.sword === 0 && !monk)) {
-    const sx = Math.floor(Lc.x + Math.cos(Lc.a) * 0.9), sy = Math.floor(Lc.y + Math.sin(Lc.a) * 0.9); const si = sy * L.w + sx;
-    if (L.props[si] === PR.SIGN && L.signText && L.signText[si]) showDialog(L.signText[si]);
+  // things you can press F on: the nearest sign or person you're facing gets an on-screen prompt
+  Lc.prompt = null;
+  { let best = 2.6;
+    for (let dy = -2; dy <= 2; dy++) for (let dx = -2; dx <= 2; dx++) {
+      const sx = Math.floor(Lc.x) + dx, sy = Math.floor(Lc.y) + dy; if (sx < 0 || sy < 0 || sx >= L.w || sy >= L.h) continue; const si = sy * L.w + sx;
+      if (L.props[si] !== PR.SIGN || !L.signText || !L.signText[si]) continue;
+      const d2 = dist2(sx + 0.5, sy + 0.5, Lc.x, Lc.y); const face = Math.abs(angDiff(Lc.a, Math.atan2(sy + 0.5 - Lc.y, sx + 0.5 - Lc.x)));
+      if (d2 < best && face < 1.1) { best = d2; Lc.prompt = { label: 'F: READ', text: L.signText[si] }; }
+    }
+    for (const e of (snap.en || [])) if (e[9]) { const d2 = dist2(e[2], e[3], Lc.x, Lc.y); if (d2 < 7 && d2 < best + 1) { best = d2; Lc.prompt = { label: 'F: TALK', text: e[9] }; } }
   }
+  if (Lc.prompt && (inp.interactP || (inp.atkP && me.sword === 0 && !monk)) && !Lc.dialog) showDialog(Lc.prompt.text);
   // revive teammates
   Lc.reviveTarget = (snap.pl || []).find(p => p[0] !== G.myId && !p[8] && p[1] === Lc.lvl && dist2(p[2], p[3], Lc.x, Lc.y) < REVIVE_R2) || null;
   if (inp.interact && Lc.reviveTarget) { const nw = performance.now(); if (nw - (Lc.reviveSent || 0) > 100) { Lc.reviveSent = nw; sendAction({ t: 'revive' }); } }
@@ -177,7 +189,7 @@ function updateLocal(dt, inp) {
   // low hp beep
   if (me.hp <= 4 && me.hp > 0) { Lc.lowT -= dt; if (Lc.lowT <= 0) { Lc.lowT = 0.5; sfx('lowhp'); } }
   // music
-  let track = L.kind === 'ow' ? 'ow' : L.kind === 'cave' ? 'cave' : 'dungeon';
+  let track = L.kind === 'ow' ? 'ow' : L.kind === 'cave' ? 'cave' : (L.dnum >= 5 && L.dnum <= 8 ? 'deep' : 'dungeon');
   if (L.kind === 'dungeon') { const r = dungeonRoomAt(L, Lc.x, Lc.y); if (r && r.boss && snap.en.some(e => e[8] >= 0)) track = L.dnum === 9 ? 'final' : 'boss'; }
   musicPlay(track);
 }
@@ -257,12 +269,13 @@ function draw(dt) {
   // pow words
   for (const p of Lc.pow) { const sc = projectPt(cam, p.x, p.y); if (sc) { const c = p.big ? rgb(255, 230, 60) : rgb(255, 255, 255); text(p.word, sc.x - p.word.length * 3, sc.y - 30 - p.t * 30, Math.floor(p.t * 20) & 1 ? c : rgb(255, 80, 40)); } }
   const bossE = ents.find(e => e[8] >= 0);
-  const st = { me, bob: Lc.bob, swing: Lc.swing, punch: Lc.punch, charge: Lc.charge, useFlash: Lc.useFlash, useSpr: Lc.useSpr, level: L, cam, players: snap ? snap.pl : [], myId: G.myId, team: snap ? snap.team : { keys: {}, maps: {}, comps: {}, shards: [], done: [] }, seen: G.seen[L.id] || new Uint8Array(L.w * L.h), seenOW: G.seen.ow || new Uint8Array(1), seenRooms: G.seenRooms, selItem: Lc.sel, pitch: Lc.pitch, lvlKind: L.kind, bossHp: bossE ? bossE[8] : -1, world: G.world };
+  const st = { me, bob: Lc.bob, moveK: Lc.moveK || 0, blockT: Lc.blockT || 0, swing: Lc.swing, punch: Lc.punch, charge: Lc.charge, useFlash: Lc.useFlash, useSpr: Lc.useSpr, level: L, cam, players: snap ? snap.pl : [], myId: G.myId, team: snap ? snap.team : { keys: {}, maps: {}, comps: {}, shards: [], done: [] }, seen: G.seen[L.id] || new Uint8Array(L.w * L.h), seenOW: G.seen.ow || new Uint8Array(1), seenRooms: G.seenRooms, selItem: Lc.sel, pitch: Lc.pitch, lvlKind: L.kind, bossHp: bossE ? bossE[8] : -1, world: G.world };
   if (me && !down) drawViewmodel(st);
   if (me && me.cls === 'monk' && me.armor > 0 && !down) { const ac = me.armor === 2 ? rgb(255, 248, 200) : rgb(100, 190, 255); for (let i = 0; i < 18; i++) { const side = Math.random() < 0.5; const x = side ? (Math.random() < 0.5 ? Math.random() * 10 : R.W - Math.random() * 10) : Math.random() * R.W; const y = side ? Math.random() * R.H : R.H - Math.random() * 8; px(x, y, ac); } }
   if (Lc.dashT > 0) rectA(0, 0, R.W, R.H, rgb(200, 240, 255), 0.15);
   if (down) { rectA(0, 0, R.W, R.H, rgb(40, 40, 60), 0.5); const multi = snap.pl.length > 1; textC(multi ? 'YOU ARE DOWN!' : 'YOU HAVE FALLEN...', R.W / 2, R.H / 2 - 20, rgb(255, 80, 80)); textC(multi ? 'A TEAMMATE CAN HOLD F NEXT TO YOU TO HELP YOU UP' : 'RISING AGAIN...', R.W / 2, R.H / 2 - 8, rgb(230, 230, 230)); const myP = snap.pl.find(p => p[0] === G.myId); if (myP && myP[11] > 0) { rect(R.W / 2 - 40, R.H / 2 + 6, 80, 5, rgb(30, 30, 30)); rect(R.W / 2 - 40, R.H / 2 + 6, 80 * clamp(myP[11], 0, 1), 5, rgb(80, 255, 120)); } }
   drawHUD(st);
+  if (Lc.prompt && !Lc.reviveTarget && !Lc.dialog && me && me.alive && G.state === 'play') { const label = Lc.prompt.label; const y = R.H / 2 + 22; const w = label.length * 6 + 12; rectA(R.W / 2 - w / 2, y - 4, w, 15, rgb(0, 0, 0), 0.6); frame(R.W / 2 - w / 2, y - 4, w, 15, rgb(255, 220, 120)); textC(label, R.W / 2, y, rgb(255, 230, 150)); }
   if (Lc.reviveTarget && me && me.alive) { const t = Lc.reviveTarget; const c = c32(hexToRgb((PCOLORS.find(c => c.name === t[5]) || PCOLORS[0]).c)); const y = R.H / 2 + 22; const label = 'HOLD F: HELP UP ' + t[10]; rectA(R.W / 2 - label.length * 3 - 6, y - 4, label.length * 6 + 12, 22, rgb(0, 0, 0), 0.6); textC(label, R.W / 2, y, c); rect(R.W / 2 - 40, y + 10, 80, 4, rgb(40, 40, 40)); rect(R.W / 2 - 40, y + 10, 80 * clamp(t[11], 0, 1), 4, rgb(90, 255, 130)); }
   // messages
   let my = 52; for (const m of G.msgs) { const lines = wrapText(m.text, Math.floor((R.W - 100) / 6)); for (const ln of lines) { textC(ln, R.W / 2, my, rgb(255, 255, 255)); my += 9; } }
@@ -457,9 +470,10 @@ function bindUI() {
   on('winBack', quitToTitle); on('overBack', quitToTitle);
   on('hudPause', () => { if (G.state === 'play') openPause(); });
   $('sens').oninput = (e) => { IN.sens = +e.target.value; try { localStorage.setItem('emberwake_sens', e.target.value); } catch (er) { } };
-  $('vol').oninput = (e) => { AU.vol = +e.target.value; if (AU.master) AU.master.gain.value = AU.vol; try { localStorage.setItem('emberwake_vol', e.target.value); } catch (er) { } };
+  $('vol').oninput = (e) => { AU.sfxVol = +e.target.value; audioSetVolumes(); try { localStorage.setItem('emberwake_sfxvol', e.target.value); } catch (er) { } sfx('gem'); };
+  $('mvol').oninput = (e) => { AU.musicVol = +e.target.value; audioSetVolumes(); try { localStorage.setItem('emberwake_musvol', e.target.value); } catch (er) { } };
   $('invy').onchange = (e) => { IN.invertY = e.target.checked; };
-  try { const s = localStorage.getItem('emberwake_sens'); if (s) { IN.sens = +s; $('sens').value = s; } const v = localStorage.getItem('emberwake_vol'); if (v) { AU.vol = +v; $('vol').value = v; } } catch (e) { }
+  try { const s = localStorage.getItem('emberwake_sens'); if (s) { IN.sens = +s; $('sens').value = s; } const v = localStorage.getItem('emberwake_sfxvol'); if (v) { AU.sfxVol = +v; $('vol').value = v; } const mv = localStorage.getItem('emberwake_musvol'); if (mv) { AU.musicVol = +mv; $('mvol').value = mv; } } catch (e) { }
 }
 function boot() {
   initSprites(); initAnims(); initTextures(); loadProfile();

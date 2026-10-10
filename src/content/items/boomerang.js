@@ -8,7 +8,7 @@ defineItem({
   use(sim, p) {
     if (sim.ents.some(e => e.k === 'boomer' && e.pid === p.id)) return; // one at a time
     const disc = p.cls === 'monk';
-    sim.spawn({ k: 'boomer', lvl: p.lvl, x: p.x, y: p.y, a: p.a, pid: p.id, out: true, t: 0, spr: disc ? 'disc' : 'boomerang', sc: 0.6, z: 0.15, disc, hitSet: {} });
+    sim.spawn({ k: 'boomer', lvl: p.lvl, x: p.x, y: p.y, a: p.a, pid: p.id, out: true, t: 0, spr: disc ? 'disc_spin' : 'boomerang_spin', sc: 0.6, z: 0.15, disc, hitSet: {} });
     sim.sfx('boomer', p.lvl);
   },
 });
@@ -34,3 +34,5 @@ defineEntity('boomer', {
     }
   },
 });
+// in flight it spins: 8 frames of the item art turned 45 degrees at a time
+for (const id of ['boomerang', 'disc']) { defineSpriteVariant(id + '_spin', id, {}); defineAnim(id + '_spin', 20, (s, kit) => [0, 1, 2, 3, 4, 5, 6, 7].map(i => kit.rotate(s, i * Math.PI / 4))); }

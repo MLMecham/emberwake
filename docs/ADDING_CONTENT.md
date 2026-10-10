@@ -96,6 +96,7 @@ Need a color that isn't there? Give the sprite its own palette: `pal: { Q: '#ff0
   - `kit.shiftCols(s, x0, x1, dy)` moves wings or arms up and down.
   - `kit.bob(s, dy)` moves the whole sprite up or down.
   - `kit.mirror(s)` flips it.
+  - `kit.rotate(s, angle)` turns it (the thrown boomerang spins this way).
   - `kit.fromRows(rows)` builds a hand-drawn frame.
 - **An array** of hand-drawn frames, each 16 rows.
 

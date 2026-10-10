@@ -86,6 +86,12 @@ function initTextures() {
     const edge = (y % 8) === 0 || (x % 8) === 0; return vary(edge ? [70, 70, 90] : [120, 124, 146], x, y, 0.2);
   });
 
+  // world-edge walls: granite peaks (west), basalt with glowing cracks (east), deep ocean (south)
+  TEX.mountain = makeTex((x, y) => { const strata = Math.sin(y * 0.55 + Math.sin(x * 0.3) * 1.4); let c = strata > 0.6 ? [150, 156, 176] : strata < -0.5 ? [92, 96, 116] : [122, 128, 148]; if (n8(x, y >> 1) > 0.9) c = [70, 72, 90]; return vary(c, x, y, 0.18); }, 13);
+  TEX.volcrock = makeTex((x, y) => { let c = n8(x >> 2, y >> 2) > 0.55 ? [58, 46, 50] : [76, 60, 62]; const cr = Math.abs(((x * 0.7 + y * 0.45 + Math.sin(y * 0.4) * 4) % 13) - 6.5); if (cr < 0.6 && n4(x >> 3, y >> 3) > 0.35) c = [255, 120 + (y & 3) * 20, 40]; return vary(c, x, y, 0.2); }, 17);
+  // the southern sea: dark, choppy, whitecaps everywhere; 'surf' is the breaking foam right off the beach
+  TEX.ocean = []; for (let f = 0; f < 4; f++) TEX.ocean.push(makeTex((x, y) => { const ph = f * Math.PI / 2; const w = Math.sin(x * 0.45 + ph + Math.sin(y * 0.35 + ph) * 2.2) + Math.sin(y * 0.6 - ph * 1.5 + x * 0.2) * 0.7; let c = [22, 52, 120]; if (w > 1.35) c = [236, 244, 255]; else if (w > 1.0) c = [130, 170, 220]; else if (w > 0.4) c = [34, 76, 160]; else if (w < -0.9) c = [14, 34, 86]; return vary(c, x, y, 0.1); }));
+  TEX.surf = []; for (let f = 0; f < 4; f++) TEX.surf.push(makeTex((x, y) => { const ph = f * Math.PI / 2; const w = Math.sin(x * 0.5 + ph + Math.sin(y * 0.5) * 1.5) + Math.sin(y * 0.9 + ph * 2) * 0.8; let c = [40, 92, 180]; if (w > 0.6) c = [240, 248, 255]; else if (w > 0.1) c = [170, 205, 240]; return vary(c, x, y, 0.1); }));
   TEX.cwall = makeTex((x, y) => vary(n8(x >> 2, y >> 2) > 0.5 ? [60, 46, 40] : [80, 62, 52], x, y, 0.3), 9);
   TEX.cwall_bomb = makeTex((x, y) => { let c = n8(x >> 2, y >> 2) > 0.5 ? [60, 46, 40] : [80, 62, 52]; if (Math.abs((x - 16) - Math.sin(y * 0.6) * 3) < 0.8 && y > 6 && y < 28) c = [30, 22, 18]; return vary(c, x, y, 0.3); }, 9);
   TEX.shop = makeTex((x, y) => { let c = [120, 80, 44]; if ((y & 7) === 0) c = [70, 44, 24]; if (y < 4) c = [200, 60, 40]; return vary(c, x, y, 0.1); });
@@ -141,6 +147,13 @@ defTile(TL.STAIRS, { floor: 'stairs', stairs: true });
 defTile(TL.SHARDGATE, { solid: true, wall: 'shardwall', shardGate: true });
 defTile(TL.BUSHFLOOR, { floor: 'grass' });
 defTile(TL.CEXIT = 27, { solid: true, wall: 'cexit', exitWall: true }); // daylight archway out of a cave
+// The edges of the Wilds, and the tall towers over dungeon gates. tall: wall height in tiles (seen over shorter walls),
+// jag: how the top edge is cut ('peak' ridge, 'trees' canopy, 'battlement'), snow: white caps on the high parts.
+defTile(TL.OCEAN = 28, { solid: true, floor: 'surf', water: true, ocean: true, low: true }); // rough sea: the raft can't cross it
+defTile(TL.PEAKS = 29, { solid: true, wall: 'mountain', tall: 3.4, jag: 'peak', snow: true });
+defTile(TL.FIREPEAKS = 30, { solid: true, wall: 'volcrock', tall: 2.8, jag: 'peak' });
+defTile(TL.BIGWOOD = 31, { solid: true, wall: 'treewall', tall: 2.6, jag: 'trees' });
+defTile(TL.TOWER = 32, { solid: true, wall: 'brick', tall: 2.3, jag: 'battlement' });
 
 // props drawn as sprites on tiles
 const PROPS = [null, 'tree', 'pine', 'boulder', 'bush', 'cactus', 'grave', 'statue', 'sign', 'flame', 'pedestal'];
