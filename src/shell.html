@@ -40,6 +40,13 @@ video { width:100%; max-height:40vh; background:#000; border:2px solid #57486e; 
 #toast { position:fixed; left:50%; top:12px; transform:translateX(-50%); background:#000c; border:2px solid var(--gold); padding:8px 14px; font-size:12px; z-index:50; opacity:0; transition:opacity .3s; pointer-events:none; color:var(--gold); }
 #toast.on { opacity:1; }
 input[type=range] { width:100%; }
+select, input[type=number] { font:inherit; width:100%; background:#000; color:var(--gold); border:2px solid #57486e; padding:6px; font-size:12px; }
+.grid2 { display:grid; grid-template-columns:repeat(auto-fit, minmax(120px, 1fr)); gap:4px 10px; }
+.chks { display:grid; grid-template-columns:repeat(auto-fit, minmax(130px, 1fr)); gap:2px 10px; }
+label.chk { display:flex; align-items:center; gap:8px; color:var(--ink); font-size:12px; margin:6px 0; cursor:pointer; }
+label.chk.big { font-size:13px; color:var(--gold); }
+#dbgBody.off { opacity:.35; pointer-events:none; }
+.warps { display:flex; flex-wrap:wrap; gap:4px; } .warps button { width:auto; flex:1 0 40px; margin:0; padding:6px; font-size:11px; }
 details { margin-top:14px; border:2px dashed #3a2f4e; padding:8px 10px; }
 summary { cursor:pointer; font-size:12px; color:var(--dim); }
 summary:hover { color:var(--gold); }
@@ -81,7 +88,7 @@ summary:hover { color:var(--gold); }
     <button id="btnNew">NEW ADVENTURE</button>
     <div class="row"><button id="btnRogue">ROGUELIKE RUN</button><button id="btnRogueCont">CONTINUE RUN</button></div>
     <button id="btnJoin">JOIN A FRIEND'S GAME</button>
-    <button id="btnHelp">HOW TO PLAY</button>
+    <div class="row"><button id="btnHelp">HOW TO PLAY</button><button id="btnDebug">DEBUG: OFF</button></div>
   </div>
 </div>
 
@@ -110,11 +117,40 @@ summary:hover { color:var(--gold); }
   </div>
 </div>
 
+<div id="debugScreen" class="screen">
+  <div class="panel">
+    <h2>DEBUG LOADOUT</h2>
+    <p class="dim">APPLIES WHEN YOU START A NEW GAME OR JOIN ONE. CONTINUED SAVES KEEP THEIR ITEMS (GOD MODE STILL APPLIES).</p>
+    <label class="chk big"><input type="checkbox" id="dbgOn"> USE DEBUG LOADOUT</label>
+    <div id="dbgBody">
+      <div class="grid2">
+        <div><label for="dbgSword">SWORD</label><select id="dbgSword"><option value="0">NONE</option><option value="1">WOODEN</option><option value="2">SILVER</option><option value="3">MYTHRIL</option></select></div>
+        <div><label for="dbgArmor">TUNIC</label><select id="dbgArmor"><option value="0">CLOTH</option><option value="1">CHAIN</option><option value="2">PLATE</option></select></div>
+        <div><label for="dbgHearts">HEARTS</label><input id="dbgHearts" type="number" min="3" max="16" value="3"></div>
+        <div><label for="dbgShards">EMBER SHARDS</label><input id="dbgShards" type="number" min="0" max="8" value="0"></div>
+        <div><label for="dbgGems">GEMS</label><input id="dbgGems" type="number" min="0" max="999" value="0"></div>
+        <div><label for="dbgBombs">BOMBS</label><input id="dbgBombs" type="number" min="0" max="16" value="0"></div>
+        <div><label for="dbgArrows">ARROWS</label><input id="dbgArrows" type="number" min="0" max="30" value="0"></div>
+        <div><label for="dbgPotions">POTIONS</label><input id="dbgPotions" type="number" min="0" max="2" value="0"></div>
+      </div>
+      <label>ITEMS</label>
+      <div class="chks" id="dbgItems"></div>
+      <label for="dbgStart">START AT</label><select id="dbgStart"></select>
+      <label class="chk"><input type="checkbox" id="dbgGod"> GOD MODE (NO DAMAGE)</label>
+    </div>
+    <div class="row"><button id="dbgAll">EVERYTHING</button><button id="dbgNone">RESET</button></div>
+    <button id="dbgMonk">UNLOCK SECRET CLASS</button>
+    <div class="sep"></div>
+    <button id="dbgBack" class="primary">DONE</button>
+  </div>
+</div>
+
 <div id="pauseScreen" class="screen">
   <div class="panel">
     <h2>PAUSED</h2>
     <div class="status" id="pInfo"></div>
     <button id="pResume" class="primary">RESUME</button>
+    <div id="pDebug" style="display:none"><label>DEBUG WARP</label><div class="warps" id="pWarps"></div></div>
     <button id="pInvite">INVITE PLAYERS (CO-OP)</button>
     <button id="pSave">SAVE</button>
     <label>LOOK SENSITIVITY</label><input id="sens" type="range" min="0.3" max="2.5" step="0.1" value="1">
@@ -162,7 +198,7 @@ summary:hover { color:var(--gold); }
     <div class="keys">
       <b>WASD</b><span>MOVE / STRAFE</span><b>MOUSE / ARROWS</b><span>LOOK (CLICK TO LOCK MOUSE)</span>
       <b>CLICK / SPACE</b><span>ATTACK (A)</span><b>RIGHT-CLICK / E</b><span>USE ITEM (B)</span>
-      <b>Q / R / WHEEL / 1-7</b><span>SWITCH ITEM</span><b>F (HOLD)</b><span>READ SIGNS / REVIVE A FALLEN FRIEND</span>
+      <b>Q / R / WHEEL / 1-7</b><span>SWITCH ITEM</span><b>F (HOLD)</b><span>READ SIGNS / HELP UP A FALLEN FRIEND</span>
       <b>M / TAB</b><span>MAP</span><b>SHIFT</b><span>DASH (SOME HEROES...)</span><b>ESC</b><span>MENU</span>
       <b>GAMEPAD</b><span>STICKS MOVE/LOOK, A/RT ATTACK, X/LT ITEM, Y/RB SWITCH, B USE, START MENU, SELECT MAP</span>
     </div>

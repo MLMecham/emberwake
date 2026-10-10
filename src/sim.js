@@ -17,12 +17,13 @@ const ENEMY = {
 const PROJ = {
   rock: { spr: 'rock', spd: 5, dmg: 1, sc: 0.6, z: 0.15 }, spear: { spr: 'arrow', spd: 6, dmg: 1, sc: 0.7, z: 0.1 }, magic: { spr: 'magic', spd: 4.5, dmg: 2, sc: 0.6, z: 0.15 },
   fire: { spr: 'fireball', spd: 4.5, dmg: 2, sc: 0.7, z: 0.15 },
-  arrow: { spr: 'arrow', spd: 11, dmg: 2, sc: 0.7, z: 0.1, player: true }, beam: { spr: 'beam', spd: 9, dmg: 1, sc: 0.8, z: 0.15, player: true },
+  arrow: { spr: 'arrow', spd: 11, dmg: 2, sc: 0.7, z: 0.1, player: true }, beam: { spr: 'beam', spd: 9, dmg: 1, sc: 0.8, z: 0.15, player: true, range: 7 },
   rodbolt: { spr: 'magic', spd: 8, dmg: 3, sc: 0.7, z: 0.15, player: true }, candle: { spr: 'flame', spd: 4, dmg: 1, sc: 0.8, z: -0.05, player: true, range: 2.2, fire: true },
-  ki: { spr: 'ki', spd: 10, dmg: 1, sc: 0.6, z: 0.15, player: true }, wave: { spr: 'ki', spd: 9, dmg: 4, sc: 1.4, z: 0.1, player: true, pierce: true },
+  ki: { spr: 'ki', spd: 10, dmg: 1, sc: 0.6, z: 0.15, player: true, range: 7 }, wave: { spr: 'ki', spd: 9, dmg: 4, sc: 1.4, z: 0.1, player: true, pierce: true },
   dart: { spr: 'beam', spd: 12, dmg: 2, sc: 0.5, z: 0.15, player: true }, palm: { spr: 'flame', spd: 6, dmg: 2, sc: 1.1, z: -0.05, player: true, range: 3.5, fire: true, pierce: true },
   thunder: { spr: 'beam', spd: 14, dmg: 3, sc: 0.9, z: 0.15, player: true, pierce: true },
 };
+const REVIVE_TIME = 1.5, REVIVE_R2 = 2.6 * 2.6;
 const ITEM_NAMES = {
   sword1: 'WOODEN SWORD', sword2: 'SILVER SWORD', sword3: 'MYTHRIL SWORD', boomerang: 'BOOMERANG', bombbag: 'BOMB BAG', bombs: 'BOMBS', bow: 'BOW', arrows: 'ARROWS',
   candle: 'CANDLE', rod: 'FIRE ROD', whistle: 'WIND WHISTLE', raft: 'RAFT', plate: 'PLATE TUNIC', chain: 'CHAIN TUNIC', silver: 'SILVER ARROWS', potion: 'RED POTION', potion2: 'BLUE POTION',
@@ -75,9 +76,10 @@ class Sim {
   sfx(s, lvl, x, y) { this.ev({ t: 'sfx', s, lvl, x, y }); }
   msg(text, pid) { this.ev({ t: 'msg', text, pid }); }
   // ---- tiles ----
-  setTile(lvl, idx, tile, prop) {
+  setTile(lvl, idx, tile, prop, sealRoom) {
     const L = this.W.levels[lvl]; if (tile != null) L.tiles[idx] = tile; if (prop != null) L.props[idx] = prop;
-    (this.mods[lvl] = this.mods[lvl] || {})[idx] = [L.tiles[idx], L.props[idx]]; this.modVer++;
+    L.sealRoom = L.sealRoom || {}; if (sealRoom != null) L.sealRoom[idx] = sealRoom; else delete L.sealRoom[idx];
+    (this.mods[lvl] = this.mods[lvl] || {})[idx] = sealRoom != null ? [L.tiles[idx], L.props[idx], sealRoom] : [L.tiles[idx], L.props[idx]]; this.modVer++;
   }
   // ---- input from clients ----
   onPlayerState(id, s) {
@@ -98,6 +100,7 @@ class Sim {
       case 'revive': this.tryRevive(p); break;
       case 'sel': if (B_ITEMS.includes(a.item)) p.sel = a.item; break;
       case 'hazard': this.hurtPlayer(p, 1, null); break;
+      case 'warp': if (p.dbg) { const T = this.W.levels[a.to]; if (T) this.teleport(p, T.id, T.spawn.x, T.spawn.y, T.spawn.a); } break;
     }
   }
   // ---- teleport ----
@@ -135,7 +138,13 @@ class Sim {
   tryRevive(p) {
     for (const o of Object.values(this.players)) {
       if (o.alive || o.lvl !== p.lvl) continue;
-      if (dist2(o.x, o.y, p.x, p.y) < 2.2) { o.revive += 0.12; if (o.revive >= 2) { o.alive = true; o.hp = Math.min(o.maxHp, 8); o.revive = 0; o.inv = 2; this.msg(p.name + ' REVIVED ' + o.name + '!'); this.sfx('fanfare', p.lvl); } }
+      if (dist2(o.x, o.y, p.x, p.y) < REVIVE_R2) {
+        const gap = this.time - (o.reviveAt || 0);
+        if (o.reviver !== p.id || gap > 0.7) { o.revive = 0; o.reviver = p.id; o.reviveAt = this.time; return; }
+        o.reviveAt = this.time; o.revive += Math.min(0.4, gap); // real time held, independent of frame rate
+        if (o.revive >= REVIVE_TIME) { o.alive = true; o.hp = Math.min(o.maxHp, 8); o.revive = 0; o.reviver = null; o.inv = 2; this.msg(p.name + ' HELPED ' + o.name + ' UP!'); this.sfx('fanfare', p.lvl); this.ev({ t: 'revived', pid: o.id }); }
+        return;
+      }
     }
   }
   // ---- level init (static entities) ----
@@ -218,6 +227,7 @@ class Sim {
       let hp = Math.ceil(def.hp * (def.boss ? 1 + (L.dnum || 1) * 0.35 : tierMul));
       if (type === 'king') hp = def.hp;
       const e = this.spawn({ k: 'en', type, lvl: L.id, x, y, hp, maxHp: hp, f: rnd() * TAU, b, g: key, st: 0, tm: rnd() * 2, stun: 0, hurt: 0, spawnFx: 0.5, dmgMul: L.kind === 'dungeon' ? Math.ceil(L.dnum / 3) : 1 + Math.floor(room.tier / 2) });
+      if (!def.boss) { const ch = L.kind === 'dungeon' ? 0.05 + L.dnum * 0.015 : 0.06 + room.tier * 0.03; if (rnd() < ch) this.makeElite(e, rnd); }
       g.ents.push(e);
     }
     if (L.kind === 'dungeon') this.roomStatics(L, room, key, false);
@@ -275,7 +285,7 @@ class Sim {
     const insidePlayers = plist.filter(p => p.alive && p.lvl === L.id && p.x > x0 + 1.3 && p.x < x0 + DSX - 0.3 && p.y > y0 + 1.3 && p.y < y0 + DSY - 0.3);
     const shouldClose = !g.cleared && insidePlayers.length > 0;
     if (shouldClose && !g.shut) {
-      g.shut = []; for (const [x, y] of doors) { const i = L.idx(x, y); if (L.tiles[i] === TL.OPENDOOR) { g.shut.push(i); this.setTile(L.id, i, TL.SHUTTER); } }
+      g.shut = []; for (const [x, y] of doors) { const i = L.idx(x, y); if (L.tiles[i] === TL.OPENDOOR) { g.shut.push(i); this.setTile(L.id, i, TL.SHUTTER, null, room.id); } }
       if (g.shut.length) this.sfx('shutter', L.id);
     } else if (!shouldClose && g.shut) {
       for (const i of g.shut) this.setTile(L.id, i, TL.OPENDOOR); if (g.shut.length) this.sfx('door', L.id); g.shut = null;
@@ -318,6 +328,7 @@ class Sim {
       case 'fx': if (e.t > e.life) e.dead = true; break;
       case 'pick': if (!e.perm && e.t > 12) e.dead = true; if (e.fairy) { e.x += Math.cos(e.t * 2.3) * dt * 0.8; e.y += Math.sin(e.t * 1.7) * dt * 0.8; } break;
       case 'fire': if (e.t > e.life) e.dead = true; else this.fireHits(e); break;
+      case 'efire': if (e.t > e.life) e.dead = true; else for (const pl of Object.values(this.players)) if (pl.alive && pl.lvl === e.lvl && dist2(pl.x, pl.y, e.x, e.y) < 0.3) this.hurtPlayer(pl, 1, e); break;
     }
   }
   updateEnemy(e, dt) {
@@ -328,7 +339,14 @@ class Sim {
     if (e.kb) { this.moveEnt(e, e.kb[0] * dt, e.kb[1] * dt, def); e.kbT -= dt; if (e.kbT <= 0) e.kb = null; }
     const p = this.nearestPlayer(e, 30);
     e.tm -= dt;
-    const spd = def.spd * (e.rage ? 1.5 : 1);
+    let spd = def.spd * (e.rage ? 1.5 : 1) * (e.spdMul || 1);
+    if (e.elite === 5) { // golden: runs from the nearest hero, vanishes if not caught in time
+      e.life -= dt; if (e.life <= 0) { e.dead = true; this.spawn({ k: 'fx', lvl: e.lvl, x: e.x, y: e.y, spr: 'puff', life: 0.4, sc: 0.9 }); this.sfx('stairs', e.lvl, e.x, e.y); return; }
+      if (p && dist2(p.x, p.y, e.x, e.y) < 49) { const fa = Math.atan2(e.y - p.y, e.x - p.x) + Math.sin(e.t * 3) * 0.6; if (this.moveEnt(e, Math.cos(fa) * Math.max(2.4, spd) * dt, Math.sin(fa) * Math.max(2.4, spd) * dt, def)) e.f = Math.random() * TAU; }
+      else if (this.moveEnt(e, Math.cos(e.f) * 1.5 * dt, Math.sin(e.f) * 1.5 * dt, def) || e.tm <= 0) { e.tm = 1; e.f = Math.random() * TAU; }
+      return;
+    }
+    if (e.elite === 1) { e.fireT -= dt; if (e.fireT <= 0) { e.fireT = 0.9; this.spawn({ k: 'efire', lvl: e.lvl, x: e.x, y: e.y, life: 2.2, spr: 'flame', sc: 0.6, z: -0.05 }); } }
     switch (def.ai) {
       case 'hop': {
         if (e.tm <= 0) { e.tm = 0.8 + Math.random() * 0.6; e.f = p && Math.random() < 0.7 ? Math.atan2(p.y - e.y, p.x - e.x) + (Math.random() - 0.5) : Math.random() * TAU; e.hop = 0.4; }
@@ -397,8 +415,18 @@ class Sim {
     // contact damage
     for (const pl of Object.values(this.players)) {
       if (!pl.alive || pl.lvl !== e.lvl || pl.inv > 0) continue;
-      const rr = def.r + 0.28; if (dist2(pl.x, pl.y, e.x, e.y) < rr * rr) this.hurtPlayer(pl, def.dmg * (def.boss ? 1 : e.dmgMul), e);
+      const rr = def.r * (e.rm || 1) + 0.28; if (dist2(pl.x, pl.y, e.x, e.y) < rr * rr) this.hurtPlayer(pl, def.dmg * (def.boss ? 1 : e.dmgMul), e);
     }
+  }
+  // ---- elite variants: 1 blazing, 2 swift, 3 giant, 4 splitter, 5 golden. Loot only, never permanent upgrades.
+  makeElite(e, rnd) {
+    const r = rnd() * 13; const v = r < 3 ? 1 : r < 6 ? 2 : r < 9 ? 3 : r < 12 ? 4 : 5;
+    e.elite = v;
+    if (v === 1) { e.hp = e.maxHp = Math.ceil(e.hp * 1.5); e.fireT = 1; }
+    if (v === 2) { e.spdMul = 2; }
+    if (v === 3) { e.hp = e.maxHp = e.hp * 3; e.scMul = 1.5; e.rm = 1.35; e.dmgMul += 1; }
+    if (v === 4) { e.hp = e.maxHp = e.hp + 1; }
+    if (v === 5) { e.hp = e.maxHp = Math.max(3, e.hp * 2); e.spdMul = 1.3; e.life = 14; }
   }
   spawnMinion(boss, type) {
     const g = this.groups[boss.g]; const def = ENEMY[type];
@@ -406,17 +434,20 @@ class Sim {
     if (g) g.ents.push(m);
   }
   hurtPlayer(p, dmg, src) {
-    if (p.inv > 0 || !p.alive) return;
+    if (p.inv > 0 || !p.alive || p.god) return;
     const red = p.armor === 2 ? 0.25 : p.armor === 1 ? 0.5 : 1;
     const amt = Math.max(1, Math.round(dmg * 2 * red)); // quarter-hearts (1 dmg = half heart)
-    p.hp -= amt; p.inv = 1.0;
+    p.hp -= amt; p.inv = 1.0; this.clearBeam(p);
+    for (const o of Object.values(this.players)) if (!o.alive && o.reviver === p.id && o.revive > 0) { o.revive = 0; o.reviver = null; this.ev({ t: 'hint', pid: p.id, text: 'HIT! HELP-UP RESET.' }); }
     let kx = 0, ky = 0; if (src) { const a = Math.atan2(p.y - src.y, p.x - src.x); kx = Math.cos(a) * 7; ky = Math.sin(a) * 7; }
     this.ev({ t: 'hurt', pid: p.id, kx, ky });
     if (p.hp <= 0) {
       if (p.potions > 0) { p.potions--; p.hp = p.maxHp; this.msg(p.name + "'S POTION SAVED THEM!"); this.sfx('heal', p.lvl); return; }
-      p.hp = 0; p.alive = false; p.revive = 0; this.ev({ t: 'down', pid: p.id }); this.msg(p.name + ' HAS FALLEN!' + (Object.keys(this.players).length > 1 ? ' STAND CLOSE AND HOLD [INTERACT] TO REVIVE.' : ''));
+      p.hp = 0; p.alive = false; p.revive = 0; p.reviver = null; this.clearBeam(p); this.ev({ t: 'down', pid: p.id }); this.msg(p.name + ' IS DOWN!' + (Object.keys(this.players).length > 1 ? ' GET CLOSE AND HOLD F TO HELP THEM UP.' : ''));
     }
   }
+  clearBeam(p) { for (const e of this.ents) if (e.k === 'proj' && e.pid === p.id && (e.type === 'beam' || e.type === 'ki')) e.dead = true; }
+  heal(p, amt) { const before = p.hp; p.hp = Math.min(p.maxHp, p.hp + amt); if (p.hp !== before) this.clearBeam(p); }
   damageEnemy(e, dmg, src, opt) {
     const def = ENEMY[e.type]; if (e.dead || e.spawnFx > 0) return false;
     if (e.hurt > 0 && !(opt && opt.ignoreIframes)) return false;
@@ -438,9 +469,25 @@ class Sim {
     if (pid && this.players[pid]) this.players[pid].kills++;
     if (e.type === 'king') { this.win(); return; }
     if (def.boss) return;
+    if (e.elite) { this.eliteDeath(e); return; }
     const r = Math.random(); let item = null;
-    if (r < 0.28) item = 'gem1'; else if (r < 0.36) item = 'gem5'; else if (r < 0.48) item = 'heart'; else if (r < 0.53) item = 'bomb'; else if (r < 0.555) item = 'fairy'; else if (r < 0.6 && Object.values(this.players).some(p => p.items.bow)) item = 'arrow';
+    if (r < 0.28) item = 'gem1'; else if (r < 0.36) item = 'gem5'; else if (r < 0.48) item = 'heart'; else if (r < 0.53) item = 'bomb'; else if (r < 0.555) item = 'fairy'; else if (r < 0.66 && Object.values(this.players).some(p => p.items.bow)) item = 'arrow';
     if (item) this.spawn({ k: 'pick', lvl: e.lvl, x: e.x, y: e.y, item, spr: ITEM_SPR[item], sc: item === 'fairy' ? 0.6 : 0.5, z: item === 'fairy' ? 0.3 : 0, g: e.g, fairy: item === 'fairy' });
+  }
+  eliteDeath(e) {
+    const drop = (item, ox, oy) => this.spawn({ k: 'pick', lvl: e.lvl, x: e.x + (ox || 0), y: e.y + (oy || 0), item, spr: ITEM_SPR[item], sc: item === 'fairy' ? 0.6 : item.startsWith('gems') ? 0.6 : 0.5, z: item === 'fairy' ? 0.3 : 0, g: e.g, fairy: item === 'fairy' });
+    const sc = (n) => { for (let i = 0; i < n; i++) { const a = i / n * TAU; drop('gem5', Math.cos(a) * 0.5, Math.sin(a) * 0.5); } };
+    switch (e.elite) {
+      case 1: for (let i = 0; i < 8; i++) this.fireProj('fire', e.lvl, e.x, e.y, i * TAU / 8, 'e', null, { dmg: 1, life: 0.6 }); this.sfx('boom', e.lvl, e.x, e.y); sc(2); drop('bomb', 0, 0.4); break;
+      case 2: drop('fairy'); sc(1); break;
+      case 3: sc(3); drop('heart', 0, 0.6); break;
+      case 4: {
+        const g = this.groups[e.g];
+        for (const s of [-1, 1]) { const def = ENEMY[e.type]; const m = this.spawn({ k: 'en', type: e.type, lvl: e.lvl, x: e.x + s * 0.3, y: e.y, hp: 1, maxHp: 1, f: Math.random() * TAU, b: e.b, g: e.g, st: 0, tm: 0.3, stun: 0, hurt: 0, spawnFx: 0.15, dmgMul: e.dmgMul, scMul: 0.65, rm: 0.7, spdMul: 1.4 }); if (g && !g.cleared) g.ents.push(m); }
+        sc(1); break;
+      }
+      case 5: drop('gems50'); this.sfx('secret', e.lvl, e.x, e.y); break;
+    }
   }
   win() {
     this.won = true; this.ev({ t: 'win' }); this.msg('THE HOLLOW KING IS UNMADE. THE EMBERS RETURN TO THE LAND.');
@@ -458,7 +505,7 @@ class Sim {
       if (e.lvl !== p.lvl || e.dead) continue;
       if (e.k === 'en') {
         const def = ENEMY[e.type]; const d = Math.sqrt(dist2(e.x, e.y, p.x, p.y));
-        if (d > range + def.r) continue;
+        if (d > range + def.r * (e.rm || 1)) continue;
         const ang = Math.atan2(e.y - p.y, e.x - p.x); if (d > 0.5 && Math.abs(angDiff(p.a, ang)) > cone) continue;
         if (this.damageEnemy(e, dmg, p, { pid: p.id })) hitAny = true;
         if (p.cls === 'monk' && a.kind === 'punch3' && !def.boss) { e.kb = [Math.cos(p.a) * 14, Math.sin(p.a) * 14]; e.kbT = 0.2; e.stun = 0.5; }
@@ -490,9 +537,9 @@ class Sim {
       }
       case 'bow': {
         if (!p.items.bow) return;
-        if (p.arrows <= 0 && p.gems <= 0) { this.ev({ t: 'hint', pid: p.id, text: 'NO ARROWS.' }); return; }
+        if (p.arrows <= 0) { this.ev({ t: 'hint', pid: p.id, text: 'NO ARROWS.' }); return; }
         if (this.ents.filter(e => e.k === 'proj' && e.pid === p.id && (e.type === 'arrow' || e.type === 'dart')).length >= (monk ? 3 : 1)) return;
-        if (p.arrows > 0) p.arrows--; else p.gems--;
+        p.arrows--;
         const silver = !!p.items.silver; const dmg = silver ? 4 : 2;
         if (monk) for (const s of [-0.12, 0, 0.12]) this.fireProj('dart', p.lvl, p.x, p.y, p.a + s, 'p', p.id, { dmg: dmg - 1, silver, life: 1.5 });
         else this.fireProj('arrow', p.lvl, p.x, p.y, p.a, 'p', p.id, { dmg, silver, spr: 'arrow' });
@@ -511,7 +558,7 @@ class Sim {
       case 'potion': {
         if (p.potions <= 0) { this.ev({ t: 'hint', pid: p.id, text: 'NO POTIONS.' }); return; }
         if (p.hp >= p.maxHp) { this.ev({ t: 'hint', pid: p.id, text: 'ALREADY AT FULL HEALTH.' }); return; }
-        p.potions--; p.hp = p.maxHp; this.sfx('heal', p.lvl); this.ev({ t: 'flash', pid: p.id, c: '#f060b0' }); break;
+        p.potions--; this.heal(p, p.maxHp); this.sfx('heal', p.lvl); this.ev({ t: 'flash', pid: p.id, c: '#f060b0' }); break;
       }
       case 'whistle': {
         if (!p.items.whistle) return;
@@ -550,7 +597,7 @@ class Sim {
     } else {
       for (const en of this.ents) {
         if (en.k !== 'en' || en.lvl !== e.lvl || en.dead || e.hitSet[en.id]) continue;
-        const r = ENEMY[en.type].r + 0.2;
+        const r = ENEMY[en.type].r * (en.rm || 1) + 0.2;
         if (dist2(en.x, en.y, e.x, e.y) < r * r) {
           e.hitSet[en.id] = 1;
           this.damageEnemy(en, e.dmg, { x: e.x - e.vx * 0.1, y: e.y - e.vy * 0.1 }, { pid: e.pid, silver: e.silver, pierceShield: e.type === 'wave' || e.type === 'thunder', ignoreIframes: def.pierce });
@@ -572,7 +619,7 @@ class Sim {
     }
     for (const en of this.ents) {
       if (en.lvl !== e.lvl || en.dead) continue;
-      if (en.k === 'en' && !e.hitSet[en.id] && dist2(en.x, en.y, e.x, e.y) < (ENEMY[en.type].r + 0.25) ** 2) {
+      if (en.k === 'en' && !e.hitSet[en.id] && dist2(en.x, en.y, e.x, e.y) < (ENEMY[en.type].r * (en.rm || 1) + 0.25) ** 2) {
         e.hitSet[en.id] = 1;
         if (e.disc) this.damageEnemy(en, 2, e, { pid: e.pid, ignoreIframes: true }); else this.damageEnemy(en, 1, e, { pid: e.pid, stunOnly: true });
         if (!e.disc) e.out = false;
@@ -624,7 +671,7 @@ class Sim {
       if (e.gift) { this.team.taken[e.tk] = true; if (e.choose) { this.team.taken[e.choose] = true; for (const o of this.ents) if (o.choose === e.choose) o.dead = true; } e.dead = true; }
       return;
     }
-    if (e.item === 'fairy') { p.hp = p.maxHp; e.dead = true; this.sfx('heal', p.lvl); return; }
+    if (e.item === 'fairy') { this.heal(p, p.maxHp); e.dead = true; this.sfx('heal', p.lvl); return; }
     if (e.tk) this.team.taken[e.tk] = true;
     e.dead = true;
     this.giveItem(p, e.item, false);
@@ -636,7 +683,7 @@ class Sim {
       case 'gem1': p.gems = Math.min(999, p.gems + 1); this.sfx('gem', p.lvl); return;
       case 'gem5': p.gems = Math.min(999, p.gems + 5); this.sfx('gem', p.lvl); return;
       case 'gems30': case 'gems50': case 'gems100': p.gems = Math.min(999, p.gems + parseInt(item.slice(4))); fan('+' + item.slice(4) + ' GEMS'); return;
-      case 'heart': p.hp = Math.min(p.maxHp, p.hp + 4); this.sfx('heart', p.lvl); if (fromShop) fan('HEART'); return;
+      case 'heart': this.heal(p, 4); this.sfx('heart', p.lvl); if (fromShop) fan('HEART'); return;
       case 'bomb': p.bombs = Math.min(p.maxBombs, p.bombs + 4); this.sfx('gem', p.lvl); return;
       case 'arrow': p.arrows = Math.min(30, p.arrows + 5); this.sfx('gem', p.lvl); return;
       case 'bombs': p.bombs = Math.min(p.maxBombs, p.bombs + 4); if (!p.items.bombs) p.items.bombs = true; fan('BOMBS'); return;
@@ -657,7 +704,7 @@ class Sim {
         case 'sword1': o.sword = Math.max(o.sword, 1); break;
         case 'sword2': o.sword = Math.max(o.sword, 2); break;
         case 'sword3': o.sword = Math.max(o.sword, 3); break;
-        case 'hcont': o.maxHp = Math.min(64, o.maxHp + 4); o.hp = o.maxHp; break;
+        case 'hcont': o.maxHp = Math.min(64, o.maxHp + 4); this.heal(o, o.maxHp); break;
         case 'bombbag': o.items.bombs = true; o.maxBombs = 16; o.bombs = Math.max(o.bombs, 8); break;
         case 'bow': o.items.bow = true; o.arrows = Math.max(o.arrows, 10); break;
         case 'plate': o.armor = 2; break;
@@ -687,7 +734,7 @@ class Sim {
   entView(e) {
     let spr = e.spr, sc = e.sc || 0.8, z = e.z || 0, fl = 0;
     if (e.k === 'en') {
-      const def = ENEMY[e.type]; spr = def.spr; sc = def.sc; z = def.z || 0;
+      const def = ENEMY[e.type]; spr = def.spr; sc = def.sc * (e.scMul || 1); z = def.z || 0;
       if (def.fly) z += Math.sin(e.t * 6) * 0.06;
       if (e.hurt > 0) fl |= 1; if (e.stun > 0) fl |= 2; if (def.phase) fl |= 4; if (e.spawnFx > 0) { spr = 'puff'; }
       if (e.type === 'slime' && e.hop > 0) z += 0.15 * Math.sin((0.4 - e.hop) / 0.4 * Math.PI);
@@ -698,13 +745,14 @@ class Sim {
     if (e.k === 'shop' && !e.gift) v.push(e.price); else if (e.k === 'shop' && e.need) v.push(-e.need); else v.push(0);
     if (e.k === 'en' && ENEMY[e.type].boss) v.push(Math.max(0, e.hp / e.maxHp)); else v.push(-1);
     if (e.k === 'npc') v.push(e.text); else v.push(0);
+    v.push(e.k === 'en' && e.elite ? e.elite : 0);
     return v;
   }
   snapshotFor(pid) {
     const p = this.players[pid]; if (!p) return null;
     const en = []; for (const e of this.ents) if (e.lvl === p.lvl) en.push(this.entView(e));
-    const pl = []; for (const o of Object.values(this.players)) pl.push([o.id, o.lvl, Math.round(o.x * 100) / 100, Math.round(o.y * 100) / 100, Math.round(o.a * 100) / 100, o.color, o.armor, o.cls, o.alive ? 1 : 0, o.atk, o.name, Math.round(o.revive * 10) / 10, o.hp, o.maxHp]);
-    const me = {}; for (const k of ['lvl', 'hp', 'maxHp', 'gems', 'bombs', 'maxBombs', 'arrows', 'sword', 'armor', 'items', 'potions', 'alive', 'cls', 'sel', 'color', 'name']) me[k] = p[k];
+    const pl = []; for (const o of Object.values(this.players)) pl.push([o.id, o.lvl, Math.round(o.x * 100) / 100, Math.round(o.y * 100) / 100, Math.round(o.a * 100) / 100, o.color, o.armor, o.cls, o.alive ? 1 : 0, o.atk, o.name, Math.round(o.revive / REVIVE_TIME * 100) / 100, o.hp, o.maxHp, o.reviver || 0]);
+    const me = {}; for (const k of ['lvl', 'hp', 'maxHp', 'gems', 'bombs', 'maxBombs', 'arrows', 'sword', 'armor', 'items', 'potions', 'alive', 'cls', 'sel', 'color', 'name', 'dbg', 'god']) me[k] = p[k];
     return { t: 's', me, pl, en, team: { keys: this.team.keys, maps: this.team.maps, comps: this.team.comps, shards: this.team.shards, done: this.team.done }, mv: this.modVer, over: this.over > 0 };
   }
   // ---- save ----

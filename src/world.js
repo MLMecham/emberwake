@@ -18,6 +18,11 @@ class Level {
     if (x < 0 || y < 0 || x >= this.w || y >= this.h) return true;
     const t = this.tiles[y * this.w + x]; const ti = TINFO[t];
     if (ti.water && opts && opts.raft) return false;
+    // sealed-room doors are one-way: teammates can come in, nobody leaves until the room is clear
+    if (t === TL.SHUTTER && opts && opts.mx != null && this.kind === 'dungeon') {
+      const rid = this.sealRoom && this.sealRoom[y * this.w + x];
+      if (rid != null) { const r = this.rooms[rid]; const x0 = r.rx * DSX, y0 = r.ry * DSY; const m = 0.23; /* just over the player's 0.22 radius: you're 'inside' only once fully clear of the doorway */ const inside = opts.mx > x0 + 1 + m && opts.mx < x0 + DSX - m && opts.my > y0 + 1 + m && opts.my < y0 + DSY - m; if (!inside) return false; }
+    }
     if (ti.solid) return true;
     const p = this.props[y * this.w + x]; if (p && PROP_INFO[p].solid) return true;
     return false;

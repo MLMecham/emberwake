@@ -19,6 +19,36 @@ function writeSave() {
 function packSeen() { const o = {}; const L = G.world.levels.ow; const s = G.seen.ow; if (!s) return o; let str = ''; for (let i = 0; i < s.length; i += 4) str += ((s[i] ? 1 : 0) | (s[i + 1] ? 2 : 0) | (s[i + 2] ? 4 : 0) | (s[i + 3] ? 8 : 0)).toString(16); o.ow = str; o.rooms = [...G.seenRooms]; return o; }
 function unpackSeen(o) { if (!o || !o.ow) return; const L = G.world.levels.ow; const s = G.seen.ow = new Uint8Array(L.w * L.h); for (let i = 0; i < o.ow.length; i++) { const v = parseInt(o.ow[i], 16); for (let b = 0; b < 4; b++) if (v & (1 << b)) s[i * 4 + b] = 1; } (o.rooms || []).forEach(r => G.seenRooms.add(r)); }
 
+// ---------- debug loadout ----------
+const DBG_ITEMS = [['boomerang', 'BOOMERANG'], ['bombbag', 'BOMB BAG'], ['bow', 'BOW'], ['silver', 'SILVER ARROWS'], ['candle', 'CANDLE'], ['rod', 'FIRE ROD'], ['whistle', 'WIND WHISTLE'], ['raft', 'RAFT']];
+function defaultDebug() { return { on: false, sword: 1, armor: 0, hearts: 3, gems: 0, bombs: 0, arrows: 0, potions: 0, shards: 0, items: [], start: 'ow', god: false }; }
+function debugLoadout() { return Object.assign(defaultDebug(), G.profile.dbg || {}); }
+function fillDebugUI() {
+  const d = debugLoadout(); $('dbgOn').checked = d.on; $('dbgBody').classList.toggle('off', !d.on);
+  for (const k of ['sword', 'armor', 'hearts', 'gems', 'bombs', 'arrows', 'potions', 'shards']) $('dbg' + k[0].toUpperCase() + k.slice(1)).value = d[k];
+  const box = $('dbgItems'); box.innerHTML = '';
+  for (const [id, label] of DBG_ITEMS) { const l = document.createElement('label'); l.className = 'chk'; l.innerHTML = '<input type="checkbox" id="dbgI_' + id + '"' + (d.items.includes(id) ? ' checked' : '') + '> ' + label; box.appendChild(l); }
+  const st = $('dbgStart'); st.innerHTML = '<option value="ow">THE WILDS (NORMAL START)</option>' + [1, 2, 3, 4, 5, 6, 7, 8, 9].map(n => '<option value="d' + n + '">LEVEL-' + n + ' ENTRANCE</option>').join(''); st.value = d.start;
+  $('dbgGod').checked = d.god;
+}
+function readDebugUI() {
+  const n = (id, lo, hi) => clamp(parseInt($(id).value, 10) || 0, lo, hi);
+  G.profile.dbg = { on: $('dbgOn').checked, sword: n('dbgSword', 0, 3), armor: n('dbgArmor', 0, 2), hearts: n('dbgHearts', 3, 16), gems: n('dbgGems', 0, 999), bombs: n('dbgBombs', 0, 16), arrows: n('dbgArrows', 0, 30), potions: n('dbgPotions', 0, 2), shards: n('dbgShards', 0, 8), items: DBG_ITEMS.map(i => i[0]).filter(id => $('dbgI_' + id).checked), start: $('dbgStart').value, god: $('dbgGod').checked };
+  saveProfile();
+}
+// fresh=true: replace the starting loadout. Always: debug flag, god mode, start location.
+function applyDebugLoadout(p, d, fresh) {
+  const sim = G.sim; p.dbg = true; p.god = !!d.god;
+  if (fresh) {
+    p.sword = d.sword; p.armor = d.armor; p.maxHp = d.hearts * 4; p.hp = p.maxHp; p.gems = d.gems; p.potions = d.potions; if (d.potions) p.items.potion = true;
+    for (const id of d.items) { if (id === 'bombbag') { p.items.bombs = true; p.maxBombs = 16; } else p.items[id] = true; }
+    p.bombs = Math.min(p.maxBombs, d.bombs); if (d.bombs) p.items.bombs = true; p.arrows = d.arrows;
+    if (d.sword > 0) sim.team.taken['c0:shop0'] = true;
+    for (let i = 1; i <= d.shards; i++) { if (!sim.team.shards.includes(i)) sim.team.shards.push(i); if (!sim.team.done.includes(i)) sim.team.done.push(i); }
+    if (d.start && d.start !== 'ow') { const T = sim.W.levels[d.start]; if (T) { sim.initLevel(T.id); p.lvl = T.id; p.x = T.spawn.x; p.y = T.spawn.y; p.a = T.spawn.a; } }
+  }
+}
+
 // ---------- start / join ----------
 function startGame(mode, cont) {
   audioInit();
@@ -31,6 +61,7 @@ function startGame(mode, cont) {
   const p = G.sim.addPlayer('p1', G.profile.name, G.profile.color, G.profile.cls);
   if (!save && mode === 'rogue') { p.sword = 1; p.gems = 30; p.bombs = 4; p.items.bombs = true; G.sim.team.taken['c0:shop0'] = true; }
   if (!save && G.profile.cls === 'monk') p.cls = 'monk';
+  const dbg = debugLoadout(); if (dbg.on) applyDebugLoadout(p, dbg, !save);
   G.sim.events = [];
   enterPlay(p.lvl, p.x, p.y, p.a);
   if (!save) { G.sim.initLevel('ow'); showDialog(mode === 'adv' ? 'THE EIGHT EMBER SHARDS HAVE BEEN SCATTERED, AND THE HOLLOW KING STIRS BENEATH THE NORTHERN PEAKS. FIND THE OLD MAN\'S CAVE TO THE NORTH. [PRESS ATTACK]' : 'ROGUELIKE RUN. A NEW LAND EVERY TIME. ONE LIFE. GOOD LUCK.'); }
@@ -54,7 +85,7 @@ function clientOnMsg(m) {
   }
 }
 function applyMods(mods) {
-  for (const lvl in mods) { const L = G.world.levels[lvl]; if (!L) continue; for (const i in mods[lvl]) { const [t, pr] = mods[lvl][i]; L.tiles[i] = t; L.props[i] = pr; } }
+  for (const lvl in mods) { const L = G.world.levels[lvl]; if (!L) continue; L.sealRoom = {}; for (const i in mods[lvl]) { const [t, pr, seal] = mods[lvl][i]; L.tiles[i] = t; L.props[i] = pr; if (seal != null) L.sealRoom[i] = seal; } }
 }
 
 // ---------- events ----------
@@ -122,8 +153,8 @@ function updateLocal(dt, inp) {
   if (Lc.dashT > 0) { Lc.dashT -= dt; const da = Lc.a + (Lc.dashDir || 0); mvx = Math.cos(da) * 15; mvy = Math.sin(da) * 15; }
   mvx += Lc.kx; mvy += Lc.ky; Lc.kx *= Math.pow(0.0005, dt); Lc.ky *= Math.pow(0.0005, dt); if (Math.abs(Lc.kx) < 0.1) Lc.kx = 0; if (Math.abs(Lc.ky) < 0.1) Lc.ky = 0;
   const moving = Math.abs(inp.fwd) + Math.abs(inp.str) > 0.1; if (moving) Lc.bob += dt * spd * 2.6;
-  const raft = !!me.items.raft; const rad = 0.22;
-  const solid = (x, y) => { for (const [ox, oy] of [[-rad, -rad], [rad, -rad], [-rad, rad], [rad, rad]]) if (L.solidAt(x + ox, y + oy, { raft })) return true; return false; };
+  const raft = !!me.items.raft; const rad = 0.22; const sop = { raft, mx: Lc.x, my: Lc.y };
+  const solid = (x, y) => { for (const [ox, oy] of [[-rad, -rad], [rad, -rad], [-rad, rad], [rad, rad]]) if (L.solidAt(x + ox, y + oy, sop)) return true; return false; };
   const nx = Lc.x + mvx * dt, ny = Lc.y + mvy * dt; let blockedX = false, blockedY = false;
   if (!solid(nx, Lc.y)) Lc.x = nx; else blockedX = true;
   if (!solid(Lc.x, ny)) Lc.y = ny; else blockedY = true;
@@ -149,7 +180,8 @@ function updateLocal(dt, inp) {
     if (L.props[si] === PR.SIGN && L.signText && L.signText[si]) showDialog(L.signText[si]);
   }
   // revive teammates
-  if (inp.interact) { Lc.reviveT -= dt; if (Lc.reviveT <= 0) { Lc.reviveT = 0.12; if ((snap.pl || []).some(p => !p[8] && p[1] === Lc.lvl && dist2(p[2], p[3], Lc.x, Lc.y) < 2.2)) sendAction({ t: 'revive' }); } }
+  Lc.reviveTarget = (snap.pl || []).find(p => p[0] !== G.myId && !p[8] && p[1] === Lc.lvl && dist2(p[2], p[3], Lc.x, Lc.y) < REVIVE_R2) || null;
+  if (inp.interact && Lc.reviveTarget) { const nw = performance.now(); if (nw - (Lc.reviveSent || 0) > 100) { Lc.reviveSent = nw; sendAction({ t: 'revive' }); } }
   // attack
   Lc.atkCd -= dt; Lc.comboT -= dt; if (Lc.swing != null) { Lc.swing += dt; if (Lc.swing > 0.3) Lc.swing = null; } if (Lc.punch) { Lc.punch.t += dt; if (Lc.punch.t > 0.25) Lc.punch = null; }
   if (Lc.atkVis > 0) Lc.atkVis -= dt;
@@ -182,7 +214,7 @@ function markSeen(L, x, y) {
 let lastT = performance.now();
 function loop(now) {
   requestAnimationFrame(loop);
-  let dt = Math.min(0.05, (now - lastT) / 1000); lastT = now; R.time += dt;
+  const rdt = Math.min(0.25, (now - lastT) / 1000); let dt = Math.min(0.05, rdt); lastT = now; R.time += dt;
   G.fps = G.fps * 0.95 + (1 / Math.max(0.001, dt)) * 0.05;
   musicTick();
   const inp = readInput(dt);
@@ -192,12 +224,15 @@ function loop(now) {
     if (inp.pause) { openPause(); }
     else if (inp.map) { G.state = 'map'; }
   } else if (G.state === 'map') { if (inp.map || inp.pause || inp.confirm) G.state = 'play'; }
+  else if (G.state === 'pause' && inp.pause && performance.now() - (G.pauseAt || 0) > 400 && $('pauseScreen').classList.contains('on')) resume();
   // host simulation
   const soloPaused = Object.keys(NET.conns).length === 0 && !NET.peer && (G.state === 'pause' || G.state === 'map' || (G.local && G.local.dialog));
   if (NET.role === 'host' && G.sim && G.state !== 'title' && !soloPaused) {
     const Lc = G.local; const mp = G.sim.players[G.myId];
     if (mp && G.state === 'play') G.sim.onPlayerState(G.myId, { lvl: Lc.lvl, x: Lc.x, y: Lc.y, a: Lc.a, atk: Lc.atkVis > 0 ? 1 : 0, sel: Lc.sel });
-    G.sim.tick(dt);
+    // fixed steps that catch up after slow frames, so game time keeps pace with real time
+    G.simAcc = Math.min(0.25, (G.simAcc || 0) + rdt);
+    while (G.simAcc >= 1 / 60) { G.sim.tick(1 / 60); G.simAcc -= 1 / 60; }
     const evs = G.sim.events; G.sim.events = [];
     G.events.push(...evs);
     for (const e of evs) handleEvent(e);
@@ -233,8 +268,9 @@ function draw(dt) {
   if (me && !down) drawViewmodel(st);
   if (me && me.cls === 'monk' && me.armor > 0 && !down) { const ac = me.armor === 2 ? rgb(255, 248, 200) : rgb(100, 190, 255); for (let i = 0; i < 18; i++) { const side = Math.random() < 0.5; const x = side ? (Math.random() < 0.5 ? Math.random() * 10 : R.W - Math.random() * 10) : Math.random() * R.W; const y = side ? Math.random() * R.H : R.H - Math.random() * 8; px(x, y, ac); } }
   if (Lc.dashT > 0) rectA(0, 0, R.W, R.H, rgb(200, 240, 255), 0.15);
-  if (down) { rectA(0, 0, R.W, R.H, rgb(40, 40, 60), 0.5); const multi = snap.pl.length > 1; textC(multi ? 'YOU ARE DOWN!' : 'YOU HAVE FALLEN...', R.W / 2, R.H / 2 - 20, rgb(255, 80, 80)); textC(multi ? 'A FRIEND CAN HOLD [INTERACT] NEAR YOU TO REVIVE' : 'RISING AGAIN...', R.W / 2, R.H / 2 - 8, rgb(230, 230, 230)); const myP = snap.pl.find(p => p[0] === G.myId); if (myP && myP[11] > 0) { rect(R.W / 2 - 40, R.H / 2 + 6, 80, 5, rgb(30, 30, 30)); rect(R.W / 2 - 40, R.H / 2 + 6, 40 * myP[11], 5, rgb(80, 255, 120)); } }
+  if (down) { rectA(0, 0, R.W, R.H, rgb(40, 40, 60), 0.5); const multi = snap.pl.length > 1; textC(multi ? 'YOU ARE DOWN!' : 'YOU HAVE FALLEN...', R.W / 2, R.H / 2 - 20, rgb(255, 80, 80)); textC(multi ? 'A TEAMMATE CAN HOLD F NEXT TO YOU TO HELP YOU UP' : 'RISING AGAIN...', R.W / 2, R.H / 2 - 8, rgb(230, 230, 230)); const myP = snap.pl.find(p => p[0] === G.myId); if (myP && myP[11] > 0) { rect(R.W / 2 - 40, R.H / 2 + 6, 80, 5, rgb(30, 30, 30)); rect(R.W / 2 - 40, R.H / 2 + 6, 80 * clamp(myP[11], 0, 1), 5, rgb(80, 255, 120)); } }
   drawHUD(st);
+  if (Lc.reviveTarget && me && me.alive) { const t = Lc.reviveTarget; const c = c32(hexToRgb((PCOLORS.find(c => c.name === t[5]) || PCOLORS[0]).c)); const y = R.H / 2 + 22; const label = 'HOLD F: HELP UP ' + t[10]; rectA(R.W / 2 - label.length * 3 - 6, y - 4, label.length * 6 + 12, 22, rgb(0, 0, 0), 0.6); textC(label, R.W / 2, y, c); rect(R.W / 2 - 40, y + 10, 80, 4, rgb(40, 40, 40)); rect(R.W / 2 - 40, y + 10, 80 * clamp(t[11], 0, 1), 4, rgb(90, 255, 130)); }
   // messages
   let my = 52; for (const m of G.msgs) { const lines = wrapText(m.text, Math.floor((R.W - 100) / 6)); for (const ln of lines) { textC(ln, R.W / 2, my, rgb(255, 255, 255)); my += 9; } }
   if (Lc.title) { const a = Math.min(1, Lc.title.t); rectA(0, R.H / 2 - 22, R.W, 34, rgb(0, 0, 0), 0.6 * a); textC(Lc.title.text, R.W / 2, R.H / 2 - 18, rgb(255, 220, 120)); textC(Lc.title.sub || '', R.W / 2, R.H / 2 - 4, rgb(255, 255, 255)); }
@@ -268,10 +304,12 @@ function showScreen(id) {
   if (!playing && document.exitPointerLock && IN.locked) document.exitPointerLock();
 }
 function showToast(t) { const el = $('toast'); el.textContent = t; el.classList.add('on'); clearTimeout(showToast.tm); showToast.tm = setTimeout(() => el.classList.remove('on'), 3500); }
-function openPause() { G.state = 'pause'; showScreen('pauseScreen'); $('pSave').style.display = NET.role === 'host' ? '' : 'none'; $('pInvite').style.display = NET.role === 'host' ? '' : 'none'; updatePauseInfo(); }
-function resume() { G.state = 'play'; showScreen(null); }
+function openPause() { if (G.state !== 'pause') G.pauseAt = performance.now(); G.state = 'pause'; showScreen('pauseScreen'); $('pSave').style.display = NET.role === 'host' ? '' : 'none'; $('pInvite').style.display = NET.role === 'host' ? '' : 'none'; updatePauseInfo(); }
+function resume() { G.state = 'play'; showScreen(null); try { const r = $('game').requestPointerLock(); if (r && r.catch) r.catch(() => { }); } catch (e) { } }
 function updatePauseInfo() {
   const n = G.snap ? G.snap.pl.length : 1; const me = G.snap && G.snap.me;
+  const dOn = !!(G.snap && G.snap.me && G.snap.me.dbg); $('pDebug').style.display = dOn ? '' : 'none';
+  if (dOn && !$('pWarps').childElementCount) { const mk = (label, to) => { const b = document.createElement('button'); b.textContent = label; b.onclick = () => { sendAction({ t: 'warp', to }); resume(); }; $('pWarps').appendChild(b); }; mk('WILDS', 'ow'); for (let d = 1; d <= 9; d++) mk('L' + d, 'd' + d); }
   $('pInfo').textContent = (NET.role === 'host' ? 'HOSTING' : NET.role === 'client' ? 'CONNECTED' : 'SOLO') + ' - ' + n + ' PLAYER' + (n > 1 ? 'S' : '') + (me ? ' - ' + (me.cls === 'monk' ? 'MARTIAL ARTIST' : 'SWORD') : '');
 }
 const KONAMI = ['ArrowUp', 'ArrowUp', 'ArrowDown', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'ArrowLeft', 'ArrowRight', 'KeyB', 'KeyA'];
@@ -368,6 +406,7 @@ function quitToTitle() {
   NET.role = 'solo'; NET.roomWord = null; G.sim = null; G.world = null; G.local = null; G.snap = null; G.state = 'title'; G.disconnected = false; musicPlay(null); showScreen('titleScreen'); refreshTitle();
 }
 function refreshTitle() {
+  $('btnDebug').textContent = 'DEBUG: ' + (debugLoadout().on ? 'ON' : 'OFF');
   $('btnContinue').style.display = readSave('adv') ? '' : 'none'; $('btnRogueCont').style.display = readSave('rogue') ? '' : 'none';
   $('pname').value = G.profile.name; buildColorPicker(); buildClassPicker();
 }
@@ -380,6 +419,12 @@ function bindUI() {
   on('btnRogueCont', () => startGame('rogue', true));
   on('btnJoin', () => { showScreen('joinScreen'); $('joinReply').style.display = 'none'; $('joinStatus').textContent = ''; setTimeout(() => $('joinWord').focus(), 50); });
   on('btnHelp', () => showScreen('helpScreen'));
+  on('btnDebug', () => { fillDebugUI(); showScreen('debugScreen'); });
+  on('dbgBack', () => { readDebugUI(); showScreen('titleScreen'); refreshTitle(); });
+  on('dbgAll', () => { G.profile.dbg = Object.assign(defaultDebug(), { on: true, sword: 3, armor: 2, hearts: 16, gems: 999, bombs: 16, arrows: 30, potions: 2, shards: 8, items: DBG_ITEMS.map(i => i[0]) }); fillDebugUI(); });
+  on('dbgNone', () => { G.profile.dbg = Object.assign(defaultDebug(), { on: true }); fillDebugUI(); });
+  on('dbgMonk', () => { unlockMonk(); buildClassPicker(); showToast('SECRET CLASS UNLOCKED'); });
+  $('dbgOn').onchange = () => { $('dbgBody').classList.toggle('off', !$('dbgOn').checked); };
   on('helpBack', () => showScreen(G.state === 'title' ? 'titleScreen' : 'pauseScreen'));
   on('joinBack', () => { stopScan(); showScreen('titleScreen'); });
   on('joinScanBtn', joinScan);
@@ -407,7 +452,7 @@ function bindUI() {
   try { const s = localStorage.getItem('emberwake_sens'); if (s) { IN.sens = +s; $('sens').value = s; } const v = localStorage.getItem('emberwake_vol'); if (v) { AU.vol = +v; $('vol').value = v; } } catch (e) { }
 }
 function boot() {
-  initSprites(); initTextures(); loadProfile();
+  initSprites(); initAnims(); initTextures(); loadProfile();
   initRenderer($('game')); initInput($('game')); bindUI(); drawLogo(); refreshTitle();
   addEventListener('resize', () => { resizeRenderer(); });
   showScreen('titleScreen');

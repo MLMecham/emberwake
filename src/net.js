@@ -75,6 +75,7 @@ function hostOnMsg(conn, m) {
     const used = new Set(Object.values(sim.players).map(p => p.color)); let color = m.color;
     if (used.has(color)) color = (PCOLORS.find(c => !used.has(c.name)) || PCOLORS[0]).name;
     const p = sim.addPlayer(pid, (m.name || 'HERO').slice(0, 8).toUpperCase(), color, m.cls === 'monk' ? 'monk' : 'sword');
+    if (m.dbg && m.dbg.on) applyDebugLoadout(p, m.dbg, true);
     conn.send({ t: 'welcome', pid, seed: G.world.seed, mode: G.world.mode, color, mods: sim.mods, mv: sim.modVer, x: p.x, y: p.y, a: p.a, lvl: p.lvl });
     conn.mv = sim.modVer; netStatus(); sfx('fanfare');
     return;
@@ -108,7 +109,7 @@ function joinerStart(conn) {
   NET.role = 'client'; NET.hostConn = conn;
   conn.onmsg = (m) => clientOnMsg(m);
   conn.onclose = () => { if (G.state === 'play' || G.state === 'lobby') showToast('LOST CONNECTION TO HOST'); G.disconnected = true; };
-  conn.send({ t: 'hello', name: G.profile.name, color: G.profile.color, cls: G.profile.cls });
+  conn.send({ t: 'hello', name: G.profile.name, color: G.profile.color, cls: G.profile.cls, dbg: debugLoadout() });
 }
 // ----- ONLINE (internet) short codes via PeerJS cloud -----
 function onlineId(code) { return 'emberwake-gld-' + code.toLowerCase().replace(/[^a-z0-9]/g, ''); }

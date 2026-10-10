@@ -21,14 +21,15 @@ function initInput(canvas) {
   // locked mouse = free look; if the browser refuses pointer lock, dragging with a button held still turns the view
   addEventListener('mousemove', e => { if (IN.locked || ((IN.mouseL || IN.mouseR) && G.state === 'play')) { IN.mouseDX += e.movementX; IN.mouseDY += e.movementY; } });
   addEventListener('wheel', e => { if (G.state === 'play') IN.wheel += Math.sign(e.deltaY); }, { passive: true });
-  document.addEventListener('pointerlockchange', () => { IN.locked = document.pointerLockElement === canvas; });
+  // the browser always spends the first Esc on releasing the mouse, so treat that release as "open the menu"
+  document.addEventListener('pointerlockchange', () => { const was = IN.locked; IN.locked = document.pointerLockElement === canvas; if (was && !IN.locked && G.state === 'play' && !G.disconnected) openPause(); });
 }
 let _padPrev = {};
 function readInput(dt) {
   const k = IN.keys, p = IN.pressed; const o = { fwd: 0, str: 0, turn: 0, pitch: 0, atk: false, atkP: false, item: false, cycle: 0, interact: false, map: false, pause: false, dash: false, anyP: false };
   if (k.KeyW || k.ArrowUp) o.fwd += 1; if (k.KeyS || k.ArrowDown) o.fwd -= 1; if (k.KeyD) o.str += 1; if (k.KeyA) o.str -= 1;
   if (k.ArrowLeft) o.turn -= 2.6 * dt; if (k.ArrowRight) o.turn += 2.6 * dt;
-  o.turn += IN.mouseDX * 0.0028 * IN.sens; o.pitch += IN.mouseDY * 0.25 * IN.sens * (IN.invertY ? -1 : 1);
+  o.turn += IN.mouseDX * 0.0028 * IN.sens; o.pitch -= IN.mouseDY * 0.25 * IN.sens * (IN.invertY ? -1 : 1);
   IN.mouseDX = 0; IN.mouseDY = 0;
   o.atk = k.Space || k.KeyJ || IN.mouseL; o.atkP = p.Space || p.KeyJ || p.Mouse0;
   o.item = p.KeyE || p.KeyK || p.Mouse2; o.itemHeld = k.KeyE || k.KeyK || IN.mouseR;
@@ -41,7 +42,7 @@ function readInput(dt) {
   const pads = navigator.getGamepads ? navigator.getGamepads() : []; const gp = pads && Array.from(pads).find(x => x && x.connected);
   if (gp) {
     const dz = (v) => Math.abs(v) < 0.18 ? 0 : v; const b = (i) => gp.buttons[i] && gp.buttons[i].pressed; const bp = (i) => b(i) && !_padPrev[i];
-    o.fwd -= dz(gp.axes[1] || 0); o.str += dz(gp.axes[0] || 0); o.turn += dz(gp.axes[2] || 0) * 2.8 * dt * IN.sens; o.pitch += dz(gp.axes[3] || 0) * 120 * dt;
+    o.fwd -= dz(gp.axes[1] || 0); o.str += dz(gp.axes[0] || 0); o.turn += dz(gp.axes[2] || 0) * 2.8 * dt * IN.sens; o.pitch -= dz(gp.axes[3] || 0) * 120 * dt * (IN.invertY ? -1 : 1);
     if (b(0) || b(7)) o.atk = true; if (bp(0) || bp(7)) { o.atkP = true; o.confirm = true; }
     if (bp(2) || bp(6)) o.item = true; if (b(2) || b(6)) o.itemHeld = true; if (bp(3)) o.cycle += 1; if (bp(4)) o.cycle -= 1; if (bp(5)) o.cycle += 1;
     if (b(1)) o.interact = true; if (bp(1)) { o.interactP = true; o.dash = true; } if (bp(9)) o.pause = true; if (bp(8)) o.map = true; if (bp(10)) o.dash = true;

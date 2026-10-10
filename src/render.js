@@ -1,6 +1,9 @@
 // ===== render.js : raycaster, sprites, HUD =====
 'use strict';
+const ELITE_NAME = [null, 'BLAZING', 'SWIFT', 'GIANT', 'SPLITTER', 'GOLDEN'];
+const ELITE_COL = [null, [255, 110, 30], [90, 220, 255], [200, 80, 255], [120, 255, 120], [255, 215, 60]];
 const R = {
+  anim: {},
   W: 320, H: 180, canvas: null, ctx: null, img: null, buf: null, zbuf: null, time: 0,
 };
 function initRenderer(canvas) {
@@ -131,14 +134,24 @@ function renderWorld(cam, L, ents, players, myId) {
   const sprites = [];
   const rad = 16; const cx0 = Math.max(0, Math.floor(cam.x) - rad), cx1 = Math.min(L.w - 1, Math.floor(cam.x) + rad), cy0 = Math.max(0, Math.floor(cam.y) - rad), cy1 = Math.min(L.h - 1, Math.floor(cam.y) + rad);
   for (let y = cy0; y <= cy1; y++) for (let x = cx0; x <= cx1; x++) { const pr = L.props[y * L.w + x]; if (pr) sprites.push({ x: x + 0.5, y: y + 0.5, spr: SPR[PROPS[pr]], sc: PROP_INFO[pr].scale, z: 0, fl: pr === PR.FLAME ? 8 : 0 }); }
-  for (const e of ents) { const s = SPR[e[1]]; if (!s) continue; sprites.push({ x: e[2], y: e[3], spr: s, sc: e[4], z: e[5], fl: e[6], price: e[7], id: e[0] }); }
+  for (const e of ents) {
+    let s = SPR[e[1]]; if (!s) continue; const an = SPR_ANIM[e[1]];
+    if (an && !(e[6] & 2)) s = an.f[Math.floor(R.time * an.fps + e[0] * 0.37) % an.f.length]; // stunned enemies freeze
+    sprites.push({ x: e[2], y: e[3], spr: s, sc: e[4], z: e[5], fl: e[6], price: e[7], id: e[0], elite: e[10] || 0 });
+  }
   for (const p of players) {
     if (p[0] === myId || p[1] !== L.id) continue;
     const ang = Math.atan2(p[3] - cam.y, p[2] - cam.x); const rel = angDiff(p[4], ang + Math.PI);
     let dir = Math.abs(rel) < 0.8 ? 'front' : Math.abs(rel) > 2.35 ? 'back' : rel > 0 ? 'side_l' : 'side';
     const col = (PCOLORS.find(c => c.name === p[5]) || PCOLORS[0]).c;
-    const s = heroSprite(p[7], col, p[6], dir);
-    sprites.push({ x: p[2], y: p[3], spr: s, sc: 0.78, z: p[8] ? 0 : -0.45, fl: p[8] ? (p[9] > 0 ? 16 : 0) : 32, name: p[10], col, aura: p[7] === 'monk' ? p[6] : 0 });
+    // run cycle from how fast this player is actually moving
+    const an = R.anim[p[0]] || (R.anim[p[0]] = { x: p[2], y: p[3], t: R.time, ph: 0, spd: 0 });
+    const ddt = Math.max(0.001, R.time - an.t); const sp = Math.hypot(p[2] - an.x, p[3] - an.y) / ddt;
+    if (ddt > 0) { an.spd = an.spd * 0.8 + Math.min(10, sp) * 0.2; an.x = p[2]; an.y = p[3]; an.t = R.time; }
+    let fr = -1, rsc = 1, flip = false;
+    if (p[8] && an.spd > 0.8) { an.ph += ddt * 9; const step = Math.floor(an.ph); fr = RUN_SEQ[step % 4]; rsc = RUN_SCALE[step % 4]; flip = (dir === 'front' || dir === 'back') && (Math.floor(step / 4) & 1); } else an.ph = 0;
+    const s = heroSpriteRun(p[7], col, p[6], dir, fr, flip);
+    sprites.push({ x: p[2], y: p[3], spr: s, sc: 0.78 * rsc, z: p[8] ? 0 : -0.45, fl: p[8] ? (p[9] > 0 ? 16 : 0) : 32, name: p[10], col, aura: p[7] === 'monk' ? p[6] : 0 });
   }
   for (const s of sprites) { const dx = s.x - cam.x, dy = s.y - cam.y; s.d = dx * dx + dy * dy; }
   sprites.sort((a, b) => b.d - a.d);
@@ -163,9 +176,15 @@ function renderWorld(cam, L, ents, players, myId) {
         if (ghost && ((x + y + (t * 30 | 0)) & 1)) continue;
         if (hurt) c = (ty + tx) & 1 ? rgb(255, 255, 255) : rgb(255, 60, 40); else if (stun) c = fogC(c, 0.45, 120, 180, 255);
         if (down) { const g = ((c & 255) + ((c >> 8) & 255) + ((c >> 16) & 255)) / 3 | 0; c = rgb(g, g, g + 30); }
+        if (s.elite) { const ec = ELITE_COL[s.elite]; c = fogC(c, s.elite === 5 ? 0.55 : 0.3 + 0.12 * Math.sin(t * 6), ec[0], ec[1], ec[2]); }
         c = shadeC(c, lf); if (fogF > 0) c = fogC(c, fogF, fogR, fogG, fogB);
         buf[y * W + x] = c;
       }
+    }
+    if (s.elite && dist < 12) {
+      const ec = ELITE_COL[s.elite]; const ecc = rgb(ec[0], ec[1], ec[2]);
+      for (let i = 0; i < 5; i++) { const ax = scrX + Math.round((Math.random() - 0.5) * wid * 1.2), ay = Math.round(topY + Math.random() * hgt); if (ax >= 0 && ax < W && tY < R.zbuf[ax]) px(ax, ay, ecc); }
+      if (dist < 7 && scrX > 0 && scrX < W && tY < R.zbuf[scrX]) textC(ELITE_NAME[s.elite], scrX, Math.max(2, y0 - 10), ecc);
     }
     // aura for monk teammates
     if (s.aura) { const ac = s.aura === 2 ? rgb(255, 250, 210) : rgb(110, 200, 255); for (let i = 0; i < 6; i++) { const ax = scrX + Math.round((Math.random() - 0.5) * wid), ay = Math.round(topY + Math.random() * hgt); if (ax >= 0 && ax < W && tY < R.zbuf[ax]) px(ax, ay, ac); } }
@@ -261,7 +280,7 @@ function drawHUD(st) {
   // A box
   const ax = 32, ay = H - 30; if (!sel) { }
   // crosshair
-  px(W / 2, H / 2 + Math.round(st.pitch), rgb(255, 255, 255)); px(W / 2 - 2, H / 2 + Math.round(st.pitch), rgb(255, 255, 255)); px(W / 2 + 2, H / 2 + Math.round(st.pitch), rgb(255, 255, 255));
+  px(W / 2, H / 2, rgb(255, 255, 255)); px(W / 2 - 2, H / 2, rgb(255, 255, 255)); px(W / 2 + 2, H / 2, rgb(255, 255, 255));
   // boss bar
   if (st.bossHp >= 0) { const bw = Math.min(160, W - 80); rect(W / 2 - bw / 2 - 1, H - 14, bw + 2, 7, rgb(10, 10, 10)); rect(W / 2 - bw / 2, H - 13, bw * st.bossHp, 5, rgb(220, 40, 60)); textC('GUARDIAN', W / 2, H - 23, rgb(255, 200, 200)); }
   // teammates status (bottom-right)

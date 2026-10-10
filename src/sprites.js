@@ -882,3 +882,78 @@ function heroSprite(cls, hex, tier, dir) { // dir: front/back/side/side_l
   }
   _heroCache[key] = s; return s;
 }
+
+// ===== run cycle (A -> B -> C -> B), drawn as limb overlays on the idle sprite =====
+// A: one arm thrown up, other tucked.  B: squished, both arms tucked.  C: arms flung wide, one leg kicked way out.
+// A=arm, H=hand, L=leg, F=foot. Coordinates are (x, y) in the 16x16 sprite.
+const RUN_FRONT = [
+  [[4, 8, 'A'], [3, 9, 'A'], [3, 10, 'H'], [11, 8, 'A'], [12, 7, 'A'], [12, 6, 'A'], [12, 5, 'H'], [5, 13, 'L'], [6, 13, 'L'], [5, 14, 'F'], [6, 14, 'F'], [9, 13, 'L'], [10, 13, 'L'], [9, 14, 'F'], [10, 14, 'F']],
+  [[4, 8, 'A'], [3, 9, 'A'], [4, 10, 'H'], [11, 8, 'A'], [12, 9, 'A'], [11, 10, 'H'], [6, 13, 'L'], [7, 13, 'L'], [6, 14, 'F'], [7, 14, 'F'], [8, 13, 'L'], [9, 13, 'L'], [8, 14, 'F'], [9, 14, 'F']],
+  [[4, 8, 'A'], [3, 8, 'A'], [2, 8, 'A'], [1, 8, 'A'], [1, 7, 'A'], [1, 6, 'H'], [11, 8, 'A'], [12, 8, 'A'], [13, 8, 'A'], [14, 8, 'A'], [15, 9, 'H'], [5, 13, 'L'], [6, 13, 'L'], [5, 14, 'F'], [6, 14, 'F'], [9, 13, 'L'], [10, 13, 'L'], [11, 14, 'L'], [12, 14, 'L'], [13, 15, 'F'], [14, 15, 'F']],
+];
+const RUN_SIDE = [
+  [[11, 8, 'A'], [12, 7, 'A'], [13, 6, 'H'], [6, 13, 'L'], [6, 14, 'F'], [5, 14, 'F'], [8, 13, 'L'], [9, 14, 'F'], [10, 14, 'F']],
+  [[11, 9, 'A'], [11, 10, 'H'], [7, 13, 'L'], [8, 13, 'L'], [7, 14, 'F'], [8, 14, 'F'], [9, 14, 'F']],
+  [[11, 8, 'A'], [12, 8, 'A'], [13, 8, 'A'], [14, 7, 'H'], [9, 13, 'L'], [10, 13, 'L'], [11, 14, 'L'], [12, 14, 'F'], [13, 14, 'F'], [5, 13, 'L'], [4, 14, 'L'], [3, 14, 'F'], [2, 14, 'F']],
+];
+const RUN_SEQ = [0, 1, 2, 1];
+const RUN_SCALE = [1.0, 0.9, 1.1, 0.9]; // squash in the middle, stretch on the big kick
+function runRows(src, cls, dir, frame) {
+  const rows = src.map(r => r.split(''));
+  const side = dir === 'side';
+  for (let y = 7; y < 16; y++) for (let x = 0; x < 16; x++) {
+    if (y >= 13) rows[y][x] = '.';
+    else if (side ? (x >= 11 && y <= 12) : (y <= 11 && (x <= 4 || x >= 11))) rows[y][x] = '.';
+  }
+  const map = cls === 'monk' ? { A: 's', H: 'w', L: 'N', F: 'k' } : { A: 's', H: 'S', L: 's', F: 'N' };
+  for (const [x, y, k] of (side ? RUN_SIDE : RUN_FRONT)[frame]) rows[y][x] = map[k];
+  return rows.map(r => r.join(''));
+}
+// frame: -1 idle, otherwise 0..2 (A,B,C)
+function heroSpriteRun(cls, hex, tier, dir, frame, flip) {
+  if (frame < 0) return heroSprite(cls, hex, tier, dir);
+  const key = 'run' + cls + hex + tier + dir + frame + (flip ? 'f' : '');
+  if (_heroCache[key]) return _heroCache[key];
+  const baseDir = dir === 'side_l' ? 'side' : dir;
+  const src = runRows(SPR_SRC[(cls === 'monk' ? 'monk_' : 'hero_') + baseDir], cls, baseDir === 'side' ? 'side' : 'front', frame);
+  const pal = tunicPal(hex, cls === 'monk' ? 0 : tier);
+  let s = buildSprite(src, pal);
+  if (cls !== 'monk' && tier >= 1) { const tc = c32(pal.T), hc = c32(pal.h); for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) { const i = y * 16 + x; if (s.px[i] === tc && ((tier === 1 && ((x + y) & 1) === 0 && y % 2 === 0) || (tier === 2 && (x + y * 3) % 7 === 0))) s.px[i] = hc; } }
+  if (dir === 'side_l' || flip) s = mirrorSpr(s);
+  _heroCache[key] = s; return s;
+}
+function mirrorSpr(s) { const m = new Uint32Array(s.px.length); for (let y = 0; y < s.h; y++) for (let x = 0; x < s.w; x++) m[y * s.w + x] = s.px[y * s.w + (s.w - 1 - x)]; return { w: s.w, h: s.h, px: m }; }
+
+// ===== enemy animation frames, made by small transforms of the base sprite =====
+function sprCopy(s) { return { w: s.w, h: s.h, px: new Uint32Array(s.px) }; }
+function sprGet(s, x, y) { return x < 0 || y < 0 || x >= s.w || y >= s.h ? 0 : s.px[y * s.w + x]; }
+// resample vertically around the bottom row (f<1 squash, f>1 stretch), widen/narrow to keep volume
+function sprSquash(s, f) {
+  const o = { w: s.w, h: s.h, px: new Uint32Array(s.px.length) }; const fx = 1 / Math.sqrt(f); const cx = (s.w - 1) / 2;
+  for (let y = 0; y < s.h; y++) for (let x = 0; x < s.w; x++) { const sy = Math.round(s.h - 1 - (s.h - 1 - y) / f), sx = Math.round(cx + (x - cx) / fx); o.px[y * s.w + x] = sprGet(s, sx, sy); }
+  return o;
+}
+// shift a band of rows sideways (legs shuffle, ghost tail wave)
+function sprShearRows(s, y0, y1, dx) { const o = sprCopy(s); for (let y = y0; y <= y1; y++) for (let x = 0; x < s.w; x++) o.px[y * s.w + x] = sprGet(s, x - dx, y); return o; }
+// split legs: left half of a band moves dl rows, right half dr rows
+function sprStep(s, y0, dl, dr) { const o = sprCopy(s); for (let y = y0; y < s.h; y++) for (let x = 0; x < s.w; x++) o.px[y * s.w + x] = 0; for (let y = y0; y < s.h; y++) for (let x = 0; x < s.w; x++) { const d = x < s.w / 2 ? dl : dr; const ty = y + d; if (ty >= y0 - 1 && ty < s.h) { const c = sprGet(s, x, y); if (c) o.px[ty * s.w + x] = c; } } return o; }
+function sprShiftCols(s, x0, x1, dy) { const o = sprCopy(s); for (let x = x0; x <= x1; x++) { for (let y = 0; y < s.h; y++) o.px[y * s.w + x] = 0; for (let y = 0; y < s.h; y++) { const c = sprGet(s, x, y); const ty = y + dy; if (c && ty >= 0 && ty < s.h) o.px[ty * s.w + x] = c; } } return o; }
+function sprBob(s, dy) { return sprShiftCols(s, 0, s.w - 1, dy); }
+const SPR_ANIM = {};
+function initAnims() {
+  const A = (k, frames, fps) => { SPR_ANIM[k] = { f: frames, fps }; };
+  A('slime', [SPR.slime, sprSquash(SPR.slime, 0.8), SPR.slime, sprSquash(SPR.slime, 1.15)], 6);
+  A('spitter', [SPR.spitter, sprShearRows(SPR.spitter, 11, 13, 1), SPR.spitter, sprShearRows(SPR.spitter, 11, 13, -1)], 6);
+  A('thornling', [SPR.thornling, sprStep(SPR.thornling, 13, -1, 0), SPR.thornling, sprStep(SPR.thornling, 13, 0, -1)], 6);
+  A('bat', [SPR.bat, sprShiftCols(sprShiftCols(SPR.bat, 0, 4, -3), 11, 15, -3), sprShiftCols(sprShiftCols(SPR.bat, 0, 4, 2), 11, 15, 2)], 10);
+  A('skeleton', [SPR.skeleton, sprStep(SPR.skeleton, 12, -1, 0), SPR.skeleton, sprStep(SPR.skeleton, 12, 0, -1)], 5);
+  A('knight', [SPR.knight, sprStep(SPR.knight, 12, -1, 0), SPR.knight, sprStep(SPR.knight, 12, 0, -1)], 4);
+  A('ghost', [SPR.ghost, sprShearRows(SPR.ghost, 10, 14, 1), SPR.ghost, sprShearRows(SPR.ghost, 10, 14, -1)], 4);
+  A('wizard', [SPR.wizard, sprShiftCols(SPR.wizard, 13, 15, -1), sprShiftCols(SPR.wizard, 13, 15, -2)], 3);
+  A('spider', [SPR.spider, sprShearRows(sprShearRows(SPR.spider, 2, 5, 1), 10, 13, -1), sprShearRows(sprShearRows(SPR.spider, 2, 5, -1), 10, 13, 1)], 9);
+  A('wyrm', [SPR.wyrm, sprBob(SPR.wyrm, 1), sprStep(SPR.wyrm, 12, -1, 0)], 3);
+  A('orb', [SPR.orb, sprSquash(SPR.orb, 0.92), SPR.orb, sprSquash(SPR.orb, 1.06)], 5);
+  A('king', [SPR.king, sprBob(SPR.king, 1)], 2);
+  A('fairy', [SPR.fairy, sprShiftCols(sprShiftCols(SPR.fairy, 0, 5, -2), 10, 15, -2)], 12);
+  A('flame', [SPR.flame, sprShearRows(SPR.flame, 2, 8, 1), sprSquash(SPR.flame, 1.1)], 8);
+}
