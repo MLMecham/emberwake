@@ -255,12 +255,46 @@ function drawViewmodel(st) {
     const p = st.punch; // {side, t}
     const auraC = me.armor === 2 ? rgb(255, 248, 200) : me.armor === 1 ? rgb(110, 200, 255) : 0;
     for (const side of [-1, 1]) {
-      let fx = W / 2 + side * W * 0.28 + bx, fy = H - 34 + by; let sc = 1;
-      if (p && p.side === side && p.t < 0.22) { const k = Math.sin(p.t / 0.22 * Math.PI); fx = lerp(fx, W / 2 + side * 6, k); fy = lerp(fy, H / 2 + 4, k); sc = 1 + k * 0.5; }
+      let fx = W / 2 + side * W * 0.26 + bx, fy = H - 44 + by; let sc = 1;
+      let turn = 0; // the forearm rolls over as it punches (0 guard .. 1 fully turned, thumb tucked out of sight underneath)
+      if (p && p.side === side && p.t < 0.22) { const k = Math.sin(p.t / 0.22 * Math.PI); fx = lerp(fx, W / 2 + side * 6, k); fy = lerp(fy, H / 2 + 4, k); sc = 1 + k * 0.5; turn = Math.min(1, k * 1.6); }
       if (st.charge > 0) { fx = lerp(fx, W / 2 + side * 14, Math.min(1, st.charge * 2)); fy = lerp(fy, H - 46, Math.min(1, st.charge * 2)); }
-      // forearm (bare skin + wraps)
-      thickLine(fx, fy + 10, W / 2 + side * W * 0.42, H + 20, 14 * sc, skinD); thickLine(fx, fy + 10, W / 2 + side * W * 0.42, H + 20, 10 * sc, skin);
-      const fw = 22 * sc, fh = 18 * sc; rect(fx - fw / 2, fy - fh / 2, fw, fh, rgb(240, 236, 220)); rect(fx - fw / 2, fy - fh / 2 + fh * 0.3, fw, 2, rgb(190, 180, 160)); rect(fx - fw / 2, fy - fh / 2 + fh * 0.65, fw, 2, rgb(190, 180, 160)); frame(fx - fw / 2, fy - fh / 2, fw, fh, rgb(20, 18, 28));
+      // muscular forearm: a round-brush stroke that bulges near the elbow and narrows into a wrapped wrist,
+      // shaded darker on the outside edge with a muscle groove, then a wrapped fist with knuckles and a thumb
+      const OUT = rgb(20, 18, 28), skinL = c32(hexToRgb('#f8d4b0')), skinS = c32(hexToRgb('#a86440')), wrap = rgb(240, 234, 216), wrapD = rgb(186, 176, 154);
+      const ex = W / 2 + side * W * 0.5, ey = H + 34; // elbow, off-screen below
+      const ax = fx - ex, ay = fy - ey, al = Math.hypot(ax, ay) || 1, dx = ax / al, dy = ay / al, qx = -dy * side, qy = dx * side; // q points to the outer edge
+      const rr = (t) => sc * (11 + 6 * Math.pow(Math.sin(Math.PI * Math.min(1, (1 - t) * 1.15)), 1.5) - 2.5 * t); // big bulge near the elbow
+      const pt = (t, o) => [ex + ax * t + qx * o, ey + ay * t + qy * o];
+      const stroke = (t0, t1, r, c, off) => { for (let i = Math.round(t0 * 60); i <= Math.round(t1 * 60); i++) { const t = i / 60; const [x, y] = pt(t, off ? off * rr(t) : 0); disc(Math.round(x), Math.round(y), Math.max(1, Math.round(r(t))), c); } };
+      stroke(0, 0.86, (t) => rr(t) + 1.5, OUT); stroke(0, 0.86, rr, skin);
+      const fl = turn > 0.5 ? -1 : 1; // rolled over: the light and shadow sides swap
+      stroke(0.05, 0.8, (t) => rr(t) * 0.45, skinD, 0.55 * fl);       // shadow along the outside
+      stroke(0.08, 0.6, (t) => rr(t) * 0.14, skinS, 0.12 * fl);       // the groove between the forearm muscles
+      stroke(0.12, 0.5, (t) => rr(t) * 0.35, skinL, -0.18 * fl);     // the muscle bulging up on the inside
+      stroke(0.05, 0.75, (t) => rr(t) * 0.28, skinL, -0.5 * fl);      // light on the inside edge
+      // wrist wraps
+      stroke(0.78, 0.92, (t) => rr(t) * 0.92 + 1, OUT); stroke(0.78, 0.92, (t) => rr(t) * 0.92, wrap);
+      for (const t of [0.81, 0.86]) { const [x, y] = pt(t, 0); thickLine(x - qx * rr(t), y - qy * rr(t), x + qx * rr(t), y + qy * rr(t), 1, wrapD); }
+      // fist: drawn in arm space (u toward the knuckles, v across), knuckles bumping out along the far edge
+      const U = 12.5 * sc, V = 14 * sc; const fcx = fx + dx * 2 * sc, fcy = fy + dy * 2 * sc;
+      for (let yy = -Math.ceil(U + V); yy <= U + V; yy++) for (let xx = -Math.ceil(U + V); xx <= U + V; xx++) {
+        const u = xx * dx + yy * dy, v = xx * qx + yy * qy;
+        const kn = 2.2 * sc * Math.max(0, Math.cos((v / V) * Math.PI * 2)); // four knuckle bumps
+        const e = Math.pow(Math.abs(u) / (U + (u > 0 ? kn : 0)), 4) + Math.pow(Math.abs(v) / V, 4); if (e > 1) continue;
+        let c;
+        if (e > 0.72) c = OUT;
+        else if (u < -U * 0.3) c = (Math.abs(((u + 40) % (4 * sc))) < 0.9) ? wrapD : wrap;          // wraps around the base of the hand
+        else c = v * fl > V * 0.45 ? skinD : (u > U * 0.6 ? skinL : skin);                              // bare knuckles
+        if (u >= -U * 0.1 && e <= 0.72 && Math.abs(((v / V) * 2 + 4) % 1 - 0.5) > 0.44) c = skinS;    // creases between the fingers
+        if (u > U * 0.25 && u < U * 0.38 && e <= 0.72) c = skinD;                                      // the fold where the fingers curl under
+        px(Math.round(fcx + xx), Math.round(fcy + yy), c);
+      }
+      // thumb folded across the front of the fist, on the inner side
+      if (turn < 0.35) { const t0 = [fcx - qx * V * 0.8 - dx * U * 0.35, fcy - qy * V * 0.8 - dy * U * 0.35], t1 = [fcx - qx * V * 0.15 + dx * U * 0.05, fcy - qy * V * 0.15 + dy * U * 0.05];
+        const tr = 3.2 * sc; for (const [r, c] of [[tr + 1.2, OUT], [tr, skin]]) for (let i = 0; i <= 12; i++) { const t = i / 12; disc(Math.round(lerp(t0[0], t1[0], t)), Math.round(lerp(t0[1], t1[1], t)), Math.max(1, Math.round(r)), c); }
+        disc(Math.round(t1[0]), Math.round(t1[1]), Math.max(1, Math.round(tr * 0.55)), rgb(255, 214, 206)); } // thumb folded across the fingers, nail at the tip
+      const fw = U * 2, fh = V * 2;
       if (auraC) for (let i = 0; i < 10; i++) px(fx + (Math.random() - 0.5) * fw * 1.6, fy + (Math.random() - 0.5) * fh * 1.8, auraC);
     }
     if (st.charge > 0) { const r = Math.min(14, 3 + st.charge * 10) | 0; disc(W / 2, H - 48, r + 2, rgb(80, 200, 255), 0.5); disc(W / 2, H - 48, r, rgb(220, 250, 255)); if (st.charge > 0.8) for (let i = 0; i < 12; i++) { const a = Math.random() * TAU; thickLine(W / 2, H - 48, W / 2 + Math.cos(a) * (r + 10), H - 48 + Math.sin(a) * (r + 10), 1, rgb(200, 240, 255)); } }
