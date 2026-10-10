@@ -17265,7 +17265,6 @@ function drawViewmodel(st) {
       for (let yy = 0; yy < fh2; yy++) for (let xx = 0; xx < fwid; xx++) { const ex = (xx - fwid / 2) / (fwid / 2), ey = (yy - fh2 / 2 + 0.5) / (fh2 / 2); const e = ex * ex * 0.6 + ey * ey; if (e > 1.05) continue; px(x + xx, y + yy, e > 0.7 ? (yy >= fh2 - 1 ? rgb(20, 18, 28) : skinD) : (ey < -0.2 ? skinL : skin)); }
       px(x + 1, y + (fh2 >> 1), rgb(236, 200, 180)); // fingertip
     }
-    { const y = Math.round(fcy - fh2 * 2) - 3; const tx0 = Math.round(gx - fwid * 0.55), tw = Math.round(fwid * 0.95); rect(tx0 - 1, y - 1, tw + 2, 6, rgb(20, 18, 28)); rect(tx0, y, tw, 4, skin); rect(tx0, y, tw, 1, skinL); rect(tx0 + tw - 3, y + 1, 2, 2, rgb(255, 228, 220)); } // thumb over the top of the grip, nail at the tip
     // the strap loop the forearm passes through, on the left part of the shield
     { const t = 0.72; const [sx2, sy2] = bez(t); const r = rr(t); const lw = Math.max(4, Math.round(5 * sc)), lh = Math.round(r * 2 + 6);
       const lx = Math.round(sx2 - lw / 2), ly = Math.round(sy2 - lh / 2);
@@ -17279,7 +17278,7 @@ function drawViewmodel(st) {
     const len = 70; const tipX = hx + Math.cos(ang) * len, tipY = hy + Math.sin(ang) * len;
     const blade = me.sword === 1 ? rgb(170, 120, 60) : me.sword === 2 ? rgb(220, 226, 240) : me.sword === 3 ? rgb(130, 240, 255) : rgb(255, 236, 150);
     const bladeD = me.sword === 1 ? rgb(110, 70, 30) : me.sword === 2 ? rgb(130, 136, 160) : me.sword === 3 ? rgb(40, 150, 200) : rgb(230, 140, 40);
-    const gx = hx + Math.cos(ang) * 14, gy = hy + Math.sin(ang) * 14;
+    const gx = hx + Math.cos(ang) * 8, gy = hy + Math.sin(ang) * 8; // the guard sits right on top of the fist: you hold it up by the hilt
     thickLine(gx, gy, tipX, tipY, (t) => 7 - t * 4, bladeD); thickLine(gx, gy, tipX, tipY, (t) => 4 - t * 3, blade);
     const pa = ang + Math.PI / 2; thickLine(gx + Math.cos(pa) * 10, gy + Math.sin(pa) * 10, gx - Math.cos(pa) * 10, gy - Math.sin(pa) * 10, 4, rgb(230, 190, 60));
     if (me.sword >= 4) for (let i = 0; i < 5; i++) { const tt = Math.random(); px(lerp(gx, tipX, tt) + (Math.random() - 0.5) * 8, lerp(gy, tipY, tt) + (Math.random() - 0.5) * 8, Math.random() < 0.5 ? rgb(255, 255, 220) : rgb(255, 180, 60)); }
@@ -17288,8 +17287,8 @@ function drawViewmodel(st) {
     // sword hand, drawn like the shield hand: the grip and pommel, then a curved forearm from the bottom-right
     // (shadow on its far edge, cuff, bare wrist), then four fingers wrapped around the grip with the thumb over them
     const dx = Math.cos(ang), dy = Math.sin(ang), qx = -dy, qy = dx; const OUT = rgb(20, 18, 28); const skinL = c32(hexToRgb('#f8d4b0'));
-    thickLine(hx - dx * 9, hy - dy * 9, gx, gy, 6, OUT); thickLine(hx - dx * 9, hy - dy * 9, gx, gy, 4, rgb(96, 60, 32)); // leather grip
-    disc(Math.round(hx - dx * 11), Math.round(hy - dy * 11), 4, OUT); disc(Math.round(hx - dx * 11), Math.round(hy - dy * 11), 3, rgb(230, 190, 60)); // pommel
+    thickLine(hx - dx * 8, hy - dy * 8, gx, gy, 6, OUT); thickLine(hx - dx * 8, hy - dy * 8, gx, gy, 4, rgb(96, 60, 32)); // leather grip
+    disc(Math.round(hx - dx * 10), Math.round(hy - dy * 10), 4, OUT); disc(Math.round(hx - dx * 10), Math.round(hy - dy * 10), 3, rgb(230, 190, 60)); // pommel
     const aw = 15;
     const P0x = hx + 40, P0y = H + 14, P1x = hx + 26, P1y = hy + 22, P2x = hx + 3, P2y = hy + 6;
     const bez = (t) => { const u = 1 - t; return [u * u * P0x + 2 * u * t * P1x + t * t * P2x, u * u * P0y + 2 * u * t * P1y + t * t * P2y]; };
