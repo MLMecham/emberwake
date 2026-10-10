@@ -17234,7 +17234,7 @@ function drawViewmodel(st) {
         px(Math.round(fcx + xx), Math.round(fcy + yy), c);
       }
       // thumb folded across the front of the fist, on the inner side
-      if (turn < 0.35) { const t0 = [fcx - qx * V * 0.8 - dx * U * 0.35, fcy - qy * V * 0.8 - dy * U * 0.35], t1 = [fcx - qx * V * 0.15 + dx * U * 0.05, fcy - qy * V * 0.15 + dy * U * 0.05];
+      if (turn < 0.35) { const t0 = [fcx + qx * V * 0.8 - dx * U * 0.35, fcy + qy * V * 0.8 - dy * U * 0.35], t1 = [fcx + qx * V * 0.15 + dx * U * 0.05, fcy + qy * V * 0.15 + dy * U * 0.05]; // on the outer side of each fist
         const tr = 3.2 * sc; for (const [r, c] of [[tr + 1.2, OUT], [tr, skin]]) for (let i = 0; i <= 12; i++) { const t = i / 12; disc(Math.round(lerp(t0[0], t1[0], t)), Math.round(lerp(t0[1], t1[1], t)), Math.max(1, Math.round(r)), c); }
         disc(Math.round(t1[0]), Math.round(t1[1]), Math.max(1, Math.round(tr * 0.55)), rgb(255, 214, 206)); } // thumb folded across the fingers, nail at the tip
       const fw = U * 2, fh = V * 2;
