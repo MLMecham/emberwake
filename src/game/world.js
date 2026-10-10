@@ -148,14 +148,14 @@ function genOverworld(W, rnd) {
     let target = d === 9 ? maxD : Math.round(1 + (d - 1) * (maxD - 1) / 8);
     let best = null, bestScore = 1e9;
     for (const r of cand) {
-      if (used.has(r) || r.biome === 'lake') continue;
+      if (used.has(r) || (r.biome === 'lake' && d !== 7)) continue;
       let near = 0; for (const u of used) if (Math.abs(u.rx - r.rx) + Math.abs(u.ry - r.ry) <= 1) near = 1;
-      const sc = Math.abs(r.dist - target) * 3 + near * 5 + rnd();
+      const sc = Math.abs(r.dist - target) * 3 + near * 5 + rnd() - (d === 7 && r.biome === 'lake' ? 3 : 0);
       if (sc < bestScore) { bestScore = sc; best = r; }
     }
     if (!best) best = cand.find(r => !used.has(r));
     used.add(best);
-    placeGate(W, L, best, rnd, d);
+    placeGate(W, L, best, rnd, d, d === 7 ? makeIsland(L, best, rnd) : null);
   }
   // optional dungeons: one deep in each frontier land, far from its pass; the Hearth on the edge of the great wood
   for (const [d, biome] of [[10, 'snow'], [11, 'ash']]) {
@@ -203,7 +203,7 @@ function repairReach(L) {
   for (let pass = 0; pass < 12; pass++) {
     const seen = new Uint8Array(L.w * L.h); const sx = Math.floor(L.spawn.x), sy = Math.floor(L.spawn.y); const q = [sx + sy * L.w]; seen[q[0]] = 1;
     while (q.length) { const i = q.pop(); const x = i % L.w, y = (i / L.w) | 0; for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { const nx = x + dx, ny = y + dy; if (nx < 1 || ny < 1 || nx >= L.w - 1 || ny >= L.h - 1) continue; const j = nx + ny * L.w; if (seen[j] || L.solidAt(nx + 0.5, ny + 0.5)) continue; seen[j] = 1; q.push(j); } }
-    const targets = []; for (const r of L.regions) { for (const d of r.doors) targets.push(d); for (const e of (r.entryPoints || [])) targets.push(e); }
+    const targets = []; for (const r of L.regions) { for (const d of r.doors) targets.push(d); if (!r.island) for (const e of (r.entryPoints || [])) targets.push(e); }
     const bad = targets.filter(([x, y]) => !seen[x + y * L.w]);
     if (!bad.length) return;
     for (const [tx, ty] of bad) {
@@ -216,7 +216,7 @@ function repairReach(L) {
         const x = i % L.w, y = (i / L.w) | 0;
         for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
           const nx = x + dx, ny = y + dy; if (nx < 1 || ny < 1 || nx >= L.w - 1 || ny >= L.h - 1) continue; const j = nx + ny * L.w; const ti = TINFO[L.tiles[j]];
-          if (ti.portal || ti.bomb || L.secretReveal[j]) continue;
+          if (ti.portal || ti.bomb || L.secretReveal[j] || (L.noCarve && L.noCarve.has(j))) continue;
           const c = dist[i] + (L.solidAt(nx + 0.5, ny + 0.5) ? 6 : 1);
           if (c < dist[j]) { if (dist[j] >= 1e9) open.push(j); dist[j] = c; prev[j] = i; }
         }
@@ -264,6 +264,7 @@ function fillRegion(L, r, rnd) {
   }
 }
 function connectRegion(L, r) {
+  if (r.island) return; // landings + raft, by design
   const { x0, y0, x1, y1 } = regionInterior(r);
   const pass = (x, y) => !L.solidAt(x, y);
   if (!r.doors.length) return;
@@ -279,18 +280,18 @@ function connectRegion(L, r) {
 }
 function carve(L, sx, sy, tx, ty, x0, y0, x1, y1) {
   let x = sx, y = sy;
-  const clr = (x, y) => { if (x < x0 || y < y0 || x >= x1 || y >= y1) return; const i = L.idx(x, y); const ti = TINFO[L.tiles[i]]; if (ti.portal || ti.bomb || L.secretReveal[i]) return; if (ti.solid) L.tiles[i] = ti.water ? TL.BRIDGE : TL.PATH; if (L.props[i] && L.props[i] !== PR.SIGN) L.props[i] = 0; };
+  const clr = (x, y) => { if (x < x0 || y < y0 || x >= x1 || y >= y1) return; const i = L.idx(x, y); const ti = TINFO[L.tiles[i]]; if (ti.portal || ti.bomb || L.secretReveal[i] || (L.noCarve && L.noCarve.has(i))) return; if (ti.solid) L.tiles[i] = ti.water ? TL.BRIDGE : TL.PATH; if (L.props[i] && L.props[i] !== PR.SIGN) L.props[i] = 0; };
   while (x !== tx) { clr(x, y); x += Math.sign(tx - x); } while (y !== ty) { clr(x, y); y += Math.sign(ty - y); } clr(x, y);
 }
 // place a structure with a portal facing south; returns portal tile coords
-function placeStructure(L, r, rnd, wallT, portalT, wide) {
+function placeStructure(L, r, rnd, wallT, portalT, wide, at) {
   const { x0, y0, x1, y1 } = regionInterior(r);
   for (let tries = 0; tries < 300; tries++) {
-    const px = rnd.range(x0 + 2, x1 - 3), py = rnd.range(y0 + 1, y1 - 4);
-    let ok = true;
+    const px = at ? at[0] : rnd.range(x0 + 2, x1 - 3), py = at ? at[1] : rnd.range(y0 + 1, y1 - 4);
+    let ok = true; if (at) tries = 300; // a fixed spot (the island) is used as is
     for (let y = py - 1; y <= py + 2 && ok; y++) for (let x = px - 2; x <= px + 2; x++) { const t = L.get(x, y); if (TINFO[t].portal || TINFO[t].bomb || L.props[L.idx(x, y)] === PR.SIGN || (r.taken && r.taken.has(x + ',' + y))) ok = false; }
     if (ok && r.doors && tries < 200) for (const [dx, dy] of r.doors) if (Math.abs(dx - px) <= 4 && dy >= py - 3 && dy <= py + 4) ok = false;
-    if (!ok) continue;
+    if (!ok && !at) continue;
     r.taken = r.taken || new Set();
     for (let y = py - 1; y <= py + 2; y++) for (let x = px - 2; x <= px + 2; x++) r.taken.add(x + ',' + y);
     const half = wide ? 2 : 1;
@@ -303,9 +304,9 @@ function placeStructure(L, r, rnd, wallT, portalT, wide) {
   }
   return null;
 }
-function placeGate(W, L, r, rnd, d) {
+function placeGate(W, L, r, rnd, d, at) {
   const sealed = d === 9 ? TL.SHARDGATE : d === 12 ? TL.HEARTHGATE : null;
-  const p = placeStructure(L, r, rnd, sealed != null ? sealed : TL.BRICK, TL.GATE, true);
+  const p = placeStructure(L, r, rnd, sealed != null ? sealed : TL.BRICK, TL.GATE, true, at);
   if (!p) return;
   const [px, py] = p;
   if (sealed != null) L.set(px, py, sealed);
@@ -317,6 +318,23 @@ function placeGate(W, L, r, rnd, d) {
   r.features.push({ type: 'dungeon', d, x: px, y: py });
   W.dungeons[d] = { x: px, y: py, region: r.ry * RW + r.rx };
   r.gate = d;
+}
+// Level 7 stands on an island in a lake: the whole region becomes water around a small island, with a sandy landing
+// inside each way in. Only the raft (level 6) gets you across. The generator never bridges it (L.noCarve).
+function makeIsland(L, r, rnd) {
+  const { x0, y0, x1, y1 } = regionInterior(r); const cx = (x0 + x1) >> 1, cy = y0 + 4;
+  L.noCarve = L.noCarve || new Set(); r.island = true; r.biome = 'lake';
+  for (let y = y0; y < y1; y++) for (let x = x0; x < x1; x++) {
+    const i = L.idx(x, y); L.props[i] = 0; const d = ((x - cx) / 4.2) ** 2 + ((y - cy) / 2.3) ** 2;
+    L.tiles[i] = d < 0.5 ? TL.GRASS : d < 1 ? TL.SAND : TL.WATER; L.noCarve.add(i);
+  }
+  // landings: a strip of sand along the edge at each way in, with open water between it and the island
+  for (const [dx, dy] of r.doors) { const alongX = dy === y0 || dy === y1 - 1; for (let k = -1; k <= 1; k++) { const x = alongX ? dx + k : dx, y = alongX ? dy : dy + k; if (x >= x0 && y >= y0 && x < x1 && y < y1) L.set(x, y, TL.SAND); } }
+  L.props[L.idx(cx - 3, cy + 1)] = PR.TREE; L.props[L.idx(cx + 3, cy + 1)] = PR.TREE;
+  // a sign on the first landing
+  const [lx, ly] = r.doors[0] || [x0 + 1, y0 + 1]; L.signText = L.signText || {};
+  for (const [sx, sy] of [[lx + 1, ly], [lx - 1, ly], [lx, ly - 1], [lx, ly + 1]]) { const i = L.idx(sx, sy); if (sx >= x0 && sy >= y0 && sx < x1 && sy < y1 && L.tiles[i] === TL.SAND) { L.props[i] = PR.SIGN; L.signText[i] = 'LEVEL-7 STANDS ALONE IN THE LAKE. NO BRIDGE REACHES IT. ONLY A RAFT WILL CARRY YOU ACROSS.'; break; } }
+  return [cx, cy - 1];
 }
 function placeCave(W, L, r, rnd, kind, secret) {
   const portalT = secret === 'bomb' ? TL.ROCK_BOMB : TL.CAVE;

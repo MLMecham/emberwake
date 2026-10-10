@@ -63,6 +63,18 @@ function sfx(name, vol) {
     case 'menu': tone(880, 0.05, 'square', 0.08 * v); break;
     case 'charge': tone(400, 0.12, 'sine', 0.06 * v, 800); break;
     case 'dash': noise(0.15, 0.2 * v, 6000); break;
+    // the frontier and the dragons
+    case 'dragonroar': tone(85, 1.0, 'sawtooth', 0.26 * v, 38); tone(130, 0.8, 'square', 0.1 * v, 62); tone(170, 0.6, 'sawtooth', 0.06 * v, 90); noise(0.9, 0.22 * v, 520); break;
+    case 'bite': noise(0.07, 0.32 * v, 2600); tone(320, 0.06, 'square', 0.16 * v, 110); noise(0.05, 0.25 * v, 1800, AU.ctx.currentTime + 0.06); break;
+    case 'breath_ice': noise(1.0, 0.16 * v, 7500); for (let i = 0; i < 8; i++) tone(1800 + Math.random() * 1800, 0.14, 'sine', 0.045 * v, null, AU.ctx.currentTime + i * 0.11); break;
+    case 'breath_fire': noise(1.0, 0.3 * v, 850); tone(68, 1.0, 'sawtooth', 0.13 * v, 48); for (let i = 0; i < 5; i++) noise(0.05, 0.12 * v, 3200, AU.ctx.currentTime + 0.1 + Math.random() * 0.8); break;
+    case 'icespit': tone(1500, 0.1, 'triangle', 0.09 * v, 2600); noise(0.06, 0.05 * v, 8000); break;
+    case 'freeze': seq([2637, 3136, 3951, 4699], 0.035, 'sine', 0.09 * v); noise(0.2, 0.07 * v, 9000); break;
+    case 'eruption': noise(1.3, 0.42 * v, 320); tone(52, 1.2, 'sawtooth', 0.26 * v, 28); for (let i = 0; i < 9; i++) noise(0.04, 0.16 * v, 3000, AU.ctx.currentTime + 0.15 + Math.random() * 1.0); break;
+    case 'vent_warn': tone(55, 0.5, 'sawtooth', 0.07 * v, 95); noise(0.5, 0.07 * v, 260); break;
+    case 'vent_blow': noise(0.55, 0.3 * v, 1600); tone(190, 0.4, 'triangle', 0.09 * v, 60); break;
+    case 'iceslide': noise(0.2, 0.05 * v, 5200); tone(2400 + Math.random() * 400, 0.12, 'sine', 0.015 * v, 1900); break;
+    case 'hearthgate': seq([262, 330, 392, 523, 659, 784, 1047], 0.12, 'triangle', 0.16 * v); tone(65, 1.6, 'sawtooth', 0.14 * v, 130); break;
     case 'whisper': noise(0.9, 0.06 * v, 900); tone(220, 0.8, 'sine', 0.03 * v, 180); tone(330, 0.7, 'sine', 0.02 * v, 300); break;
   }
 }

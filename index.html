@@ -14928,10 +14928,10 @@ function dragonAi(cfg) {
     };
     switch (e.mode) {
       case 'sway': { const a = cfg.home + Math.sin(e.t * 0.9 + (cfg.phase || 0)) * 0.7; const r = 2 + Math.sin(e.t * 1.7) * 0.5; toward(B.x + Math.cos(a) * r, B.y + Math.sin(a) * r, 3);
-        if (e.tm <= 0 && p) { e.mode = 'aim'; e.tm = 0.75 / fast; sim.sfx('roar', e.lvl, e.x, e.y); } break; }
+        if (e.tm <= 0 && p) { e.mode = 'aim'; e.tm = 0.75 / fast; sim.sfx('dragonroar', e.lvl, e.x, e.y); } break; }
       case 'aim': { if (!p) { e.mode = 'sway'; break; } const d = Math.hypot(p.x - B.x, p.y - B.y) || 1; const k = Math.min(reach * 0.6, d);
         toward(B.x + (p.x - B.x) / d * k, B.y + (p.y - B.y) / d * k, 4); e.f = Math.atan2(p.y - e.y, p.x - e.x);
-        if (e.tm <= 0) { if (dist2(p.x, p.y, e.x, e.y) < 7 && Math.random() < 0.7) { e.mode = 'bite'; e.tm = 0.5; e.bx = p.x; e.by = p.y; sim.sfx('roar', e.lvl, e.x, e.y); } else { e.mode = 'breath'; e.tm = 1.0; e.shot = 0; } }
+        if (e.tm <= 0) { if (dist2(p.x, p.y, e.x, e.y) < 7 && Math.random() < 0.7) { e.mode = 'bite'; e.tm = 0.5; e.bx = p.x; e.by = p.y; sim.sfx('bite', e.lvl, e.x, e.y); } else { e.mode = 'breath'; e.tm = 1.0; e.shot = 0; sim.sfx(cfg.breathSfx || 'breath_fire', e.lvl, e.x, e.y); } }
         break; }
       case 'bite': toward(e.bx, e.by, 10); if (e.tm <= 0) { e.mode = 'recoil'; e.tm = 0.7; } break;
       case 'breath': if (p) e.f += clamp(angDiff(e.f, Math.atan2(p.y - e.y, p.x - e.x)), -dt * 1.4, dt * 1.4);
@@ -14951,18 +14951,18 @@ function dragonAi(cfg) {
     }
   };
 }
-const stream = (proj, jitter) => (sim, e) => { sim.fireProj(proj, e.lvl, e.x, e.y, e.f + (Math.random() - 0.5) * jitter, 'e', null, { dmg: Content.projectiles[proj].dmg }); if (Math.random() < 0.3) sim.sfx('fire', e.lvl, e.x, e.y); };
+const stream = (proj, jitter) => (sim, e) => { sim.fireProj(proj, e.lvl, e.x, e.y, e.f + (Math.random() - 0.5) * jitter, 'e', null, { dmg: Content.projectiles[proj].dmg }); };
 const eruption = (sim, e) => { // lava bursts out of the floor all over the room
   if (!e.b) return; const L = sim.W.levels[e.lvl];
   for (let i = 0; i < 7; i++) { const x = e.b.x0 + 1 + Math.random() * (e.b.x1 - e.b.x0 - 2), y = e.b.y0 + 2 + Math.random() * (e.b.y1 - e.b.y0 - 3); if (!L.solidAt(x, y)) sim.spawn({ k: 'efire', lvl: e.lvl, x, y, life: 2.2, spr: 'flame', sc: 1.0, z: -0.05 }); }
-  sim.sfx('boom', e.lvl, e.x, e.y);
+  sim.sfx('eruption', e.lvl, e.x, e.y);
 };
 const headDef = (o) => defineEnemy(Object.assign({ hp: 12, spd: 0, dmg: 2, r: 0.6, sc: 1.3, boss: true, sprite: HEAD_ROWS, view: (e) => e.hz || 0.7,
   anim: { fps: 4, frames: (s, kit) => [s, kit.squash(s, 0.94), s, kit.squash(s, 1.05)] } }, o));
 headDef({
   id: 'matriarch', title: 'THE FROST MATRIARCH', bossOf: [10], pal: PALS.ice,
-  ai: dragonAi({ tint: 'ice', home: Math.PI / 2, reach: 4.8, breath: stream('icebreath', 0.5), breathGap: 0.11,
-    special(sim, e) { AI.ring(sim, e, 'icebolt', 12, Math.random(), { dmg: 1 }); for (let i = 0; i < 2; i++) sim.spawnMinion(e, 'frostling'); } }),
+  ai: dragonAi({ tint: 'ice', breathSfx: 'breath_ice', home: Math.PI / 2, reach: 4.8, breath: stream('icebreath', 0.5), breathGap: 0.11,
+    special(sim, e) { AI.ring(sim, e, 'icebolt', 12, Math.random(), { dmg: 1 }); sim.sfx('breath_ice', e.lvl, e.x, e.y); for (let i = 0; i < 2; i++) sim.spawnMinion(e, 'frostling'); } }),
   onDeath(sim) { sim.msg('THE FROST MATRIARCH FALLS. THE HOLLOW THAWS.'); },
 });
 headDef({
@@ -14974,7 +14974,7 @@ headDef({
 const lastHead = (sim, e, line) => { const left = (e.body ? e.body.heads : []).filter(h => !h.dead && h !== e).length; sim.msg(left ? line : 'THE HEARTHWYRM FALLS. ITS THREE FLAMES BURN AS ONE.'); };
 headDef({
   id: 'hearth_frost', title: 'THE HEARTHWYRM', pal: PALS.ice, hp: 9,
-  ai: dragonAi({ bodyTint: 'hearth', tint: 'ice', home: Math.PI / 2 + 0.75, baseDx: -0.8, phase: 0, reach: 4.4, breath: stream('icebreath', 0.5), breathGap: 0.14,
+  ai: dragonAi({ bodyTint: 'hearth', tint: 'ice', breathSfx: 'breath_ice', home: Math.PI / 2 + 0.75, baseDx: -0.8, phase: 0, reach: 4.4, breath: stream('icebreath', 0.5), breathGap: 0.14,
     special(sim, e) { AI.ring(sim, e, 'icebolt', 8, 0, { dmg: 1 }); } }),
   onDeath(sim, e) { lastHead(sim, e, 'THE FROST HEAD FALLS.'); },
 });
@@ -14985,7 +14985,7 @@ headDef({
 });
 headDef({
   id: 'hearth_hollow', title: 'THE HEARTHWYRM', pal: PALS.hollow, hp: 9,
-  ai: dragonAi({ bodyTint: 'hearth', tint: 'hollow', home: Math.PI / 2 - 0.75, baseDx: 0.8, phase: 4, reach: 4.4, breath: stream('magic', 0.7), breathGap: 0.22,
+  ai: dragonAi({ bodyTint: 'hearth', tint: 'hollow', breathSfx: 'magic', home: Math.PI / 2 - 0.75, baseDx: 0.8, phase: 4, reach: 4.4, breath: stream('magic', 0.7), breathGap: 0.22,
     special(sim, e) { for (let i = 0; i < 2; i++) sim.spawnMinion(e, 'bat'); } }),
   onDeath(sim, e) { lastHead(sim, e, 'THE HOLLOW HEAD FALLS... AND THE STOLEN LIGHT RETURNS.'); },
 });
@@ -14999,7 +14999,7 @@ headDef({
 const hopSpit = (proj) => (sim, e, dt, ctx) => {
   AI.hop(sim, e, dt, ctx);
   e.spit = (e.spit == null ? 1 + Math.random() * 2 : e.spit) - dt;
-  if (e.spit <= 0 && ctx.p && dist2(ctx.p.x, ctx.p.y, e.x, e.y) < 49) { e.spit = 2 + Math.random() * 1.5; sim.fireProj(proj, e.lvl, e.x, e.y, Math.atan2(ctx.p.y - e.y, ctx.p.x - e.x), 'e', null, { dmg: Content.projectiles[proj].dmg * e.dmgMul }); sim.sfx('shoot', e.lvl, e.x, e.y); }
+  if (e.spit <= 0 && ctx.p && dist2(ctx.p.x, ctx.p.y, e.x, e.y) < 49) { e.spit = 2 + Math.random() * 1.5; sim.fireProj(proj, e.lvl, e.x, e.y, Math.atan2(ctx.p.y - e.y, ctx.p.x - e.x), 'e', null, { dmg: Content.projectiles[proj].dmg * e.dmgMul }); sim.sfx(proj === 'icebolt' ? 'icespit' : 'shoot', e.lvl, e.x, e.y); }
 };
 defineEnemy({
   id: 'frostling', hp: 3, spd: 1.6, dmg: 1, r: 0.32, sc: 0.8,
@@ -15174,7 +15174,7 @@ defineEnemy({
   id: 'magmite', hp: 7, spd: 1.0, dmg: 2, r: 0.42, sc: 1.05, hot: true,
   spawns: { biomes: ['ash'], dungeons: [11, 12] },
   ai: AI.chase,
-  onDeath(sim, e) { for (let i = 0; i < 4; i++) { const a = i * Math.PI / 2 + 0.4; sim.spawn({ k: 'efire', lvl: e.lvl, x: e.x + Math.cos(a) * 0.7, y: e.y + Math.sin(a) * 0.7, life: 1.6, spr: 'flame', sc: 0.8, z: -0.05 }); } },
+  onDeath(sim, e) { sim.sfx('fire', e.lvl, e.x, e.y); for (let i = 0; i < 4; i++) { const a = i * Math.PI / 2 + 0.4; sim.spawn({ k: 'efire', lvl: e.lvl, x: e.x + Math.cos(a) * 0.7, y: e.y + Math.sin(a) * 0.7, life: 1.6, spr: 'flame', sc: 0.8, z: -0.05 }); } },
   anim: { fps: 3, frames: (s, kit) => [s, kit.squash(s, 0.92), kit.bob(s, 1)] },
   sprite: [
     '................',
@@ -15971,14 +15971,14 @@ function genOverworld(W, rnd) {
     let target = d === 9 ? maxD : Math.round(1 + (d - 1) * (maxD - 1) / 8);
     let best = null, bestScore = 1e9;
     for (const r of cand) {
-      if (used.has(r) || r.biome === 'lake') continue;
+      if (used.has(r) || (r.biome === 'lake' && d !== 7)) continue;
       let near = 0; for (const u of used) if (Math.abs(u.rx - r.rx) + Math.abs(u.ry - r.ry) <= 1) near = 1;
-      const sc = Math.abs(r.dist - target) * 3 + near * 5 + rnd();
+      const sc = Math.abs(r.dist - target) * 3 + near * 5 + rnd() - (d === 7 && r.biome === 'lake' ? 3 : 0);
       if (sc < bestScore) { bestScore = sc; best = r; }
     }
     if (!best) best = cand.find(r => !used.has(r));
     used.add(best);
-    placeGate(W, L, best, rnd, d);
+    placeGate(W, L, best, rnd, d, d === 7 ? makeIsland(L, best, rnd) : null);
   }
   // optional dungeons: one deep in each frontier land, far from its pass; the Hearth on the edge of the great wood
   for (const [d, biome] of [[10, 'snow'], [11, 'ash']]) {
@@ -16026,7 +16026,7 @@ function repairReach(L) {
   for (let pass = 0; pass < 12; pass++) {
     const seen = new Uint8Array(L.w * L.h); const sx = Math.floor(L.spawn.x), sy = Math.floor(L.spawn.y); const q = [sx + sy * L.w]; seen[q[0]] = 1;
     while (q.length) { const i = q.pop(); const x = i % L.w, y = (i / L.w) | 0; for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { const nx = x + dx, ny = y + dy; if (nx < 1 || ny < 1 || nx >= L.w - 1 || ny >= L.h - 1) continue; const j = nx + ny * L.w; if (seen[j] || L.solidAt(nx + 0.5, ny + 0.5)) continue; seen[j] = 1; q.push(j); } }
-    const targets = []; for (const r of L.regions) { for (const d of r.doors) targets.push(d); for (const e of (r.entryPoints || [])) targets.push(e); }
+    const targets = []; for (const r of L.regions) { for (const d of r.doors) targets.push(d); if (!r.island) for (const e of (r.entryPoints || [])) targets.push(e); }
     const bad = targets.filter(([x, y]) => !seen[x + y * L.w]);
     if (!bad.length) return;
     for (const [tx, ty] of bad) {
@@ -16039,7 +16039,7 @@ function repairReach(L) {
         const x = i % L.w, y = (i / L.w) | 0;
         for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
           const nx = x + dx, ny = y + dy; if (nx < 1 || ny < 1 || nx >= L.w - 1 || ny >= L.h - 1) continue; const j = nx + ny * L.w; const ti = TINFO[L.tiles[j]];
-          if (ti.portal || ti.bomb || L.secretReveal[j]) continue;
+          if (ti.portal || ti.bomb || L.secretReveal[j] || (L.noCarve && L.noCarve.has(j))) continue;
           const c = dist[i] + (L.solidAt(nx + 0.5, ny + 0.5) ? 6 : 1);
           if (c < dist[j]) { if (dist[j] >= 1e9) open.push(j); dist[j] = c; prev[j] = i; }
         }
@@ -16087,6 +16087,7 @@ function fillRegion(L, r, rnd) {
   }
 }
 function connectRegion(L, r) {
+  if (r.island) return; // landings + raft, by design
   const { x0, y0, x1, y1 } = regionInterior(r);
   const pass = (x, y) => !L.solidAt(x, y);
   if (!r.doors.length) return;
@@ -16102,18 +16103,18 @@ function connectRegion(L, r) {
 }
 function carve(L, sx, sy, tx, ty, x0, y0, x1, y1) {
   let x = sx, y = sy;
-  const clr = (x, y) => { if (x < x0 || y < y0 || x >= x1 || y >= y1) return; const i = L.idx(x, y); const ti = TINFO[L.tiles[i]]; if (ti.portal || ti.bomb || L.secretReveal[i]) return; if (ti.solid) L.tiles[i] = ti.water ? TL.BRIDGE : TL.PATH; if (L.props[i] && L.props[i] !== PR.SIGN) L.props[i] = 0; };
+  const clr = (x, y) => { if (x < x0 || y < y0 || x >= x1 || y >= y1) return; const i = L.idx(x, y); const ti = TINFO[L.tiles[i]]; if (ti.portal || ti.bomb || L.secretReveal[i] || (L.noCarve && L.noCarve.has(i))) return; if (ti.solid) L.tiles[i] = ti.water ? TL.BRIDGE : TL.PATH; if (L.props[i] && L.props[i] !== PR.SIGN) L.props[i] = 0; };
   while (x !== tx) { clr(x, y); x += Math.sign(tx - x); } while (y !== ty) { clr(x, y); y += Math.sign(ty - y); } clr(x, y);
 }
 // place a structure with a portal facing south; returns portal tile coords
-function placeStructure(L, r, rnd, wallT, portalT, wide) {
+function placeStructure(L, r, rnd, wallT, portalT, wide, at) {
   const { x0, y0, x1, y1 } = regionInterior(r);
   for (let tries = 0; tries < 300; tries++) {
-    const px = rnd.range(x0 + 2, x1 - 3), py = rnd.range(y0 + 1, y1 - 4);
-    let ok = true;
+    const px = at ? at[0] : rnd.range(x0 + 2, x1 - 3), py = at ? at[1] : rnd.range(y0 + 1, y1 - 4);
+    let ok = true; if (at) tries = 300; // a fixed spot (the island) is used as is
     for (let y = py - 1; y <= py + 2 && ok; y++) for (let x = px - 2; x <= px + 2; x++) { const t = L.get(x, y); if (TINFO[t].portal || TINFO[t].bomb || L.props[L.idx(x, y)] === PR.SIGN || (r.taken && r.taken.has(x + ',' + y))) ok = false; }
     if (ok && r.doors && tries < 200) for (const [dx, dy] of r.doors) if (Math.abs(dx - px) <= 4 && dy >= py - 3 && dy <= py + 4) ok = false;
-    if (!ok) continue;
+    if (!ok && !at) continue;
     r.taken = r.taken || new Set();
     for (let y = py - 1; y <= py + 2; y++) for (let x = px - 2; x <= px + 2; x++) r.taken.add(x + ',' + y);
     const half = wide ? 2 : 1;
@@ -16126,9 +16127,9 @@ function placeStructure(L, r, rnd, wallT, portalT, wide) {
   }
   return null;
 }
-function placeGate(W, L, r, rnd, d) {
+function placeGate(W, L, r, rnd, d, at) {
   const sealed = d === 9 ? TL.SHARDGATE : d === 12 ? TL.HEARTHGATE : null;
-  const p = placeStructure(L, r, rnd, sealed != null ? sealed : TL.BRICK, TL.GATE, true);
+  const p = placeStructure(L, r, rnd, sealed != null ? sealed : TL.BRICK, TL.GATE, true, at);
   if (!p) return;
   const [px, py] = p;
   if (sealed != null) L.set(px, py, sealed);
@@ -16140,6 +16141,23 @@ function placeGate(W, L, r, rnd, d) {
   r.features.push({ type: 'dungeon', d, x: px, y: py });
   W.dungeons[d] = { x: px, y: py, region: r.ry * RW + r.rx };
   r.gate = d;
+}
+// Level 7 stands on an island in a lake: the whole region becomes water around a small island, with a sandy landing
+// inside each way in. Only the raft (level 6) gets you across. The generator never bridges it (L.noCarve).
+function makeIsland(L, r, rnd) {
+  const { x0, y0, x1, y1 } = regionInterior(r); const cx = (x0 + x1) >> 1, cy = y0 + 4;
+  L.noCarve = L.noCarve || new Set(); r.island = true; r.biome = 'lake';
+  for (let y = y0; y < y1; y++) for (let x = x0; x < x1; x++) {
+    const i = L.idx(x, y); L.props[i] = 0; const d = ((x - cx) / 4.2) ** 2 + ((y - cy) / 2.3) ** 2;
+    L.tiles[i] = d < 0.5 ? TL.GRASS : d < 1 ? TL.SAND : TL.WATER; L.noCarve.add(i);
+  }
+  // landings: a strip of sand along the edge at each way in, with open water between it and the island
+  for (const [dx, dy] of r.doors) { const alongX = dy === y0 || dy === y1 - 1; for (let k = -1; k <= 1; k++) { const x = alongX ? dx + k : dx, y = alongX ? dy : dy + k; if (x >= x0 && y >= y0 && x < x1 && y < y1) L.set(x, y, TL.SAND); } }
+  L.props[L.idx(cx - 3, cy + 1)] = PR.TREE; L.props[L.idx(cx + 3, cy + 1)] = PR.TREE;
+  // a sign on the first landing
+  const [lx, ly] = r.doors[0] || [x0 + 1, y0 + 1]; L.signText = L.signText || {};
+  for (const [sx, sy] of [[lx + 1, ly], [lx - 1, ly], [lx, ly - 1], [lx, ly + 1]]) { const i = L.idx(sx, sy); if (sx >= x0 && sy >= y0 && sx < x1 && sy < y1 && L.tiles[i] === TL.SAND) { L.props[i] = PR.SIGN; L.signText[i] = 'LEVEL-7 STANDS ALONE IN THE LAKE. NO BRIDGE REACHES IT. ONLY A RAFT WILL CARRY YOU ACROSS.'; break; } }
+  return [cx, cy - 1];
 }
 function placeCave(W, L, r, rnd, kind, secret) {
   const portalT = secret === 'bomb' ? TL.ROCK_BOMB : TL.CAVE;
@@ -16288,7 +16306,7 @@ function roomBounds(L, room) {
 // Only the host runs this. Clients send their position and actions; the host sends back snapshots.
 'use strict';
 // Enemy, item, projectile and elite definitions live in src/content and are looked up through core/registry.js.
-const SAVE_VERSION = 4;
+const SAVE_VERSION = 5;
 // Bring an old save up to date. v1 -> v2: dungeons were redrawn as shapes, so dungeon tile changes, cleared rooms,
 // keys and maps from v1 no longer fit; overworld progress, items and shards are kept. Tile/prop ids are remapped by name.
 function migrateSave(s) {
@@ -16301,7 +16319,7 @@ function migrateSave(s) {
   // v2 -> v3: the Wilds were redrawn (start in the middle, sea/peaks/great wood at the edges, gate towers), so overworld
   // changes and cave contents no longer line up. Dungeon progress, items and shards are kept; everyone starts at the new spawn.
   // v3 -> v4: the Wilds grew two frontier columns, so the same applies again
-  if ((s.v || 1) < 4) {
+  if ((s.v || 1) < 5) { // (v5: level 7 moved onto a lake island)
     for (const lvl of Object.keys(s.mods)) if (lvl === 'ow' || (lvl[0] === 'c' && lvl !== 'c0')) delete s.mods[lvl];
     for (const t of ['cleared', 'taken']) for (const k of Object.keys(s.team[t] || {})) if (k.startsWith('ow:') || (k[0] === 'c' && !k.startsWith('c0:'))) delete s.team[t][k];
     for (const c in (s.players || {})) { const pl = s.players[c]; if (pl.lvl === 'ow' || (pl.lvl && pl.lvl[0] === 'c')) pl.respawn = true; }
@@ -16407,7 +16425,7 @@ class Sim {
     }
     if (TINFO[t].hearthGate) {
       const rel = this.team.relics || []; const has = (id) => rel.includes(id);
-      if (has('fang') && has('emberheart')) { this.setTile(L.id, idx, TL.GATE); this.sfx('secret', L.id); this.msg('FROST AND FIRE MEET IN THE LOCK... THE HEARTH OPENS.'); }
+      if (has('fang') && has('emberheart')) { this.setTile(L.id, idx, TL.GATE); this.sfx('hearthgate', L.id); this.msg('FROST AND FIRE MEET IN THE LOCK... THE HEARTH OPENS.'); }
       else this.ev({ t: 'dialog', pid: p.id, text: 'A GATE OF THREE FLAMES. TWO OF THE HOLLOWS ARE EMPTY: ONE COLD AS THE FROZEN REACH, ONE HOT AS THE CINDER WASTES.' + (has('fang') ? ' (THE FROST FANG FITS.)' : '') + (has('emberheart') ? ' (THE EMBER HEART FITS.)' : '') });
       return;
     }
@@ -16791,7 +16809,7 @@ class Sim {
         if (dist2(en.x, en.y, e.x, e.y) < r * r) {
           e.hitSet[en.id] = 1;
           const landed = this.damageEnemy(en, e.dmg * (e.frost && enemyDef(en.type).hot ? 2 : 1), { x: e.x - e.vx * 0.1, y: e.y - e.vy * 0.1 }, { pid: e.pid, silver: e.silver, pierceShield: def.pierceShield, ignoreIframes: def.pierce });
-          if (e.frost && landed && !en.dead) { en.stun = Math.max(en.stun, enemyDef(en.type).boss ? 0.6 : 2.5); this.spawn({ k: 'fx', lvl: e.lvl, x: en.x, y: en.y, spr: 'icefx', life: 0.4, sc: 1 }); }
+          if (e.frost && landed && !en.dead) { en.stun = Math.max(en.stun, enemyDef(en.type).boss ? 0.6 : 2.5); this.spawn({ k: 'fx', lvl: e.lvl, x: en.x, y: en.y, spr: 'icefx', life: 0.4, sc: 1 }); this.sfx('freeze', e.lvl, en.x, en.y); }
           if (def.fire) this.spawn({ k: 'fire', lvl: e.lvl, x: e.x, y: e.y, life: 0.8, spr: 'flame', sc: 0.8, z: -0.05, pid: e.pid });
           if (!def.pierce) { e.dead = true; return; }
         }
@@ -17472,6 +17490,18 @@ function sfx(name, vol) {
     case 'menu': tone(880, 0.05, 'square', 0.08 * v); break;
     case 'charge': tone(400, 0.12, 'sine', 0.06 * v, 800); break;
     case 'dash': noise(0.15, 0.2 * v, 6000); break;
+    // the frontier and the dragons
+    case 'dragonroar': tone(85, 1.0, 'sawtooth', 0.26 * v, 38); tone(130, 0.8, 'square', 0.1 * v, 62); tone(170, 0.6, 'sawtooth', 0.06 * v, 90); noise(0.9, 0.22 * v, 520); break;
+    case 'bite': noise(0.07, 0.32 * v, 2600); tone(320, 0.06, 'square', 0.16 * v, 110); noise(0.05, 0.25 * v, 1800, AU.ctx.currentTime + 0.06); break;
+    case 'breath_ice': noise(1.0, 0.16 * v, 7500); for (let i = 0; i < 8; i++) tone(1800 + Math.random() * 1800, 0.14, 'sine', 0.045 * v, null, AU.ctx.currentTime + i * 0.11); break;
+    case 'breath_fire': noise(1.0, 0.3 * v, 850); tone(68, 1.0, 'sawtooth', 0.13 * v, 48); for (let i = 0; i < 5; i++) noise(0.05, 0.12 * v, 3200, AU.ctx.currentTime + 0.1 + Math.random() * 0.8); break;
+    case 'icespit': tone(1500, 0.1, 'triangle', 0.09 * v, 2600); noise(0.06, 0.05 * v, 8000); break;
+    case 'freeze': seq([2637, 3136, 3951, 4699], 0.035, 'sine', 0.09 * v); noise(0.2, 0.07 * v, 9000); break;
+    case 'eruption': noise(1.3, 0.42 * v, 320); tone(52, 1.2, 'sawtooth', 0.26 * v, 28); for (let i = 0; i < 9; i++) noise(0.04, 0.16 * v, 3000, AU.ctx.currentTime + 0.15 + Math.random() * 1.0); break;
+    case 'vent_warn': tone(55, 0.5, 'sawtooth', 0.07 * v, 95); noise(0.5, 0.07 * v, 260); break;
+    case 'vent_blow': noise(0.55, 0.3 * v, 1600); tone(190, 0.4, 'triangle', 0.09 * v, 60); break;
+    case 'iceslide': noise(0.2, 0.05 * v, 5200); tone(2400 + Math.random() * 400, 0.12, 'sine', 0.015 * v, 1900); break;
+    case 'hearthgate': seq([262, 330, 392, 523, 659, 784, 1047], 0.12, 'triangle', 0.16 * v); tone(65, 1.6, 'sawtooth', 0.14 * v, 130); break;
     case 'whisper': noise(0.9, 0.06 * v, 900); tone(220, 0.8, 'sine', 0.03 * v, 180); tone(330, 0.7, 'sine', 0.02 * v, 300); break;
   }
 }
@@ -17952,6 +17982,10 @@ function updateLocal(dt, inp) {
   if (Lc.dashT > 0) { Lc.dashT -= dt; const da = Lc.a + (Lc.dashDir || 0); mvx = Math.cos(da) * 15; mvy = Math.sin(da) * 15; }
   // ice: you keep your momentum and steer slowly, so it's easy to slide into whatever is at the edge
   { const ti0 = TINFO[L.get(Math.floor(Lc.x), Math.floor(Lc.y))]; if (ti0.slippery && Lc.dashT <= 0) { const k = Math.min(1, dt * 1.3); Lc.svx = lerp(Lc.svx || 0, mvx * 1.15, k); Lc.svy = lerp(Lc.svy || 0, mvy * 1.15, k); mvx = Lc.svx; mvy = Lc.svy; } else { Lc.svx = mvx; Lc.svy = mvy; } }
+  // sounds of the frontier: skates on ice, vents near you building up and blowing, and the bite of being frozen
+  { const ti1 = TINFO[L.get(Math.floor(Lc.x), Math.floor(Lc.y))]; if (ti1.slippery && Math.hypot(Lc.svx || 0, Lc.svy || 0) > 1.5) { Lc.slideT = (Lc.slideT || 0) - dt; if (Lc.slideT <= 0) { Lc.slideT = 0.24; sfx('iceslide', 0.8); } } }
+  if (snap.vp !== Lc.lastVp) { Lc.lastVp = snap.vp; if (snap.vp) { const v = ventNear(L, Lc.x, Lc.y); if (v > 0) sfx(snap.vp === 2 ? 'vent_blow' : 'vent_warn', v); } }
+  if (me.chill && !Lc.wasChill) sfx('freeze'); Lc.wasChill = !!me.chill;
   mvx += Lc.kx; mvy += Lc.ky; Lc.kx *= Math.pow(0.0005, dt); Lc.ky *= Math.pow(0.0005, dt); if (Math.abs(Lc.kx) < 0.1) Lc.kx = 0; if (Math.abs(Lc.ky) < 0.1) Lc.ky = 0;
   const moving = Math.abs(inp.fwd) + Math.abs(inp.str) > 0.1; if (moving) Lc.bob += dt * spd * 2.6;
   Lc.moveK = lerp(Lc.moveK || 0, moving ? 1 : 0, Math.min(1, dt * 8)); if (Lc.blockT > 0) Lc.blockT -= dt;
@@ -18027,6 +18061,12 @@ function updateLocal(dt, inp) {
   if (L.kind === 'ow') { const rg = owRegionAt(L, Lc.x, Lc.y); if (rg.biome === 'snow') track = 'frost'; else if (rg.biome === 'ash') track = 'fire'; }
   if (L.kind === 'dungeon') { const r = dungeonRoomAt(L, Lc.x, Lc.y); if (r && r.boss && snap.en.some(e => e[8] >= 0)) track = L.dnum === 9 ? 'final' : L.dnum >= 10 ? 'dragon' : 'boss'; }
   musicPlay(track);
+}
+// how loud the vents are where you stand (0 if none within 7 tiles)
+function ventNear(L, x, y) {
+  if (L.kind !== 'dungeon') return 0; let best = 99; const cx = Math.floor(x), cy = Math.floor(y);
+  for (let j = -7; j <= 7; j++) for (let i = -7; i <= 7; i++) if (TINFO[L.get(cx + i, cy + j)].vent) best = Math.min(best, Math.hypot(i, j));
+  return best > 7 ? 0 : clamp(1.2 - best / 7, 0.15, 1);
 }
 function markSeen(L, x, y) {
   let s = G.seen[L.id]; if (!s) s = G.seen[L.id] = new Uint8Array(L.w * L.h);

@@ -55,7 +55,13 @@ for (let s = 1; s <= SEEDS; s++) {
   for (let d = 1; d <= NDUNGEONS(); d++) { const D = W.levels['d' + d]; __ok(solveDungeon(D), 'seed ' + seed + ': dungeon ' + d + ' has unreachable rooms'); __ok(!!W.dungeons[d], 'seed ' + seed + ': dungeon ' + d + ' gate missing'); }
   const seen = new Uint8Array(L.w * L.h); const q = [[Math.floor(L.spawn.x), Math.floor(L.spawn.y)]]; seen[q[0][1] * L.w + q[0][0]] = 1;
   while (q.length) { const [x, y] = q.pop(); for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { const nx = x + dx, ny = y + dy, i = ny * L.w + nx; if (seen[i] || L.solidAt(nx + 0.5, ny + 0.5)) continue; seen[i] = 1; q.push([nx, ny]); } }
-  for (let d = 1; d <= NDUNGEONS(); d++) { const g = W.dungeons[d]; if (g) __ok(!!seen[(g.y + 1) * L.w + g.x], 'seed ' + seed + ': gate ' + d + ' unreachable'); }
+  // with the raft (level 6's treasure) everything is reachable; without it, level 7's island is not
+  const seenR = new Uint8Array(L.w * L.h); const qr = [[Math.floor(L.spawn.x), Math.floor(L.spawn.y)]]; seenR[qr[0][1] * L.w + qr[0][0]] = 1;
+  while (qr.length) { const [x, y] = qr.pop(); for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { const nx = x + dx, ny = y + dy, i = ny * L.w + nx; if (seenR[i] || L.solidAt(nx + 0.5, ny + 0.5, { raft: true })) continue; seenR[i] = 1; qr.push([nx, ny]); } }
+  for (let d = 1; d <= NDUNGEONS(); d++) { const g = W.dungeons[d]; if (!g) continue; const gi = (g.y + 1) * L.w + g.x;
+    if (d === 7) { __ok(!!seenR[gi], 'seed ' + seed + ': island gate 7 unreachable even with the raft'); __ok(!seen[gi], 'seed ' + seed + ': island gate 7 reachable without the raft'); }
+    else __ok(!!seen[gi], 'seed ' + seed + ': gate ' + d + ' unreachable'); }
+  const g6 = W.dungeons[6]; __ok(g6 && !!seen[(g6.y + 1) * L.w + g6.x], 'seed ' + seed + ': gate 6 (the raft) must be reachable on foot');
   for (const r of L.regions) for (const f of r.features) if (f.type === 'cave' && f.secret !== 'bush') __ok(!!seen[(f.y + 1) * L.w + f.x], 'seed ' + seed + ': cave "' + f.kind + '" unreachable');
 }
 

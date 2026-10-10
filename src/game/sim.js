@@ -2,7 +2,7 @@
 // Only the host runs this. Clients send their position and actions; the host sends back snapshots.
 'use strict';
 // Enemy, item, projectile and elite definitions live in src/content and are looked up through core/registry.js.
-const SAVE_VERSION = 4;
+const SAVE_VERSION = 5;
 // Bring an old save up to date. v1 -> v2: dungeons were redrawn as shapes, so dungeon tile changes, cleared rooms,
 // keys and maps from v1 no longer fit; overworld progress, items and shards are kept. Tile/prop ids are remapped by name.
 function migrateSave(s) {
@@ -15,7 +15,7 @@ function migrateSave(s) {
   // v2 -> v3: the Wilds were redrawn (start in the middle, sea/peaks/great wood at the edges, gate towers), so overworld
   // changes and cave contents no longer line up. Dungeon progress, items and shards are kept; everyone starts at the new spawn.
   // v3 -> v4: the Wilds grew two frontier columns, so the same applies again
-  if ((s.v || 1) < 4) {
+  if ((s.v || 1) < 5) { // (v5: level 7 moved onto a lake island)
     for (const lvl of Object.keys(s.mods)) if (lvl === 'ow' || (lvl[0] === 'c' && lvl !== 'c0')) delete s.mods[lvl];
     for (const t of ['cleared', 'taken']) for (const k of Object.keys(s.team[t] || {})) if (k.startsWith('ow:') || (k[0] === 'c' && !k.startsWith('c0:'))) delete s.team[t][k];
     for (const c in (s.players || {})) { const pl = s.players[c]; if (pl.lvl === 'ow' || (pl.lvl && pl.lvl[0] === 'c')) pl.respawn = true; }
@@ -121,7 +121,7 @@ class Sim {
     }
     if (TINFO[t].hearthGate) {
       const rel = this.team.relics || []; const has = (id) => rel.includes(id);
-      if (has('fang') && has('emberheart')) { this.setTile(L.id, idx, TL.GATE); this.sfx('secret', L.id); this.msg('FROST AND FIRE MEET IN THE LOCK... THE HEARTH OPENS.'); }
+      if (has('fang') && has('emberheart')) { this.setTile(L.id, idx, TL.GATE); this.sfx('hearthgate', L.id); this.msg('FROST AND FIRE MEET IN THE LOCK... THE HEARTH OPENS.'); }
       else this.ev({ t: 'dialog', pid: p.id, text: 'A GATE OF THREE FLAMES. TWO OF THE HOLLOWS ARE EMPTY: ONE COLD AS THE FROZEN REACH, ONE HOT AS THE CINDER WASTES.' + (has('fang') ? ' (THE FROST FANG FITS.)' : '') + (has('emberheart') ? ' (THE EMBER HEART FITS.)' : '') });
       return;
     }
@@ -505,7 +505,7 @@ class Sim {
         if (dist2(en.x, en.y, e.x, e.y) < r * r) {
           e.hitSet[en.id] = 1;
           const landed = this.damageEnemy(en, e.dmg * (e.frost && enemyDef(en.type).hot ? 2 : 1), { x: e.x - e.vx * 0.1, y: e.y - e.vy * 0.1 }, { pid: e.pid, silver: e.silver, pierceShield: def.pierceShield, ignoreIframes: def.pierce });
-          if (e.frost && landed && !en.dead) { en.stun = Math.max(en.stun, enemyDef(en.type).boss ? 0.6 : 2.5); this.spawn({ k: 'fx', lvl: e.lvl, x: en.x, y: en.y, spr: 'icefx', life: 0.4, sc: 1 }); }
+          if (e.frost && landed && !en.dead) { en.stun = Math.max(en.stun, enemyDef(en.type).boss ? 0.6 : 2.5); this.spawn({ k: 'fx', lvl: e.lvl, x: en.x, y: en.y, spr: 'icefx', life: 0.4, sc: 1 }); this.sfx('freeze', e.lvl, en.x, en.y); }
           if (def.fire) this.spawn({ k: 'fire', lvl: e.lvl, x: e.x, y: e.y, life: 0.8, spr: 'flame', sc: 0.8, z: -0.05, pid: e.pid });
           if (!def.pierce) { e.dead = true; return; }
         }

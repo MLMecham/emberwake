@@ -121,6 +121,10 @@ function updateLocal(dt, inp) {
   if (Lc.dashT > 0) { Lc.dashT -= dt; const da = Lc.a + (Lc.dashDir || 0); mvx = Math.cos(da) * 15; mvy = Math.sin(da) * 15; }
   // ice: you keep your momentum and steer slowly, so it's easy to slide into whatever is at the edge
   { const ti0 = TINFO[L.get(Math.floor(Lc.x), Math.floor(Lc.y))]; if (ti0.slippery && Lc.dashT <= 0) { const k = Math.min(1, dt * 1.3); Lc.svx = lerp(Lc.svx || 0, mvx * 1.15, k); Lc.svy = lerp(Lc.svy || 0, mvy * 1.15, k); mvx = Lc.svx; mvy = Lc.svy; } else { Lc.svx = mvx; Lc.svy = mvy; } }
+  // sounds of the frontier: skates on ice, vents near you building up and blowing, and the bite of being frozen
+  { const ti1 = TINFO[L.get(Math.floor(Lc.x), Math.floor(Lc.y))]; if (ti1.slippery && Math.hypot(Lc.svx || 0, Lc.svy || 0) > 1.5) { Lc.slideT = (Lc.slideT || 0) - dt; if (Lc.slideT <= 0) { Lc.slideT = 0.24; sfx('iceslide', 0.8); } } }
+  if (snap.vp !== Lc.lastVp) { Lc.lastVp = snap.vp; if (snap.vp) { const v = ventNear(L, Lc.x, Lc.y); if (v > 0) sfx(snap.vp === 2 ? 'vent_blow' : 'vent_warn', v); } }
+  if (me.chill && !Lc.wasChill) sfx('freeze'); Lc.wasChill = !!me.chill;
   mvx += Lc.kx; mvy += Lc.ky; Lc.kx *= Math.pow(0.0005, dt); Lc.ky *= Math.pow(0.0005, dt); if (Math.abs(Lc.kx) < 0.1) Lc.kx = 0; if (Math.abs(Lc.ky) < 0.1) Lc.ky = 0;
   const moving = Math.abs(inp.fwd) + Math.abs(inp.str) > 0.1; if (moving) Lc.bob += dt * spd * 2.6;
   Lc.moveK = lerp(Lc.moveK || 0, moving ? 1 : 0, Math.min(1, dt * 8)); if (Lc.blockT > 0) Lc.blockT -= dt;
@@ -196,6 +200,12 @@ function updateLocal(dt, inp) {
   if (L.kind === 'ow') { const rg = owRegionAt(L, Lc.x, Lc.y); if (rg.biome === 'snow') track = 'frost'; else if (rg.biome === 'ash') track = 'fire'; }
   if (L.kind === 'dungeon') { const r = dungeonRoomAt(L, Lc.x, Lc.y); if (r && r.boss && snap.en.some(e => e[8] >= 0)) track = L.dnum === 9 ? 'final' : L.dnum >= 10 ? 'dragon' : 'boss'; }
   musicPlay(track);
+}
+// how loud the vents are where you stand (0 if none within 7 tiles)
+function ventNear(L, x, y) {
+  if (L.kind !== 'dungeon') return 0; let best = 99; const cx = Math.floor(x), cy = Math.floor(y);
+  for (let j = -7; j <= 7; j++) for (let i = -7; i <= 7; i++) if (TINFO[L.get(cx + i, cy + j)].vent) best = Math.min(best, Math.hypot(i, j));
+  return best > 7 ? 0 : clamp(1.2 - best / 7, 0.15, 1);
 }
 function markSeen(L, x, y) {
   let s = G.seen[L.id]; if (!s) s = G.seen[L.id] = new Uint8Array(L.w * L.h);

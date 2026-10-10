@@ -52,10 +52,10 @@ function dragonAi(cfg) {
     };
     switch (e.mode) {
       case 'sway': { const a = cfg.home + Math.sin(e.t * 0.9 + (cfg.phase || 0)) * 0.7; const r = 2 + Math.sin(e.t * 1.7) * 0.5; toward(B.x + Math.cos(a) * r, B.y + Math.sin(a) * r, 3);
-        if (e.tm <= 0 && p) { e.mode = 'aim'; e.tm = 0.75 / fast; sim.sfx('roar', e.lvl, e.x, e.y); } break; }
+        if (e.tm <= 0 && p) { e.mode = 'aim'; e.tm = 0.75 / fast; sim.sfx('dragonroar', e.lvl, e.x, e.y); } break; }
       case 'aim': { if (!p) { e.mode = 'sway'; break; } const d = Math.hypot(p.x - B.x, p.y - B.y) || 1; const k = Math.min(reach * 0.6, d);
         toward(B.x + (p.x - B.x) / d * k, B.y + (p.y - B.y) / d * k, 4); e.f = Math.atan2(p.y - e.y, p.x - e.x);
-        if (e.tm <= 0) { if (dist2(p.x, p.y, e.x, e.y) < 7 && Math.random() < 0.7) { e.mode = 'bite'; e.tm = 0.5; e.bx = p.x; e.by = p.y; sim.sfx('roar', e.lvl, e.x, e.y); } else { e.mode = 'breath'; e.tm = 1.0; e.shot = 0; } }
+        if (e.tm <= 0) { if (dist2(p.x, p.y, e.x, e.y) < 7 && Math.random() < 0.7) { e.mode = 'bite'; e.tm = 0.5; e.bx = p.x; e.by = p.y; sim.sfx('bite', e.lvl, e.x, e.y); } else { e.mode = 'breath'; e.tm = 1.0; e.shot = 0; sim.sfx(cfg.breathSfx || 'breath_fire', e.lvl, e.x, e.y); } }
         break; }
       case 'bite': toward(e.bx, e.by, 10); if (e.tm <= 0) { e.mode = 'recoil'; e.tm = 0.7; } break;
       case 'breath': if (p) e.f += clamp(angDiff(e.f, Math.atan2(p.y - e.y, p.x - e.x)), -dt * 1.4, dt * 1.4);
@@ -75,18 +75,18 @@ function dragonAi(cfg) {
     }
   };
 }
-const stream = (proj, jitter) => (sim, e) => { sim.fireProj(proj, e.lvl, e.x, e.y, e.f + (Math.random() - 0.5) * jitter, 'e', null, { dmg: Content.projectiles[proj].dmg }); if (Math.random() < 0.3) sim.sfx('fire', e.lvl, e.x, e.y); };
+const stream = (proj, jitter) => (sim, e) => { sim.fireProj(proj, e.lvl, e.x, e.y, e.f + (Math.random() - 0.5) * jitter, 'e', null, { dmg: Content.projectiles[proj].dmg }); };
 const eruption = (sim, e) => { // lava bursts out of the floor all over the room
   if (!e.b) return; const L = sim.W.levels[e.lvl];
   for (let i = 0; i < 7; i++) { const x = e.b.x0 + 1 + Math.random() * (e.b.x1 - e.b.x0 - 2), y = e.b.y0 + 2 + Math.random() * (e.b.y1 - e.b.y0 - 3); if (!L.solidAt(x, y)) sim.spawn({ k: 'efire', lvl: e.lvl, x, y, life: 2.2, spr: 'flame', sc: 1.0, z: -0.05 }); }
-  sim.sfx('boom', e.lvl, e.x, e.y);
+  sim.sfx('eruption', e.lvl, e.x, e.y);
 };
 const headDef = (o) => defineEnemy(Object.assign({ hp: 12, spd: 0, dmg: 2, r: 0.6, sc: 1.3, boss: true, sprite: HEAD_ROWS, view: (e) => e.hz || 0.7,
   anim: { fps: 4, frames: (s, kit) => [s, kit.squash(s, 0.94), s, kit.squash(s, 1.05)] } }, o));
 headDef({
   id: 'matriarch', title: 'THE FROST MATRIARCH', bossOf: [10], pal: PALS.ice,
-  ai: dragonAi({ tint: 'ice', home: Math.PI / 2, reach: 4.8, breath: stream('icebreath', 0.5), breathGap: 0.11,
-    special(sim, e) { AI.ring(sim, e, 'icebolt', 12, Math.random(), { dmg: 1 }); for (let i = 0; i < 2; i++) sim.spawnMinion(e, 'frostling'); } }),
+  ai: dragonAi({ tint: 'ice', breathSfx: 'breath_ice', home: Math.PI / 2, reach: 4.8, breath: stream('icebreath', 0.5), breathGap: 0.11,
+    special(sim, e) { AI.ring(sim, e, 'icebolt', 12, Math.random(), { dmg: 1 }); sim.sfx('breath_ice', e.lvl, e.x, e.y); for (let i = 0; i < 2; i++) sim.spawnMinion(e, 'frostling'); } }),
   onDeath(sim) { sim.msg('THE FROST MATRIARCH FALLS. THE HOLLOW THAWS.'); },
 });
 headDef({
@@ -98,7 +98,7 @@ headDef({
 const lastHead = (sim, e, line) => { const left = (e.body ? e.body.heads : []).filter(h => !h.dead && h !== e).length; sim.msg(left ? line : 'THE HEARTHWYRM FALLS. ITS THREE FLAMES BURN AS ONE.'); };
 headDef({
   id: 'hearth_frost', title: 'THE HEARTHWYRM', pal: PALS.ice, hp: 9,
-  ai: dragonAi({ bodyTint: 'hearth', tint: 'ice', home: Math.PI / 2 + 0.75, baseDx: -0.8, phase: 0, reach: 4.4, breath: stream('icebreath', 0.5), breathGap: 0.14,
+  ai: dragonAi({ bodyTint: 'hearth', tint: 'ice', breathSfx: 'breath_ice', home: Math.PI / 2 + 0.75, baseDx: -0.8, phase: 0, reach: 4.4, breath: stream('icebreath', 0.5), breathGap: 0.14,
     special(sim, e) { AI.ring(sim, e, 'icebolt', 8, 0, { dmg: 1 }); } }),
   onDeath(sim, e) { lastHead(sim, e, 'THE FROST HEAD FALLS.'); },
 });
@@ -109,7 +109,7 @@ headDef({
 });
 headDef({
   id: 'hearth_hollow', title: 'THE HEARTHWYRM', pal: PALS.hollow, hp: 9,
-  ai: dragonAi({ bodyTint: 'hearth', tint: 'hollow', home: Math.PI / 2 - 0.75, baseDx: 0.8, phase: 4, reach: 4.4, breath: stream('magic', 0.7), breathGap: 0.22,
+  ai: dragonAi({ bodyTint: 'hearth', tint: 'hollow', breathSfx: 'magic', home: Math.PI / 2 - 0.75, baseDx: 0.8, phase: 4, reach: 4.4, breath: stream('magic', 0.7), breathGap: 0.22,
     special(sim, e) { for (let i = 0; i < 2; i++) sim.spawnMinion(e, 'bat'); } }),
   onDeath(sim, e) { lastHead(sim, e, 'THE HOLLOW HEAD FALLS... AND THE STOLEN LIGHT RETURNS.'); },
 });

@@ -4,7 +4,7 @@
 const hopSpit = (proj) => (sim, e, dt, ctx) => {
   AI.hop(sim, e, dt, ctx);
   e.spit = (e.spit == null ? 1 + Math.random() * 2 : e.spit) - dt;
-  if (e.spit <= 0 && ctx.p && dist2(ctx.p.x, ctx.p.y, e.x, e.y) < 49) { e.spit = 2 + Math.random() * 1.5; sim.fireProj(proj, e.lvl, e.x, e.y, Math.atan2(ctx.p.y - e.y, ctx.p.x - e.x), 'e', null, { dmg: Content.projectiles[proj].dmg * e.dmgMul }); sim.sfx('shoot', e.lvl, e.x, e.y); }
+  if (e.spit <= 0 && ctx.p && dist2(ctx.p.x, ctx.p.y, e.x, e.y) < 49) { e.spit = 2 + Math.random() * 1.5; sim.fireProj(proj, e.lvl, e.x, e.y, Math.atan2(ctx.p.y - e.y, ctx.p.x - e.x), 'e', null, { dmg: Content.projectiles[proj].dmg * e.dmgMul }); sim.sfx(proj === 'icebolt' ? 'icespit' : 'shoot', e.lvl, e.x, e.y); }
 };
 defineEnemy({
   id: 'frostling', hp: 3, spd: 1.6, dmg: 1, r: 0.32, sc: 0.8,
