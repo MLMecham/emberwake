@@ -89,6 +89,8 @@ class Sim {
         const L = this.W.levels[p.lvl]; let x = +a.x, y = +a.y; if (!(dist2(x, y, p.x, p.y) < 64) || L.solidAt(x, y)) { x = L.spawn.x; y = L.spawn.y; }
         p.inv = 0; this.hurtPlayer(p, 2, null); this.teleport(p, p.lvl, x, y, p.a); this.sfx('hurt', p.lvl); break;
       }
+      case 'debug': // dev names only; turning it off also drops god mode (and with it the Warp Stone)
+        if (!isDevName(p.name)) break; p.dbg = !!a.on; p.god = !!(a.on && a.god); if (!p.dbg && p.sel === 'devwarp') p.sel = null; this.hint(p, 'DEBUG ' + (p.dbg ? 'ON' : 'OFF')); break;
       case 'warp': if (p.dbg) { const T = this.W.levels[a.to]; if (T) this.teleport(p, T.id, T.spawn.x, T.spawn.y, T.spawn.a); } break;
     }
   }

@@ -12,7 +12,11 @@ A first-person, retro pixel-3D adventure: explore the Wilds, clear nine dungeons
 WASD move · mouse look (click to lock, or hold a button and drag) · click/Space attack · right-click/E item · Q/R/wheel switch item · hold F next to a fallen friend to help them up · M map · Esc menu. Gamepads work too.
 
 ## Debug mode
-Title screen → DEBUG. Pick a starting loadout (sword, tunic, hearts, items, shards), a start location and god mode. The pause menu then has warp buttons for every dungeon. It also applies to friends who join with debug on.
+Only for heroes named **MITCH** or **LOGAN** (the list is `DEV_NAMES` in `src/core/util.js`). With one of those names:
+- **Title screen → DEBUG** sets a starting loadout (sword, tunic, hearts, items, shards), a start location and god mode.
+- **Pause menu → DEBUG: ON/OFF** switches it mid-game. While it's on you get warp buttons and a **Warp Stone** B-item that hops between dungeons.
+
+Any other name has no debug at all.
 
 ## Working on the game
 ```

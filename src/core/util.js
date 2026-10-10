@@ -30,3 +30,7 @@ function c32(c) { return rgb(c[0], c[1], c[2]); }
 let _uid = 1;
 function uid() { return _uid++; }
 
+
+// Developer names: only heroes with these names can use debug mode (title-screen DEBUG button, pause-menu toggle, Warp Stone).
+const DEV_NAMES = ['MITCH', 'LOGAN'];
+function isDevName(name) { return DEV_NAMES.includes(String(name || '').trim().toUpperCase()); }

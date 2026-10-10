@@ -159,7 +159,7 @@ Enemy health scales with how many heroes are in the room, set by `PARTY_HP` in `
 
 ## Dev tools
 
-Start with the debug loadout on and you get a **Warp Stone** (B-item). Each use jumps to the next dungeon's entrance, then back to the overworld.
+Debug mode is only available to heroes named in `DEV_NAMES` (`src/core/util.js`; currently MITCH and LOGAN). Switch it on from the title screen's DEBUG button or the pause menu's DEBUG toggle. While it's on you get a **Warp Stone** (B-item): each use jumps to the next dungeon's entrance, then back to the overworld.
 
 ## Projectiles, drops, dungeons, caves
 

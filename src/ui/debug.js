@@ -4,7 +4,8 @@
 // Items marked `debug: true` in content/items get a checkbox automatically.
 const debugItems = () => Object.values(Content.items).filter(d => d.debug).map(d => [d.id, d.name]);
 function defaultDebug() { return { on: false, sword: 1, armor: 0, hearts: 3, gems: 0, bombs: 0, arrows: 0, potions: 0, shards: 0, items: [], start: 'ow', god: false }; }
-function debugLoadout() { return Object.assign(defaultDebug(), G.profile.dbg || {}); }
+// Debug only exists for heroes named in DEV_NAMES (core/util.js).
+function debugLoadout() { const d = Object.assign(defaultDebug(), G.profile.dbg || {}); if (!isDevName(G.profile.name)) d.on = false; return d; }
 function fillDebugUI() {
   const d = debugLoadout(); $('dbgOn').checked = d.on; $('dbgBody').classList.toggle('off', !d.on);
   for (const k of ['sword', 'armor', 'hearts', 'gems', 'bombs', 'arrows', 'potions', 'shards']) $('dbg' + k[0].toUpperCase() + k.slice(1)).value = d[k];

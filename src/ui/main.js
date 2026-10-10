@@ -285,6 +285,7 @@ function resume() { G.state = 'play'; showScreen(null); try { const r = $('game'
 function updatePauseInfo() {
   const n = G.snap ? G.snap.pl.length : 1; const me = G.snap && G.snap.me;
   const dOn = !!(G.snap && G.snap.me && G.snap.me.dbg); $('pDebug').style.display = dOn ? '' : 'none';
+  const dev = isDevName(G.snap && G.snap.me ? G.snap.me.name : G.profile.name); $('pDbgToggle').style.display = dev ? '' : 'none'; $('pDbgToggle').textContent = 'DEBUG: ' + (dOn ? 'ON' : 'OFF');
   if (dOn && !$('pWarps').childElementCount) { const mk = (label, to) => { const b = document.createElement('button'); b.textContent = label; b.onclick = () => { sendAction({ t: 'warp', to }); resume(); }; $('pWarps').appendChild(b); }; mk('WILDS', 'ow'); for (let d = 1; d <= 9; d++) mk('L' + d, 'd' + d); }
   $('pInfo').textContent = (NET.role === 'host' ? 'HOSTING' : NET.role === 'client' ? 'CONNECTED' : 'SOLO') + ' - ' + n + ' PLAYER' + (n > 1 ? 'S' : '') + (me ? ' - ' + (me.cls === 'monk' ? 'MARTIAL ARTIST' : 'SWORD') : '');
 }
@@ -382,13 +383,13 @@ function quitToTitle() {
   NET.role = 'solo'; NET.roomWord = null; G.sim = null; G.world = null; G.local = null; G.snap = null; G.state = 'title'; G.disconnected = false; musicPlay(null); showScreen('titleScreen'); refreshTitle();
 }
 function refreshTitle() {
-  $('btnDebug').textContent = 'DEBUG: ' + (debugLoadout().on ? 'ON' : 'OFF');
+  $('btnDebug').textContent = 'DEBUG: ' + (debugLoadout().on ? 'ON' : 'OFF'); $('btnDebug').style.display = isDevName(G.profile.name) ? '' : 'none';
   $('btnContinue').style.display = readSave('adv') ? '' : 'none'; $('btnRogueCont').style.display = readSave('rogue') ? '' : 'none';
   $('pname').value = G.profile.name; buildColorPicker(); buildClassPicker();
 }
 function bindUI() {
   const on = (id, fn) => { const el = $(id); if (el) el.onclick = (e) => { audioInit(); sfx('menu'); fn(e); }; };
-  $('pname').oninput = (e) => { G.profile.name = e.target.value.toUpperCase().replace(/[^A-Z0-9 ]/g, '').slice(0, 8) || 'HERO'; saveProfile(); };
+  $('pname').oninput = (e) => { G.profile.name = e.target.value.toUpperCase().replace(/[^A-Z0-9 ]/g, '').slice(0, 8) || 'HERO'; saveProfile(); $('btnDebug').style.display = isDevName(G.profile.name) ? '' : 'none'; $('btnDebug').textContent = 'DEBUG: ' + (debugLoadout().on ? 'ON' : 'OFF'); };
   on('btnNew', () => { if (readSave('adv') && !confirm('Start a new adventure? Your old save will be replaced.')) return; startGame('adv', false); });
   on('btnContinue', () => startGame('adv', true));
   on('btnRogue', () => startGame('rogue', false));
@@ -396,6 +397,13 @@ function bindUI() {
   on('btnJoin', () => { showScreen('joinScreen'); $('joinReply').style.display = 'none'; $('joinStatus').textContent = ''; setTimeout(() => $('joinWord').focus(), 50); });
   on('btnHelp', () => showScreen('helpScreen'));
   on('btnDebug', () => { fillDebugUI(); showScreen('debugScreen'); });
+  // in-game debug switch (dev names only): remembers the choice for next time too
+  on('pDbgToggle', () => {
+    const now = !(G.snap && G.snap.me && G.snap.me.dbg);
+    G.profile.dbg = Object.assign(defaultDebug(), G.profile.dbg || {}, { on: now }); saveProfile();
+    sendAction({ t: 'debug', on: now, god: !!G.profile.dbg.god });
+    setTimeout(updatePauseInfo, 150); showToast(now ? 'DEBUG ON' : 'DEBUG OFF');
+  });
   on('dbgBack', () => { readDebugUI(); showScreen('titleScreen'); refreshTitle(); });
   on('dbgAll', () => { G.profile.dbg = Object.assign(defaultDebug(), { on: true, sword: 3, armor: 2, hearts: 16, gems: 999, bombs: 16, arrows: 30, potions: 2, shards: 8, items: debugItems().map(i => i[0]) }); fillDebugUI(); });
   on('dbgNone', () => { G.profile.dbg = Object.assign(defaultDebug(), { on: true }); fillDebugUI(); });
