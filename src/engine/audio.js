@@ -59,6 +59,7 @@ function sfx(name, vol) {
     case 'menu': tone(880, 0.05, 'square', 0.08 * v); break;
     case 'charge': tone(400, 0.12, 'sine', 0.06 * v, 800); break;
     case 'dash': noise(0.15, 0.2 * v, 6000); break;
+    case 'whisper': noise(0.9, 0.06 * v, 900); tone(220, 0.8, 'sine', 0.03 * v, 180); tone(330, 0.7, 'sine', 0.02 * v, 300); break;
   }
 }
 // ---- music: original procedural loops ----

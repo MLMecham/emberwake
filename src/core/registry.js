@@ -16,6 +16,7 @@ const Content = {
   drops: {},        // drop table id -> { entries: [{ item, w, when? }], none }
   dungeons: [],     // index = dungeon number (1-9)
   caves: {},        // cave kind -> { npc, text, stock }
+  gimmicks: {},     // dungeon gimmick id -> hooks (see defineGimmick)
   hints: [],        // old-man hint lines
 };
 const _defErr = [];
@@ -77,7 +78,18 @@ function defineElite(def) { _need('elite', def, ['id', 'name', 'color', 'weight'
 // ---- drop tables ----  entries: [{ item, w (weight), when(sim)? }], none: weight of dropping nothing
 function defineDropTable(id, none, entries) { Content.drops[id] = { none, entries }; }
 // ---- dungeons & caves ----
-function defineDungeon(n, def) { Content.dungeons[n] = def; }
+// defineDungeon(n, { name, item, shape: [...rows], theme: {...colors}, gimmicks: [...ids], secret: 'TILE_NAME', lore: [...] })
+// shape: up to 8 rows of 8 chars. '#' room, 'S' entrance (nothing may sit directly below it), 'H' hidden room, '.' nothing.
+function defineDungeon(n, def) { Content.dungeons[n] = def; if (def.theme) defineTheme('d' + n, def.theme); }
+// ---- dungeon gimmicks ----
+// defineGimmick(id, {
+//   doors(L, doors, ctx)        change door tiles after the room tree is built (doors: [{ a, b, x, y, t, tree }])
+//   room(L, r, ctx) -> true     decorate one normal room (return true to skip the default block layout)
+//                               ctx = { rnd, d, set(x, y, tileName), prop(x, y, PR), lane(x, y), ix, iy }
+//   level(L, ctx)               once per dungeon at the end (flags like L.dark)
+//   update(sim, L, dt)          every tick on the host while a hero is in this dungeon
+// })
+function defineGimmick(id, def) { _dupe('gimmick', Content.gimmicks, id); Content.gimmicks[id] = def; }
 function defineCave(kind, def) { Content.caves[kind] = def; }
 function defineHints(lines) { Content.hints.push(...lines); }
 
@@ -100,6 +112,18 @@ function rollDrop(table, sim, rnd) {
   return null;
 }
 
+// checks a dungeon shape: size, an entrance with nothing below it, normal rooms connected, hidden rooms touching a normal room
+function shapeProblems(shape) {
+  const err = []; if (!Array.isArray(shape) || !shape.length) return ['missing shape'];
+  if (shape.length > 8 || shape.some(r => r.length > 8)) err.push('must fit in 8 rows of 8 characters');
+  const at = (x, y) => (shape[y] || '')[x] || '.'; const cells = [];
+  for (let y = 0; y < shape.length; y++) for (let x = 0; x < shape[y].length; x++) { const c = at(x, y); if (!'.#SH'.includes(c)) err.push('unknown character "' + c + '"'); if ('#S'.includes(c)) cells.push([x, y]); }
+  const starts = cells.filter(([x, y]) => at(x, y) === 'S'); if (starts.length !== 1) err.push('needs exactly one S (entrance)');
+  else { const [sx, sy] = starts[0]; if (at(sx, sy + 1) !== '.') err.push('nothing may be directly below the S'); }
+  if (cells.length) { const seen = new Set([cells[0].join()]); const q = [cells[0]]; while (q.length) { const [x, y] = q.pop(); for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { const k = (x + dx) + ',' + (y + dy); if (!seen.has(k) && '#S'.includes(at(x + dx, y + dy))) { seen.add(k); q.push([x + dx, y + dy]); } } } if (seen.size !== cells.length) err.push('rooms (#) are not all connected'); }
+  for (let y = 0; y < shape.length; y++) for (let x = 0; x < shape[y].length; x++) if (at(x, y) === 'H' && ![[1, 0], [-1, 0], [0, 1], [0, -1]].some(([dx, dy]) => '#'.includes(at(x + dx, y + dy)))) err.push('hidden room at ' + x + ',' + y + ' must touch a # room');
+  return err;
+}
 // ---- validation: run at boot (browser console) and by tools/check.js ----
 function validateContent() {
   const err = _defErr.slice(); const spriteIds = new Set([...Object.keys(Content.sprites), ...Object.keys(Content.spriteVariants)]);
@@ -114,7 +138,10 @@ function validateContent() {
   for (const d of Object.values(Content.projectiles)) needSpr('projectile "' + d.id + '"', d.spr);
   for (const d of Object.values(Content.enemies)) { if (typeof d.ai !== 'function') err.push('enemy "' + d.id + '" ai must be a function'); if (d.drops && !Content.drops[d.drops]) err.push('enemy "' + d.id + '" uses unknown drop table "' + d.drops + '"'); }
   for (const [id, t] of Object.entries(Content.drops)) for (const e of t.entries) if (!Content.items[e.item]) err.push('drop table "' + id + '" drops unknown item "' + e.item + '"');
-  for (let n = 1; n <= 9; n++) { const d = Content.dungeons[n]; if (!d) { err.push('dungeon ' + n + ' is not defined'); continue; } if (d.item && !Content.items[d.item]) err.push('dungeon ' + n + ' rewards unknown item "' + d.item + '"'); if (!bossFor(n)) err.push('dungeon ' + n + ' has no boss (set bossOf on an enemy)'); if (!enemiesFor('dungeons', n).length) err.push('dungeon ' + n + ' has no enemies (add it to an enemy\'s spawns.dungeons)'); }
+  for (let n = 1; n <= 9; n++) { const d = Content.dungeons[n]; if (!d) { err.push('dungeon ' + n + ' is not defined'); continue; }
+    for (const s of shapeProblems(d.shape)) err.push('dungeon ' + n + ' shape: ' + s);
+    for (const g of d.gimmicks || []) if (!Content.gimmicks[g]) err.push('dungeon ' + n + ' uses unknown gimmick "' + g + '"');
+    if (d.secret && TL[d.secret] == null) err.push('dungeon ' + n + ' secret wall "' + d.secret + '" is not a tile'); if (d.item && !Content.items[d.item]) err.push('dungeon ' + n + ' rewards unknown item "' + d.item + '"'); if (!bossFor(n)) err.push('dungeon ' + n + ' has no boss (set bossOf on an enemy)'); if (!enemiesFor('dungeons', n).length) err.push('dungeon ' + n + ' has no enemies (add it to an enemy\'s spawns.dungeons)'); }
   for (const b of BIOMES) if (!enemiesFor('biomes', b).length) err.push('biome "' + b + '" has no enemies');
   for (const [k, c] of Object.entries(Content.caves)) { for (const s of (c.stock || [])) for (const it of [].concat(s.item)) if (!Content.items[it]) err.push('cave "' + k + '" sells unknown item "' + it + '"'); if (c.npc) needSpr('cave "' + k + '"', c.npc); }
   return err;

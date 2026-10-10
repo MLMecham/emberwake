@@ -347,3 +347,17 @@ defineSpriteVariant('gem_g', 'gem', { T: '#40d040', t: '#187018', h: '#b8f8a8' }
 defineSpriteVariant('gem_b', 'gem', { T: '#4080f0', t: '#183890', h: '#b8d8ff' });
 defineSpriteVariant('gem_r', 'gem', { T: '#f04040', t: '#901818', h: '#ffc0c0' });
 defineAnim('fairy', 12, (s, kit) => [s, kit.shiftCols(kit.shiftCols(s, 0, 5, -2), 10, 15, -2)]);
+defineSprite('hpiece', [
+  '................', '................', '................', '................',
+  '....kk..........',
+  '...krrk.........',
+  '..krwrrk........',
+  '..krrrrrk.......',
+  '..krrrrrk.......',
+  '...krrrrk.......',
+  '....krrrk.......',
+  '.....krrk.......',
+  '......krk.......',
+  '.......k........',
+  '................', '................',
+]);

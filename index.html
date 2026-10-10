@@ -12824,9 +12824,41 @@ function makeTex(fn, seed) {
   return px;
 }
 function noiseGrid(seed, n) { const r = mulberry32(seed); const g = []; for (let i = 0; i < n * n; i++) g.push(r()); return (x, y) => g[((y % n + n) % n) * n + ((x % n + n) % n)]; }
+// ---- dungeon color themes (each dungeon picks one in content/dungeons.js) ----
+// wall/mortar/hi: brick face, mortar lines, brick highlight.  floor/edge/fhi: floor tiles.  trim: door frames.
+const DEFAULT_THEME = { wall: [70, 80, 140], mortar: [30, 30, 54], hi: [100, 112, 176], floor: [78, 84, 120], edge: [40, 44, 70], fhi: [100, 108, 150], trim: [80, 80, 90] };
+const DUNGEON_THEMES = {}; // filled by defineDungeon({ theme: {...} })
+function defineTheme(id, th) { DUNGEON_THEMES[id] = Object.assign({}, DEFAULT_THEME, th); }
+// ---- registrable textures: defineTexture(name, fn) with fn(x, y, rnd, ctx) -> [r,g,b]
+//   { themed: true } -> fn(x, y, rnd, theme, ctx) and one copy per dungeon theme
+//   { frames: n }    -> fn(x, y, rnd, frame, ctx), animated (like water)
+// ctx gives helpers: vary(color, x, y, amount), shade(color, f), n8(x, y) noise, texPx(name, x, y).
+const TEXTURE_DEFS = {};
+function defineTexture(name, fn, opts) { TEXTURE_DEFS[name] = Object.assign({ fn }, opts || {}); }
+// the textures dungeons recolor
+function themedTextures(th, sfx) {
+  const n8 = noiseGrid(11, 32); const vary = (c, x, y, amt) => shade(c, 1 - amt / 2 + n8(x, y) * amt);
+  const o = {};
+  o['brick' + sfx] = makeTex((x, y) => { const by = y >> 3, off = by % 2 ? 8 : 0; const edge = (y & 7) === 0 || ((x + off) & 15) === 0; let c = edge ? th.mortar : th.wall; if (!edge && (y & 7) === 1) c = th.hi; return vary(c, x, y, 0.2); }, 3);
+  o['brick_bomb' + sfx] = makeTex((x, y) => { const by = y >> 3, off = by % 2 ? 8 : 0; const edge = (y & 7) === 0 || ((x + off) & 15) === 0; let c = edge ? th.mortar : th.wall; if (Math.abs((x - 14) + Math.sin(y * 0.5) * 3) < 0.7 && y > 4) c = shade(th.mortar, 0.8); return vary(c, x, y, 0.2); }, 3);
+  o['dfloor' + sfx] = makeTex((x, y) => { const e = (x & 15) === 0 || (y & 15) === 0; let c = e ? th.edge : th.floor; if (!e && ((x & 15) === 1 || (y & 15) === 1)) c = th.fhi; return vary(c, x, y, 0.15); });
+  o['locked' + sfx] = makeTex((x, y) => {
+    if (x < 3 || x > 28) return vary(th.wall, x, y, 0.2);
+    let c = ((x - 3) % 7 === 0) ? [70, 40, 20] : [150, 96, 48]; if (y < 2 || y > 29 || y === 10 || y === 22) c = th.trim;
+    const kx = x - 16, ky = y - 16; if (kx * kx + (ky + 2) ** 2 < 10) c = [240, 210, 60]; if (Math.abs(kx) < 1.5 && ky > -2 && ky < 5) c = [20, 16, 10]; if (kx * kx + (ky + 2) ** 2 < 3) c = [20, 16, 10];
+    return vary(c, x, y, 0.1);
+  });
+  o['shutter' + sfx] = makeTex((x, y) => { if (x < 3 || x > 28) return vary(th.wall, x, y, 0.2); const bar = (x % 6) < 2; return bar ? vary([180, 186, 200], x, y, 0.1) : [10, 10, 20]; });
+  const brick = o['brick' + sfx];
+  o['dexit' + sfx] = makeTex((x, y) => { const arch = ((x - 15.5) / 9) ** 2 + ((y - 31) / 24) ** 2 < 1; if (arch) return [250, 236, 180]; const v = brick[y * TS + x]; return [v & 255, (v >> 8) & 255, (v >> 16) & 255]; });
+  return o;
+}
+// themed lookup used by the renderer: 'brick' in dungeon d3 -> TEX['brick@d3'] if it exists
+function texFor(name, L) { if (L && L.theme) { const t = TEX[name + '@' + L.theme]; if (t) return t; } return TEX[name]; }
 function initTextures() {
   const n8 = noiseGrid(11, 32), n4 = noiseGrid(22, 32);
   const vary = (c, x, y, amt) => shade(c, 1 - amt / 2 + n8(x, y) * amt);
+  const ctx = { vary, shade, n8, n4, texPx: (name, x, y) => { const v = TEX[name][y * TS + x]; return [v & 255, (v >> 8) & 255, (v >> 16) & 255]; } };
   // floors
   TEX.grass = makeTex((x, y, r) => { let c = [72, 160, 56]; if (n8(x, y) > 0.86) c = [120, 200, 80]; if (n4(x * 3, y * 7) > 0.93) c = [40, 110, 40]; return vary(c, x, y, 0.18); });
   TEX.flowers = makeTex((x, y) => { const f = n4(x >> 2, y >> 2); if (f > 0.8 && (x & 3) == 1 && (y & 3) == 1) return f > 0.9 ? [248, 216, 64] : [240, 96, 160]; return vary([72, 160, 56], x, y, 0.18); });
@@ -12835,7 +12867,6 @@ function initTextures() {
   TEX.bridge = makeTex((x, y) => { const plank = (y >> 3); let c = plank % 2 ? [150, 100, 52] : [168, 116, 60]; if ((y & 7) === 0) c = [70, 44, 24]; if ((x + plank * 11) % 16 === 0) c = [90, 58, 30]; return vary(c, x, y, 0.1); });
   TEX.water = []; for (let f = 0; f < 4; f++) TEX.water.push(makeTex((x, y) => { const w = Math.sin((x + f * 4) * 0.4 + Math.sin(y * 0.3 + f) * 1.5); let c = [48, 104, 216]; if (w > 0.85) c = [150, 200, 255]; else if (w > 0.4) c = [72, 132, 232]; return c; }));
   TEX.lava = []; for (let f = 0; f < 4; f++) TEX.lava.push(makeTex((x, y) => { const w = Math.sin((x + f * 3) * 0.35 + Math.sin(y * 0.4 + f * 1.3) * 1.7); let c = [200, 50, 20]; if (w > 0.8) c = [255, 220, 80]; else if (w > 0.3) c = [250, 120, 30]; return c; }));
-  TEX.dfloor = makeTex((x, y) => { const e = (x & 15) === 0 || (y & 15) === 0; let c = e ? [40, 44, 70] : [78, 84, 120]; if (!e && ((x & 15) === 1 || (y & 15) === 1)) c = [100, 108, 150]; return vary(c, x, y, 0.15); });
   TEX.cfloor = makeTex((x, y) => vary(n8(x >> 1, y >> 1) > 0.8 ? [70, 58, 50] : [92, 78, 66], x, y, 0.2));
   TEX.exit = makeTex((x, y) => { const d = Math.max(Math.abs(x - 15.5), Math.abs(y - 15.5)); return d < 12 ? (((x + y) >> 2) & 1 ? [250, 240, 190] : [230, 210, 150]) : [92, 78, 66]; });
   TEX.stairs = makeTex((x, y) => { const s = y >> 2; return s % 2 ? [40, 40, 50] : shade([150, 150, 170], 1 - s / 10); });
@@ -12870,19 +12901,17 @@ function initTextures() {
     if (x < 4 || x > 27) return vary([140, 140, 160], x, y, 0.2);
     const edge = (y % 8) === 0 || (x % 8) === 0; return vary(edge ? [70, 70, 90] : [120, 124, 146], x, y, 0.2);
   });
-  TEX.brick = makeTex((x, y) => { const by = y >> 3, off = by % 2 ? 8 : 0; const edge = (y & 7) === 0 || ((x + off) & 15) === 0; let c = edge ? [30, 30, 54] : [70, 80, 140]; if (!edge && (y & 7) === 1) c = [100, 112, 176]; return vary(c, x, y, 0.2); }, 3);
-  TEX.brick_bomb = makeTex((x, y) => { const by = y >> 3, off = by % 2 ? 8 : 0; const edge = (y & 7) === 0 || ((x + off) & 15) === 0; let c = edge ? [30, 30, 54] : [70, 80, 140]; if (Math.abs((x - 14) + Math.sin(y * 0.5) * 3) < 0.7 && y > 4) c = [24, 24, 40]; return vary(c, x, y, 0.2); }, 3);
-  TEX.locked = makeTex((x, y) => {
-    if (x < 3 || x > 28) return vary([70, 80, 140], x, y, 0.2);
-    let c = ((x - 3) % 7 === 0) ? [70, 40, 20] : [150, 96, 48]; if (y < 2 || y > 29 || y === 10 || y === 22) c = [80, 80, 90];
-    const kx = x - 16, ky = y - 16; if (kx * kx + (ky + 2) ** 2 < 10) c = [240, 210, 60]; if (Math.abs(kx) < 1.5 && ky > -2 && ky < 5) c = [20, 16, 10]; if (kx * kx + (ky + 2) ** 2 < 3) c = [20, 16, 10];
-    return vary(c, x, y, 0.1);
-  });
-  TEX.shutter = makeTex((x, y) => { if (x < 3 || x > 28) return vary([70, 80, 140], x, y, 0.2); const bar = (x % 6) < 2; return bar ? vary([180, 186, 200], x, y, 0.1) : [10, 10, 20]; });
+
   TEX.cwall = makeTex((x, y) => vary(n8(x >> 2, y >> 2) > 0.5 ? [60, 46, 40] : [80, 62, 52], x, y, 0.3), 9);
   TEX.cwall_bomb = makeTex((x, y) => { let c = n8(x >> 2, y >> 2) > 0.5 ? [60, 46, 40] : [80, 62, 52]; if (Math.abs((x - 16) - Math.sin(y * 0.6) * 3) < 0.8 && y > 6 && y < 28) c = [30, 22, 18]; return vary(c, x, y, 0.3); }, 9);
-  TEX.dexit = makeTex((x, y) => { const arch = ((x - 15.5) / 9) ** 2 + ((y - 31) / 24) ** 2 < 1; if (arch) return [250, 236, 180]; const i = y * TS + x; const v = TEX.brick[i]; return [v & 255, (v >> 8) & 255, (v >> 16) & 255]; });
   TEX.shop = makeTex((x, y) => { let c = [120, 80, 44]; if ((y & 7) === 0) c = [70, 44, 24]; if (y < 4) c = [200, 60, 40]; return vary(c, x, y, 0.1); });
+  Object.assign(TEX, themedTextures(DEFAULT_THEME, ''));
+  for (const id in DUNGEON_THEMES) Object.assign(TEX, themedTextures(DUNGEON_THEMES[id], '@' + id));
+  for (const [name, t] of Object.entries(TEXTURE_DEFS)) {
+    if (t.themed) { TEX[name] = makeTex((x, y, r) => t.fn(x, y, r, DEFAULT_THEME, ctx), t.seed); for (const id in DUNGEON_THEMES) TEX[name + '@' + id] = makeTex((x, y, r) => t.fn(x, y, r, DUNGEON_THEMES[id], ctx), t.seed); }
+    else if (t.frames) { TEX[name] = []; for (let f = 0; f < t.frames; f++) TEX[name].push(makeTex((x, y, r) => t.fn(x, y, r, f, ctx), t.seed)); }
+    else TEX[name] = makeTex((x, y, r) => t.fn(x, y, r, ctx), t.seed);
+  }
   TEX.shardwall = makeTex((x, y) => { const d = Math.abs(x - 16) + Math.abs(y - 16); if (d < 9) return d < 5 ? [255, 230, 120] : [240, 140, 40]; const i = y * TS + x; const v = TEX.brick[i]; return shade([v & 255, (v >> 8) & 255, (v >> 16) & 255], 0.7); });
 }
 
@@ -12895,6 +12924,10 @@ const TL = {
 // solid, wall texture key, floor texture key, flags
 const TINFO = [];
 function defTile(id, o) { TINFO[id] = Object.assign({ solid: false, wall: null, floor: 'grass', portal: false, water: false, bomb: false, hurt: 0 }, o); }
+// Register a new tile type from content: defineTile('ICE', { floor: 'ice', slippery: true }) -> TL.ICE.
+// Common flags: solid, wall (texture), floor (texture), water, hurt, bomb (bombable), opensTo (tile name it becomes when opened),
+// low (projectiles fly over), plus any custom flag your code checks with TINFO[t].yourFlag.
+function defineTile(name, o) { if (TL[name] != null) throw new Error('tile ' + name + ' defined twice'); const id = TINFO.length; TL[name] = id; defTile(id, o); return id; }
 defTile(TL.GRASS, { floor: 'grass' });
 defTile(TL.FLOWERS, { floor: 'flowers' });
 defTile(TL.PATH, { floor: 'path' });
@@ -12930,6 +12963,10 @@ const PROP_INFO = {
   1: { solid: true, scale: 1.5 }, 2: { solid: true, scale: 1.6 }, 3: { solid: true, scale: 1.0 }, 4: { solid: true, scale: 0.9, burn: true },
   5: { solid: true, scale: 1.1 }, 6: { solid: true, scale: 0.9 }, 7: { solid: true, scale: 1.1 }, 8: { solid: true, scale: 0.8 }, 9: { solid: true, scale: 0.7 }, 10: { solid: false, scale: 0.6 },
 };
+// Register a new prop: defineProp('TORCH', 'brazier', { solid: true, scale: 0.7 }) -> PR.TORCH, drawn with sprite 'brazier'.
+function defineProp(name, sprite, info) { if (PR[name] != null) throw new Error('prop ' + name + ' defined twice'); const id = PROPS.length; PROPS.push(sprite); PR[name] = id; PROP_INFO[id] = Object.assign({ solid: false, scale: 1 }, info); return id; }
+// tile id -> name, for saves (so adding tiles later can't scramble old saves)
+function tileName(id) { for (const k in TL) if (TL[k] === id) return k; return null; }
 
 // ---- src/core/registry.js ----
 // ===== core/registry.js : the content registries =====
@@ -12950,6 +12987,7 @@ const Content = {
   drops: {},        // drop table id -> { entries: [{ item, w, when? }], none }
   dungeons: [],     // index = dungeon number (1-9)
   caves: {},        // cave kind -> { npc, text, stock }
+  gimmicks: {},     // dungeon gimmick id -> hooks (see defineGimmick)
   hints: [],        // old-man hint lines
 };
 const _defErr = [];
@@ -13011,7 +13049,18 @@ function defineElite(def) { _need('elite', def, ['id', 'name', 'color', 'weight'
 // ---- drop tables ----  entries: [{ item, w (weight), when(sim)? }], none: weight of dropping nothing
 function defineDropTable(id, none, entries) { Content.drops[id] = { none, entries }; }
 // ---- dungeons & caves ----
-function defineDungeon(n, def) { Content.dungeons[n] = def; }
+// defineDungeon(n, { name, item, shape: [...rows], theme: {...colors}, gimmicks: [...ids], secret: 'TILE_NAME', lore: [...] })
+// shape: up to 8 rows of 8 chars. '#' room, 'S' entrance (nothing may sit directly below it), 'H' hidden room, '.' nothing.
+function defineDungeon(n, def) { Content.dungeons[n] = def; if (def.theme) defineTheme('d' + n, def.theme); }
+// ---- dungeon gimmicks ----
+// defineGimmick(id, {
+//   doors(L, doors, ctx)        change door tiles after the room tree is built (doors: [{ a, b, x, y, t, tree }])
+//   room(L, r, ctx) -> true     decorate one normal room (return true to skip the default block layout)
+//                               ctx = { rnd, d, set(x, y, tileName), prop(x, y, PR), lane(x, y), ix, iy }
+//   level(L, ctx)               once per dungeon at the end (flags like L.dark)
+//   update(sim, L, dt)          every tick on the host while a hero is in this dungeon
+// })
+function defineGimmick(id, def) { _dupe('gimmick', Content.gimmicks, id); Content.gimmicks[id] = def; }
 function defineCave(kind, def) { Content.caves[kind] = def; }
 function defineHints(lines) { Content.hints.push(...lines); }
 
@@ -13034,6 +13083,18 @@ function rollDrop(table, sim, rnd) {
   return null;
 }
 
+// checks a dungeon shape: size, an entrance with nothing below it, normal rooms connected, hidden rooms touching a normal room
+function shapeProblems(shape) {
+  const err = []; if (!Array.isArray(shape) || !shape.length) return ['missing shape'];
+  if (shape.length > 8 || shape.some(r => r.length > 8)) err.push('must fit in 8 rows of 8 characters');
+  const at = (x, y) => (shape[y] || '')[x] || '.'; const cells = [];
+  for (let y = 0; y < shape.length; y++) for (let x = 0; x < shape[y].length; x++) { const c = at(x, y); if (!'.#SH'.includes(c)) err.push('unknown character "' + c + '"'); if ('#S'.includes(c)) cells.push([x, y]); }
+  const starts = cells.filter(([x, y]) => at(x, y) === 'S'); if (starts.length !== 1) err.push('needs exactly one S (entrance)');
+  else { const [sx, sy] = starts[0]; if (at(sx, sy + 1) !== '.') err.push('nothing may be directly below the S'); }
+  if (cells.length) { const seen = new Set([cells[0].join()]); const q = [cells[0]]; while (q.length) { const [x, y] = q.pop(); for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { const k = (x + dx) + ',' + (y + dy); if (!seen.has(k) && '#S'.includes(at(x + dx, y + dy))) { seen.add(k); q.push([x + dx, y + dy]); } } } if (seen.size !== cells.length) err.push('rooms (#) are not all connected'); }
+  for (let y = 0; y < shape.length; y++) for (let x = 0; x < shape[y].length; x++) if (at(x, y) === 'H' && ![[1, 0], [-1, 0], [0, 1], [0, -1]].some(([dx, dy]) => '#'.includes(at(x + dx, y + dy)))) err.push('hidden room at ' + x + ',' + y + ' must touch a # room');
+  return err;
+}
 // ---- validation: run at boot (browser console) and by tools/check.js ----
 function validateContent() {
   const err = _defErr.slice(); const spriteIds = new Set([...Object.keys(Content.sprites), ...Object.keys(Content.spriteVariants)]);
@@ -13048,7 +13109,10 @@ function validateContent() {
   for (const d of Object.values(Content.projectiles)) needSpr('projectile "' + d.id + '"', d.spr);
   for (const d of Object.values(Content.enemies)) { if (typeof d.ai !== 'function') err.push('enemy "' + d.id + '" ai must be a function'); if (d.drops && !Content.drops[d.drops]) err.push('enemy "' + d.id + '" uses unknown drop table "' + d.drops + '"'); }
   for (const [id, t] of Object.entries(Content.drops)) for (const e of t.entries) if (!Content.items[e.item]) err.push('drop table "' + id + '" drops unknown item "' + e.item + '"');
-  for (let n = 1; n <= 9; n++) { const d = Content.dungeons[n]; if (!d) { err.push('dungeon ' + n + ' is not defined'); continue; } if (d.item && !Content.items[d.item]) err.push('dungeon ' + n + ' rewards unknown item "' + d.item + '"'); if (!bossFor(n)) err.push('dungeon ' + n + ' has no boss (set bossOf on an enemy)'); if (!enemiesFor('dungeons', n).length) err.push('dungeon ' + n + ' has no enemies (add it to an enemy\'s spawns.dungeons)'); }
+  for (let n = 1; n <= 9; n++) { const d = Content.dungeons[n]; if (!d) { err.push('dungeon ' + n + ' is not defined'); continue; }
+    for (const s of shapeProblems(d.shape)) err.push('dungeon ' + n + ' shape: ' + s);
+    for (const g of d.gimmicks || []) if (!Content.gimmicks[g]) err.push('dungeon ' + n + ' uses unknown gimmick "' + g + '"');
+    if (d.secret && TL[d.secret] == null) err.push('dungeon ' + n + ' secret wall "' + d.secret + '" is not a tile'); if (d.item && !Content.items[d.item]) err.push('dungeon ' + n + ' rewards unknown item "' + d.item + '"'); if (!bossFor(n)) err.push('dungeon ' + n + ' has no boss (set bossOf on an enemy)'); if (!enemiesFor('dungeons', n).length) err.push('dungeon ' + n + ' has no enemies (add it to an enemy\'s spawns.dungeons)'); }
   for (const b of BIOMES) if (!enemiesFor('biomes', b).length) err.push('biome "' + b + '" has no enemies');
   for (const [k, c] of Object.entries(Content.caves)) { for (const s of (c.stock || [])) for (const it of [].concat(s.item)) if (!Content.items[it]) err.push('cave "' + k + '" sells unknown item "' + it + '"'); if (c.npc) needSpr('cave "' + k + '"', c.npc); }
   return err;
@@ -13636,6 +13700,20 @@ defineSpriteVariant('gem_g', 'gem', { T: '#40d040', t: '#187018', h: '#b8f8a8' }
 defineSpriteVariant('gem_b', 'gem', { T: '#4080f0', t: '#183890', h: '#b8d8ff' });
 defineSpriteVariant('gem_r', 'gem', { T: '#f04040', t: '#901818', h: '#ffc0c0' });
 defineAnim('fairy', 12, (s, kit) => [s, kit.shiftCols(kit.shiftCols(s, 0, 5, -2), 10, 15, -2)]);
+defineSprite('hpiece', [
+  '................', '................', '................', '................',
+  '....kk..........',
+  '...krrk.........',
+  '..krwrrk........',
+  '..krrrrrk.......',
+  '..krrrrrk.......',
+  '...krrrrk.......',
+  '....krrrk.......',
+  '.....krrk.......',
+  '......krk.......',
+  '.......k........',
+  '................', '................',
+]);
 
 // ---- src/content/sprites/npcs.js ----
 // ===== content/sprites/npcs.js : Cave NPCs. =====
@@ -13994,18 +14072,142 @@ defineDropTable('common', 34, [
 // ---- src/content/dungeons.js ----
 (function () {
 // ===== content/dungeons.js : the nine dungeons =====
-// item: the treasure on the pedestal (an item id). Enemies and bosses are chosen by each enemy's
-// spawns.dungeons / bossOf lists, so a new enemy can join a dungeon without touching this file.
+// Each dungeon is drawn as a shape: '#' room, 'S' entrance (keep the space below it empty), 'H' hidden room, '.' nothing.
+// Up to 8 rows of 8. The generator wires doors, keys, locks, the boss (deepest room) and the treasure inside the shape.
+// Hidden rooms sit behind a secret wall (secret: tile name) and hold a heart piece (or gems) plus a lore tablet.
+// theme: wall / mortar / hi (brick), floor / edge / fhi (floor tiles), trim (door frames) as [r, g, b].
+// gimmicks: ids from content/gimmicks/. Enemies and bosses come from each enemy's spawns / bossOf.
 'use strict';
-defineDungeon(1, { name: 'THE MOSSY HOLLOW', item: 'boomerang' });
-defineDungeon(2, { name: 'BRAMBLE KEEP', item: 'bombbag' });
-defineDungeon(3, { name: 'THE SUNKEN STAIR', item: 'bow' });
-defineDungeon(4, { name: 'EMBERFORGE', item: 'rod' });
-defineDungeon(5, { name: 'WHISPERING VAULT', item: 'whistle' });
-defineDungeon(6, { name: 'TIDEGLASS HALLS', item: 'raft' });
-defineDungeon(7, { name: 'IRON CATHEDRAL', item: 'plate' });
-defineDungeon(8, { name: 'THE STARLESS DEEP', item: 'silver' });
-defineDungeon(9, { name: 'HOLLOW CROWN', item: null });
+defineDungeon(1, {
+  name: 'THE MOSSY HOLLOW', item: 'boomerang', gimmicks: ['brambles'], secret: 'BRAMBLE',
+  theme: { wall: [62, 96, 52], mortar: [30, 44, 24], hi: [96, 138, 70], floor: [92, 76, 52], edge: [54, 42, 28], fhi: [120, 100, 70], trim: [70, 52, 30] },
+  shape: [ // a leaf
+    '....##..',
+    '...###..',
+    '..####..',
+    '..###H..',
+    '...##...',
+    '...#....',
+    '...S....',
+  ],
+  lore: ['THE WYRMLING OF THIS HOLLOW HATCHED FROM A FROST-BLUE EGG. ITS MOTHER SLEEPS FAR TO THE NORTH, BEYOND THE PASS.'],
+});
+defineDungeon(2, {
+  name: 'BRAMBLE KEEP', item: 'bombbag', gimmicks: ['cracked'], loops: 0.4, bombLoops: 1,
+  theme: { wall: [118, 110, 104], mortar: [52, 46, 44], hi: [150, 142, 134], floor: [104, 70, 60], edge: [58, 36, 30], fhi: [130, 90, 76], trim: [120, 50, 40] },
+  shape: [ // a key
+    '..###...',
+    '..#.#...',
+    '..###...',
+    '...#....',
+    '...##...',
+    '...#....',
+    '...##H..',
+    '...S....',
+  ],
+  lore: ['THE KEEP WAS BUILT TO GUARD AN EMBER SHARD. ITS BUILDERS CRACKED EVERY WALL THEY COULD NOT AFFORD TO FINISH.'],
+});
+defineDungeon(3, {
+  name: 'THE SUNKEN STAIR', item: 'bow', gimmicks: ['drain'],
+  theme: { wall: [44, 104, 110], mortar: [18, 46, 52], hi: [70, 140, 146], floor: [56, 96, 92], edge: [26, 54, 52], fhi: [80, 124, 118], trim: [40, 80, 90] },
+  shape: [ // a spiral
+    '#####...',
+    '#...#...',
+    '#.#.#...',
+    '#.#H#...',
+    '#.###...',
+    '#.......',
+    'S.......',
+  ],
+  lore: ['WATER REMEMBERS. THE STAIR SANK THE NIGHT THE HOLLOW KING FIRST WOKE.'],
+});
+defineDungeon(4, {
+  name: 'EMBERFORGE', item: 'rod', gimmicks: ['conveyors'],
+  theme: { wall: [52, 48, 50], mortar: [20, 16, 18], hi: [84, 74, 72], floor: [70, 54, 46], edge: [36, 24, 20], fhi: [120, 70, 40], trim: [200, 90, 30] },
+  shape: [ // a hammer
+    '#######.',
+    '#######.',
+    '...#....',
+    '...#....',
+    '...#H...',
+    '...#....',
+    '...S....',
+  ],
+  lore: ['THE FORGE WYRM WAS BORN IN MAGMA. ITS FATHER STILL BREATHES BENEATH THE EASTERN VOLCANO.'],
+});
+defineDungeon(5, {
+  name: 'WHISPERING VAULT', item: 'whistle', gimmicks: ['fakewalls'], secret: 'FAKEWALL',
+  theme: { wall: [86, 64, 116], mortar: [36, 24, 52], hi: [120, 96, 150], floor: [196, 186, 160], edge: [120, 110, 90], fhi: [220, 212, 186], trim: [140, 110, 170] },
+  shape: [ // a keyhole
+    '..###...',
+    '.#####..',
+    '.##H##..',
+    '.#####..',
+    '..###...',
+    '..#.#...',
+    '..#.#...',
+    '..#S#...',
+  ],
+  lore: ['SOME WALLS ARE ONLY HABITS. LISTEN FOR THE ONES THAT WHISPER.'],
+});
+defineDungeon(6, {
+  name: 'TIDEGLASS HALLS', item: 'raft', gimmicks: ['glass'],
+  theme: { wall: [70, 150, 170], mortar: [30, 70, 84], hi: [140, 210, 224], floor: [200, 230, 236], edge: [120, 170, 184], fhi: [236, 250, 252], trim: [60, 120, 140] },
+  shape: [ // a fish
+    '.......#',
+    '.H###.##',
+    '########',
+    '.####.##',
+    '..#....#',
+    '..S.....',
+  ],
+  lore: ['THE GLASS WAS POURED FROM THE SEA ITSELF. IT HOLDS ITS BREATH FOR TWO HEARTBEATS, NO MORE.'],
+});
+defineDungeon(7, {
+  name: 'IRON CATHEDRAL', item: 'plate', gimmicks: ['statues'],
+  theme: { wall: [110, 114, 126], mortar: [50, 52, 60], hi: [150, 154, 168], floor: [90, 86, 80], edge: [50, 48, 44], fhi: [170, 140, 70], trim: [200, 170, 70] },
+  shape: [ // a cathedral
+    '...#....',
+    '...#....',
+    '..###...',
+    '.#####..',
+    '.##H##..',
+    '.#####..',
+    '.#####..',
+    '.##S##..',
+  ],
+  lore: ['THE HOLLOW KING TOOK THE THIRD HEAD OF THE HEARTHWYRM. WHAT REMAINS OF IT HUNGERS FOR LIGHT.'],
+});
+defineDungeon(8, {
+  name: 'THE STARLESS DEEP', item: 'silver', gimmicks: ['darkness'],
+  theme: { wall: [30, 34, 66], mortar: [10, 10, 24], hi: [52, 58, 100], floor: [36, 38, 60], edge: [16, 16, 30], fhi: [60, 64, 100], trim: [90, 100, 160] },
+  shape: [ // a constellation
+    '##....##',
+    '.#....#.',
+    '.###.##.',
+    '...###..',
+    '....#...',
+    '...H#...',
+    '....#...',
+    '....S...',
+  ],
+  lore: ['THREE FLAMES, ONE HEART. FIRE, FROST, AND A LIGHT THAT WAS STOLEN. THE HEARTH WAITS FOR ALL THREE.'],
+});
+defineDungeon(9, {
+  name: 'HOLLOW CROWN', item: null, gimmicks: ['statues', 'glass'],
+  theme: { wall: [40, 34, 30], mortar: [12, 10, 8], hi: [120, 96, 40], floor: [60, 52, 40], edge: [24, 20, 14], fhi: [200, 160, 60], trim: [230, 190, 70] },
+  shape: [ // a crown
+    '#..#..#.',
+    '##.#.##.',
+    '#######.',
+    '#######.',
+    '#H###H#.',
+    '#######.',
+    '...#....',
+    '...S....',
+  ],
+  lore: ['HERE THE KING WEARS WHAT HE STOLE.', 'EVEN A HOLLOW CROWN CASTS A SHADOW.'],
+});
 
 })();
 // ---- src/content/elites.js ----
@@ -14095,6 +14297,192 @@ defineProjectile({ id: 'candle', spr: 'flame', spd: 4, dmg: 1, sc: 0.8, z: -0.05
 defineProjectile({ id: 'palm', spr: 'flame', spd: 6, dmg: 2, sc: 1.1, z: -0.05, player: true, range: 3.5, fire: true, pierce: true });
 defineProjectile({ id: 'rodbolt', spr: 'magic', spd: 8, dmg: 3, player: true });
 defineProjectile({ id: 'thunder', spr: 'beam', spd: 14, dmg: 3, sc: 0.9, player: true, pierce: true, pierceShield: true, endFx: 'boom' });
+
+})();
+// ---- src/content/gimmicks/brambles.js ----
+(function () {
+// ===== content/gimmicks/brambles.js : thorny brambles block doors and rooms. Cut them with a sword or fist, or burn them. =====
+'use strict';
+defineTexture('bramble', (x, y, r, ctx) => {
+  const v = Math.sin(x * 0.7 + Math.sin(y * 0.5) * 2) + Math.sin(y * 0.9 - x * 0.3);
+  let c = v > 1.1 ? [70, 130, 50] : v > 0.2 ? [44, 92, 34] : [22, 46, 18];
+  if (((x * 7 + y * 13) % 23) === 0) c = [230, 220, 190]; // thorns
+  return ctx.vary(c, x, y, 0.2);
+});
+// cuttable / burnable tiles become their opensTo tile when hit
+defineTile('BRAMBLE', { solid: true, wall: 'bramble', floor: 'dfloor', cuttable: true, burnable: true, opensTo: 'OPENDOOR' });     // in a doorway
+defineTile('BRAMBLE_BUSH', { solid: true, wall: 'bramble', floor: 'dfloor', cuttable: true, burnable: true, opensTo: 'DFLOOR' }); // inside a room
+defineGimmick('brambles', {
+  doors(L, doors, { rnd }) {
+    for (const dr of doors) if (dr.t === TL.OPENDOOR && rnd() < 0.45) { L.set(dr.x, dr.y, TL.BRAMBLE); dr.a.links[dr.b.id] = dr.b.links[dr.a.id] = dr.t = TL.BRAMBLE; }
+  },
+  room(L, r, { rnd, set, lane }) {
+    if (rnd() < 0.5) for (let i = 0; i < 4; i++) { const x = 2 + rnd.int(9), y = 2 + rnd.int(5); if (!lane(x, y)) set(x, y, 'BRAMBLE_BUSH'); }
+  },
+});
+
+})();
+// ---- src/content/gimmicks/conveyors.js ----
+(function () {
+// ===== content/gimmicks/conveyors.js : moving floors that push you (toward lava, in the Emberforge) =====
+'use strict';
+const belt = (dir) => (x, y, r, f, ctx) => {
+  const u = dir > 0 ? (x - f * 4 + 64) % 16 : (x + f * 4) % 16; const edge = y < 3 || y > 28;
+  if (edge) return [60, 58, 60];
+  const chev = Math.abs((dir > 0 ? u : 15 - u) - 8 - Math.abs(y - 15.5) * 0.4) < 1.6;
+  return chev ? [230, 170, 40] : ((y >> 2) & 1 ? [44, 42, 46] : [54, 52, 56]);
+};
+defineTexture('conv_e', belt(1), { frames: 4 });
+defineTexture('conv_w', belt(-1), { frames: 4 });
+// conveyor: [dx, dy] push in tiles per second
+defineTile('CONV_E', { floor: 'conv_e', conveyor: [2.2, 0] });
+defineTile('CONV_W', { floor: 'conv_w', conveyor: [-2.2, 0] });
+defineGimmick('conveyors', {
+  room(L, r, { rnd, set }) {
+    if (rnd() < 0.5) return false;
+    for (let x = 1; x <= 11; x++) { set(x, 2, 'CONV_E'); set(x, 6, 'CONV_W'); }
+    set(11, 2, 'LAVA'); set(1, 6, 'LAVA'); // where the belts dump you
+    return true;
+  },
+});
+
+})();
+// ---- src/content/gimmicks/cracked.js ----
+(function () {
+// ===== content/gimmicks/cracked.js : cracked pillars inside rooms that bombs can clear (Bramble Keep) =====
+// Bramble Keep also sets loops: 0.4 and bombLoops: 1 in content/dungeons.js, so many shortcuts are behind cracked walls.
+'use strict';
+defineTile('CRACKED_PILLAR', { solid: true, wall: 'brick_bomb', floor: 'dfloor', bomb: true, opensTo: 'DFLOOR' });
+defineGimmick('cracked', {
+  room(L, r, { rnd, set, lane }) {
+    if (rnd() < 0.5) return false;
+    for (const [x, y] of [[3, 2], [9, 2], [3, 6], [9, 6], [5, 3], [7, 5]]) if (!lane(x, y) && rnd() < 0.7) set(x, y, 'CRACKED_PILLAR');
+    return true;
+  },
+});
+
+})();
+// ---- src/content/gimmicks/darkness.js ----
+(function () {
+// ===== content/gimmicks/darkness.js : the dungeon is dark. Light the braziers with fire (candle, fire rod, flame palm). =====
+'use strict';
+defineSprite('brazier', [
+  '................', '................', '................', '................', '................', '................',
+  '................', '................', '................',
+  '...kkkkkkkkkk...',
+  '...kGGGGGGGGk...',
+  '....kGggggGk....',
+  '.....kGGGGk.....',
+  '......kGGk......',
+  '.....kGGGGk.....',
+  '....kkkkkkkk....',
+]);
+defineProp('TORCH', 'brazier', { solid: true, scale: 0.7, unlit: true }); // a lit torch becomes the FLAME prop, which gives light
+defineGimmick('darkness', {
+  // braziers in every room's corners; the entrance's are already burning so you can see where you are
+  level(L) {
+    L.dark = true;
+    for (const r of Object.values(L.rooms)) for (const [x, y] of [[2, 1], [10, 1], [2, 7], [10, 7]]) {
+      const i = L.idx(r.rx * DSX + x, r.ry * DSY + y); if (TINFO[L.tiles[i]].solid) continue;
+      L.props[i] = r === L.startRoom ? PR.FLAME : PR.TORCH;
+    }
+  },
+});
+
+})();
+// ---- src/content/gimmicks/drain.js ----
+(function () {
+// ===== content/gimmicks/drain.js : rooms with a moat around the middle. Step on the floor switch to drain it. =====
+'use strict';
+defineTexture('switch', (x, y, r, th, ctx) => { const d = Math.max(Math.abs(x - 15.5), Math.abs(y - 15.5)); if (d < 8) return d < 6 ? [230, 200, 60] : [120, 100, 30]; return ctx.vary(th.floor, x, y, 0.15); }, { themed: true });
+defineTexture('switch_down', (x, y, r, th, ctx) => { const d = Math.max(Math.abs(x - 15.5), Math.abs(y - 15.5)); if (d < 8) return d < 6 ? [110, 96, 40] : [70, 60, 20]; return ctx.vary(th.floor, x, y, 0.15); }, { themed: true });
+defineTile('SWITCH', { floor: 'switch', pressure: true });
+defineTile('SWITCH_DOWN', { floor: 'switch_down' });
+defineGimmick('drain', {
+  room(L, r, { rnd, set }) {
+    if (!(r.key || r.map || r.compass || r.item || rnd() < 0.3)) return false;
+    for (let x = 3; x <= 9; x++) { set(x, 2, 'WATER'); set(x, 6, 'WATER'); }
+    for (let y = 3; y <= 5; y++) { set(3, y, 'WATER'); set(9, y, 'WATER'); }
+    const [sx, sy] = rnd.pick([[1, 1], [11, 1], [1, 7], [11, 7]]); set(sx, sy, 'SWITCH');
+    return true;
+  },
+  update(sim, L) {
+    for (const p of Object.values(sim.players)) {
+      if (!p.alive || p.lvl !== L.id) continue;
+      const tx = Math.floor(p.x), ty = Math.floor(p.y); const i = L.idx(tx, ty);
+      if (L.tiles[i] !== TL.SWITCH) continue;
+      sim.setTile(L.id, i, TL.SWITCH_DOWN);
+      const room = dungeonRoomAt(L, p.x, p.y); if (!room) continue;
+      for (let y = room.ry * DSY + 1; y < room.ry * DSY + DSY; y++) for (let x = room.rx * DSX + 1; x < room.rx * DSX + DSX; x++) if (L.get(x, y) === TL.WATER) sim.setTile(L.id, L.idx(x, y), TL.DFLOOR);
+      sim.sfx('secret', L.id); sim.hint(p, 'THE WATER DRAINS AWAY.');
+    }
+  },
+});
+
+})();
+// ---- src/content/gimmicks/fakewalls.js ----
+(function () {
+// ===== content/gimmicks/fakewalls.js : walls you can walk through. They whisper when you're close. =====
+// Used as the secret wall for hidden rooms in the Whispering Vault (secret: 'FAKEWALL'). The whisper is in ui/main.js.
+'use strict';
+defineTile('FAKEWALL', { solid: false, wall: 'brick', floor: 'dfloor', fake: true });
+defineGimmick('fakewalls', {
+  room(L, r, { rnd, set, lane }) {
+    if (rnd() < 0.6) return false;
+    // a solid-looking wall across the room with one fake block
+    const y = rnd.pick([2, 6]); const gap = rnd.pick([2, 3, 9, 10]);
+    for (let x = 1; x <= 11; x++) if (!lane(x, y)) set(x, y, x === gap ? 'FAKEWALL' : 'BRICK');
+    return true;
+  },
+});
+
+})();
+// ---- src/content/gimmicks/glass.js ----
+(function () {
+// ===== content/gimmicks/glass.js : glass floors crack when you stand on them, then break into a pit for a few seconds =====
+'use strict';
+defineTexture('glass', (x, y, r, th, ctx) => { const g = ((x + y) % 11 === 0) ? [255, 255, 255] : ((x - y + 64) % 17 === 0) ? [210, 240, 250] : [150, 210, 230]; return ctx.vary(g, x, y, 0.08); }, { themed: true });
+defineTexture('glass_cracked', (x, y, r, th, ctx) => { const crack = Math.abs((x - 16) - Math.sin(y * 0.4) * 6) < 0.8 || Math.abs((y - 12) - Math.sin(x * 0.5) * 5) < 0.8; return crack ? [40, 60, 70] : ctx.vary([150, 200, 220], x, y, 0.15); }, { themed: true });
+defineTexture('pit', (x, y) => { const d = Math.max(Math.abs(x - 15.5), Math.abs(y - 15.5)); return d > 14 ? [40, 50, 60] : [4, 4, 8]; });
+// pit: falling in costs a heart and puts you back where you last stood safely
+defineTile('GLASS', { floor: 'glass', glass: true });
+defineTile('GLASS_CRACKED', { floor: 'glass_cracked', glass: true });
+defineTile('PIT', { floor: 'pit', pit: true });
+const CRACK_AT = 0.6, BREAK_AT = 1.2, REFORM_AFTER = 8;
+defineGimmick('glass', {
+  room(L, r, { rnd, set }) {
+    if (rnd() < 0.5) return false;
+    for (let y = 3; y <= 5; y++) for (let x = 4; x <= 8; x++) set(x, y, 'GLASS');
+    return false; // blocks may still be added on top
+  },
+  update(sim, L, dt) {
+    L.glassT = L.glassT || {}; L.pits = L.pits || {};
+    for (const p of Object.values(sim.players)) {
+      if (!p.alive || p.lvl !== L.id) continue;
+      const i = L.idx(Math.floor(p.x), Math.floor(p.y)); const t = L.tiles[i];
+      if (!TINFO[t].glass) continue;
+      L.glassT[i] = (L.glassT[i] || 0) + dt;
+      if (t === TL.GLASS && L.glassT[i] > CRACK_AT) { sim.setTile(L.id, i, TL.GLASS_CRACKED); sim.sfx('clink', L.id, p.x, p.y); }
+      else if (t === TL.GLASS_CRACKED && L.glassT[i] > BREAK_AT) { sim.setTile(L.id, i, TL.PIT); L.pits[i] = sim.time; sim.sfx('shutter', L.id, p.x, p.y); }
+    }
+    for (const i in L.pits) if (sim.time - L.pits[i] > REFORM_AFTER) { sim.setTile(L.id, +i, TL.GLASS); delete L.pits[i]; L.glassT[i] = 0; }
+  },
+});
+
+})();
+// ---- src/content/gimmicks/statues.js ----
+(function () {
+// ===== content/gimmicks/statues.js : knight statues that come to life when you walk past =====
+// The waking itself is handled by the engine for any enemy with dormant: true (see sim.js).
+'use strict';
+defineGimmick('statues', {
+  room(L, r, { rnd, d }) {
+    if (rnd() < 0.5) return false;
+    const spots = rnd.shuffle([[2, 1], [10, 1], [2, 7], [10, 7], [3, 3], [9, 5]]);
+    r.dormant = spots.slice(0, 1 + rnd.int(2)).map(([x, y]) => ({ type: 'knight', x: r.rx * DSX + x + 0.5, y: r.ry * DSY + y + 0.5 }));
+    return false;
+  },
+});
 
 })();
 // ---- src/content/enemies/bat.js ----
@@ -14548,7 +14936,7 @@ defineEntity('bomb', {
       const bx = tx + dx, by = ty + dy; if (bx < 0 || by < 0 || bx >= L.w || by >= L.h) continue;
       if (dist2(bx + 0.5, by + 0.5, e.x, e.y) > (R * 0.9) ** 2) continue;
       const i = L.idx(bx, by); const t = L.tiles[i];
-      if (TINFO[t].bomb) { let nt = TL.OPENDOOR; if (t === TL.ROCK_BOMB) nt = (L.secretReveal[i] && L.secretReveal[i].tile) || TL.CAVE; if (t === TL.CWALL_BOMB) nt = TL.CFLOOR; sim.setTile(L.id, i, nt); found = true; }
+      if (TINFO[t].bomb) { let nt = TINFO[t].opensTo ? TL[TINFO[t].opensTo] : TL.OPENDOOR; if (t === TL.ROCK_BOMB) nt = (L.secretReveal[i] && L.secretReveal[i].tile) || TL.CAVE; if (t === TL.CWALL_BOMB) nt = TL.CFLOOR; sim.setTile(L.id, i, nt); found = true; }
     }
     if (found) sim.sfx('secret', L.id);
   },
@@ -14636,6 +15024,37 @@ defineItem({
 });
 
 })();
+// ---- src/content/items/devwarp.js ----
+(function () {
+// ===== content/items/devwarp.js : WARP STONE, a developer tool. Only heroes started with the debug loadout have it. =====
+// Each use jumps to the next destination: every dungeon entrance (inside), then back to the overworld start.
+'use strict';
+defineSprite('warpstone', [
+  '................', '................', '................',
+  '.......kk.......',
+  '......kppk......',
+  '.....kpmppk.....',
+  '....kpmwmppk....',
+  '....kpmmpppk....',
+  '....kppppPPk....',
+  '.....kppPPk.....',
+  '......kPPk......',
+  '.......kk.......',
+  '................', '................', '................', '................',
+]);
+defineItem({
+  id: 'devwarp', name: 'WARP STONE', sprite: 'warpstone', slot: 'b', order: 0,
+  owned: (p) => !!p.dbg,
+  give(sim, p) { },
+  use(sim, p) {
+    const stops = []; for (let d = 1; d <= 9; d++) if (sim.W.levels['d' + d]) stops.push('d' + d); stops.push('ow');
+    const i = (stops.indexOf(p.lvl) + 1) % stops.length; const T = sim.W.levels[stops[i]];
+    sim.teleport(p, T.id, T.spawn.x, T.spawn.y, T.spawn.a); sim.sfx('whistle', T.id);
+    sim.hint(p, 'WARP STONE: ' + (T.id === 'ow' ? 'THE WILDS' : 'LEVEL-' + T.dnum + ' ' + dungeonName(T.dnum)) + '. USE AGAIN FOR THE NEXT.');
+  },
+});
+
+})();
 // ---- src/content/items/dungeon.js ----
 (function () {
 // ===== content/items/dungeon.js : keys, maps, compasses and Ember Shards (shared by the party) =====
@@ -14679,6 +15098,15 @@ defineItem({ id: 'heart', name: 'HEART', sprite: 'heart', give(sim, p, ctx) { si
 defineItem({ id: 'fairy', name: 'FAIRY', sprite: 'fairy', pickup: { sc: 0.6, z: 0.3, float: true }, give(sim, p) { sim.heal(p, p.maxHp); sim.sfx('heal', p.lvl); } });
 // +1 heart for the whole party
 defineItem({ id: 'hcont', name: 'HEART CONTAINER', sprite: 'hcont', team: true, give(sim, p, ctx) { p.maxHp = Math.min(64, p.maxHp + 4); sim.heal(p, p.maxHp); ctx.banner(); } });
+// found in hidden dungeon rooms: every 4 pieces the party gains a heart
+defineItem({
+  id: 'hpiece', name: 'HEART PIECE', sprite: 'hpiece',
+  give(sim, p, ctx) {
+    const t = sim.team; t.hpieces = (t.hpieces || 0) + 1;
+    if (t.hpieces % 4 === 0) { ctx.banner('HEART PIECE 4/4 - A NEW HEART!', true); for (const o of Object.values(sim.players)) { o.maxHp = Math.min(64, o.maxHp + 4); sim.heal(o, o.maxHp); } }
+    else ctx.banner('HEART PIECE ' + (t.hpieces % 4) + '/4', true);
+  },
+});
 
 })();
 // ---- src/content/items/potion.js ----
@@ -14758,7 +15186,7 @@ defineItem({
 // ===== game/world.js : level generation (overworld, caves, dungeons) =====
 'use strict';
 const RW = 8, RH = 6, RSX = 16, RSY = 11; // overworld region grid & stride
-const DGW = 6, DGH = 6, DSX = 12, DSY = 8;  // dungeon room grid & stride
+const DGW = 8, DGH = 8, DSX = 12, DSY = 8;  // dungeon room grid (8x8 rooms, drawn as shapes in content/dungeons.js) & room size
 
 class Level {
   constructor(id, kind, w, h) {
@@ -15061,80 +15489,99 @@ function genCave(W, id, kind, exit, rnd) {
 
 // ---------- DUNGEONS ----------
 function genDungeon(W, d, rnd) {
-  const w = DGW * DSX + 1, h = DGH * DSY + 1; const L = new Level('d' + d, 'dungeon', w, h); W.levels['d' + d] = L; L.dnum = d;
+  const def = Content.dungeons[d] || {};
+  const w = DGW * DSX + 1, h = DGH * DSY + 1; const L = new Level('d' + d, 'dungeon', w, h); W.levels['d' + d] = L; L.dnum = d; L.theme = 'd' + d;
   for (let i = 0; i < w * h; i++) L.tiles[i] = TL.BRICK;
-  const nRooms = Math.min(30, 9 + Math.floor(d * 1.6) + rnd.int(3));
-  const start = { x: rnd.range(2, 3), y: DGH - 1 };
+  // ---- read the shape (roguelike runs may mirror it) ----
+  let shape = (def.shape || ['S']).map(r => r.padEnd(DGW, '.'));
+  if (W.mode === 'rogue' && rnd() < 0.5) shape = shape.map(r => r.split('').reverse().join(''));
+  const ox = 0, oy = DGH - shape.length; // shapes sit at the bottom of the 8x8 grid
+  const cellAt = (x, y) => { const r = shape[y - oy]; return r ? (r[x - ox] || '.') : '.'; };
   const rooms = {}; const key = (x, y) => y * DGW + x; const order = [];
-  const add = (x, y, parent) => { const r = { rx: x, ry: y, id: key(x, y), parent, children: [], depth: parent ? parent.depth + 1 : 0, enemies: [], links: {} }; rooms[r.id] = r; order.push(r); if (parent) parent.children.push(r); return r; };
-  add(start.x, start.y, null);
-  let guard = 0;
-  while (order.length < nRooms && guard++ < 2000) {
-    // prefer extending from deeper rooms for long dungeons
-    const base = rnd() < 0.6 ? order[order.length - 1 - rnd.int(Math.min(4, order.length))] : rnd.pick(order);
-    const dirs = rnd.shuffle([[1, 0], [-1, 0], [0, -1], [0, 1]]);
-    for (const [dx, dy] of dirs) { const nx = base.rx + dx, ny = base.ry + dy; if (nx < 0 || ny < 0 || nx >= DGW || ny >= DGH || rooms[key(nx, ny)]) continue; if (base === order[0] && dy === 1) continue; add(nx, ny, base); break; }
+  const mk = (x, y, hidden) => { const r = { rx: x, ry: y, id: key(x, y), parent: null, children: [], depth: 0, enemies: [], links: {}, hidden: !!hidden }; rooms[r.id] = r; return r; };
+  let start = null;
+  for (let y = 0; y < DGH; y++) for (let x = 0; x < DGW; x++) { const c = cellAt(x, y); if (c === '#' || c === 'S') { const r = mk(x, y); if (c === 'S') start = r; } else if (c === 'H') mk(x, y, true); }
+  const normal = (x, y) => { const r = rooms[key(x, y)]; return r && !r.hidden ? r : null; };
+  // ---- random spanning tree over the shape, grown depth-first so paths wind ----
+  start.depth = 0; order.push(start); const inTree = new Set([start.id]); const stack = [start];
+  while (stack.length) {
+    const cur = stack[stack.length - 1];
+    const nb = rnd.shuffle([[1, 0], [-1, 0], [0, -1], [0, 1]]).map(([dx, dy]) => normal(cur.rx + dx, cur.ry + dy)).filter(o => o && !inTree.has(o.id) && !(cur === start && o.ry > cur.ry));
+    if (!nb.length) { stack.pop(); continue; }
+    const o = nb[0]; o.parent = cur; o.depth = cur.depth + 1; cur.children.push(o); inTree.add(o.id); order.push(o); stack.push(o);
   }
-  L.rooms = rooms; L.startRoom = order[0];
-  // carve rooms
-  for (const r of order) { for (let y = r.ry * DSY + 1; y < r.ry * DSY + DSY; y++) for (let x = r.rx * DSX + 1; x < r.rx * DSX + DSX; x++) L.set(x, y, TL.DFLOOR); }
-  // doors from tree
-  const doorPos = (a, b) => { // returns tile coords of door between rooms a,b
-    if (a.ry === b.ry) { const x = Math.max(a.rx, b.rx) * DSX; return [x, a.ry * DSY + 4]; }
-    const y = Math.max(a.ry, b.ry) * DSY; return [a.rx * DSX + 6, y];
-  };
-  const setDoor = (a, b, t) => { const [x, y] = doorPos(a, b); L.set(x, y, t); a.links[b.id] = t; b.links[a.id] = t; };
-  for (const r of order) if (r.parent) setDoor(r.parent, r, TL.OPENDOOR);
-  // extra loops (some secret bomb walls)
+  L.rooms = rooms; L.startRoom = start;
+  for (const r of Object.values(rooms)) for (let y = r.ry * DSY + 1; y < r.ry * DSY + DSY; y++) for (let x = r.rx * DSX + 1; x < r.rx * DSX + DSX; x++) L.set(x, y, TL.DFLOOR);
+  const doorPos = (a, b) => a.ry === b.ry ? [Math.max(a.rx, b.rx) * DSX, a.ry * DSY + 4] : [a.rx * DSX + 6, Math.max(a.ry, b.ry) * DSY];
+  const doors = [];
+  const setDoor = (a, b, t, tree) => { const [x, y] = doorPos(a, b); L.set(x, y, t); a.links[b.id] = t; b.links[a.id] = t; let dr = doors.find(q => q.x === x && q.y === y); if (!dr) doors.push(dr = { a, b, x, y, t, tree }); else dr.t = t; };
+  for (const r of order) if (r.parent) setDoor(r.parent, r, TL.OPENDOOR, true);
+  // extra loops between neighbors (some behind cracked walls)
+  const loopChance = def.loops != null ? def.loops : 0.18;
   for (const r of order) for (const [dx, dy] of [[1, 0], [0, 1]]) {
-    const o = rooms[key(r.rx + dx, r.ry + dy)]; if (!o || o.parent === r || r.parent === o) continue;
-    if (rnd() < 0.18) setDoor(r, o, rnd() < 0.5 ? TL.BRICK_BOMB : TL.OPENDOOR);
+    const o = normal(r.rx + dx, r.ry + dy); if (!o || o.parent === r || r.parent === o || (r === start && dy === 1)) continue;
+    if (rnd() < loopChance) setDoor(r, o, rnd() < (def.bombLoops != null ? def.bombLoops : 0.5) ? TL.BRICK_BOMB : TL.OPENDOOR, false);
   }
-  // boss = deepest room; item room = deepest leaf not boss
+  // ---- boss, treasure, locks, keys (every key reachable without opening a lock, so no softlocks) ----
   const sorted = order.slice().sort((a, b) => b.depth - a.depth);
   const boss = sorted[0]; boss.boss = bossFor(d);
-  const leaves = order.filter(r => r !== boss && r !== order[0] && r.children.length === 0).sort((a, b) => b.depth - a.depth);
-  const itemRoom = leaves[0] || sorted[1]; const treasure = (Content.dungeons[d] || {}).item; if (treasure) itemRoom.item = treasure;
-  // locks: boss door + some others
-  const locked = new Set();
-  locked.add(boss.id);
+  const leaves = order.filter(r => r !== boss && r !== start && r.children.length === 0).sort((a, b) => b.depth - a.depth);
+  const itemRoom = leaves[0] || sorted[1]; if (def.item && itemRoom) itemRoom.item = def.item;
+  const locked = new Set([boss.id]);
   const lockN = Math.min(1 + Math.floor(d / 2), 5);
   const lockCand = rnd.shuffle(order.filter(r => r.depth >= 2 && r !== boss && r !== itemRoom));
   for (let i = 0; i < lockN - 1 && i < lockCand.length; i++) locked.add(lockCand[i].id);
   if (itemRoom && rnd() < 0.6) locked.add(itemRoom.id);
-  // key placement: every key is reachable without opening any lock, so no order of key use can softlock
-  const reach = new Set(); { const st = [order[0]]; while (st.length) { const r = st.pop(); if (reach.has(r.id)) continue; reach.add(r.id); for (const oid in r.links) { const o = rooms[oid]; if (locked.has(o.id) && o.parent === r) continue; if (locked.has(r.id) && r.parent === o) continue; st.push(o); } } }
+  const reach = new Set(); { const st = [start]; while (st.length) { const r = st.pop(); if (reach.has(r.id)) continue; reach.add(r.id); for (const oid in r.links) { const o = rooms[oid]; if (locked.has(o.id) && o.parent === r) continue; if (locked.has(r.id) && r.parent === o) continue; st.push(o); } } }
   let lockList = [...locked].filter(id => !reach.has(id));
-  const keySpots = rnd.shuffle(order.filter(r => reach.has(r.id) && r !== order[0] && !r.item && !r.boss));
+  const keySpots = rnd.shuffle(order.filter(r => reach.has(r.id) && r !== start && !r.item && !r.boss));
   while (lockList.length > keySpots.length) { const drop = lockList.find(id => id !== boss.id) || lockList[0]; lockList = lockList.filter(id => id !== drop); }
   for (let i = 0; i < lockList.length; i++) keySpots[i].key = true;
-  for (const id of lockList) { const r = rooms[id]; if (r.parent) setDoor(r.parent, r, TL.LOCKED); }
-  // map & compass
-  const mc = rnd.shuffle(order.filter(r => r !== order[0] && !r.boss && !r.item));
+  for (const id of lockList) { const r = rooms[id]; if (r.parent) setDoor(r.parent, r, TL.LOCKED, true); }
+  const mc = rnd.shuffle(order.filter(r => r !== start && !r.boss && !r.item));
   if (mc[0]) mc[0].map = true; if (mc[1]) mc[1].compass = true;
-  // contents
+  // ---- hidden rooms: joined to one neighbor through a secret wall; each holds a heart piece and a lore tablet ----
+  const secretT = TL[def.secret || 'BRICK_BOMB'] != null ? TL[def.secret || 'BRICK_BOMB'] : TL.BRICK_BOMB;
+  const hidden = Object.values(rooms).filter(r => r.hidden);
+  hidden.forEach((r, i) => {
+    const nb = rnd.shuffle([[1, 0], [-1, 0], [0, 1], [0, -1]]).map(([dx, dy]) => normal(r.rx + dx, r.ry + dy)).filter(Boolean)[0];
+    if (!nb) return; r.parent = nb; r.depth = nb.depth + 1; setDoor(nb, r, secretT, false);
+    r.reward = i === 0 ? 'hpiece' : 'gems100';
+    const lore = (def.lore || [])[i]; if (lore) { const si = L.idx(r.rx * DSX + 6, r.ry * DSY + 2); L.props[si] = PR.SIGN; L.signText = L.signText || {}; L.signText[si] = lore; }
+  });
+  // ---- gimmicks ----
+  const gimmicks = (def.gimmicks || []).map(g => Content.gimmicks[g]).filter(Boolean);
+  const gctx = { rnd, d, def };
+  for (const g of gimmicks) if (g.doors) g.doors(L, doors, gctx);
+  // ---- room contents ----
   const pool = enemiesFor('dungeons', d);
   for (const r of order) {
     const ix = r.rx * DSX, iy = r.ry * DSY;
-    if (r === order[0]) { L.set(ix + 6, iy + DSY, TL.DEXIT); continue; }
+    if (r === start) { L.set(ix + 6, iy + DSY, TL.DEXIT); continue; }
     if (r.boss) { r.enemies = [r.boss]; if (d >= 4) r.enemies.push(rnd.pick(pool)); r.shutter = true; continue; }
-    // layout pattern
-    const pat = rnd.int(7);
-    const blk = (x, y, t) => { if (x === 6 || y === 4) return; L.set(ix + x, iy + y, t || TL.BRICK); };
-    const block = (d >= 4 && rnd() < 0.25) ? TL.LAVA : TL.BRICK;
-    if (pat === 1) { blk(3, 2); blk(9, 2); blk(3, 6); blk(9, 6); }
-    else if (pat === 2) { for (let x = 2; x <= 10; x += 2) { blk(x, 2, block); blk(x, 6, block); } }
-    else if (pat === 3) { blk(5, 3); blk(7, 3); blk(5, 5); blk(7, 5); }
-    else if (pat === 4) { for (let y = 2; y <= 6; y++) { blk(2, y, block); blk(10, y, block); } }
-    else if (pat === 5) { for (let x = 3; x <= 9; x++) { blk(x, 2, block); blk(x, 6, block); } }
-    else if (pat === 6) { L.props[L.idx(ix + 2, iy + 1)] = PR.STATUE; L.props[L.idx(ix + 10, iy + 1)] = PR.STATUE; }
+    const lane = (x, y) => x === 6 || y === 4; // keep the cross through each room's doors clear
+    const rc = Object.assign({}, gctx, { ix, iy, lane, set: (x, y, t) => L.set(ix + x, iy + y, typeof t === 'string' ? TL[t] : t), prop: (x, y, pr) => { L.props[L.idx(ix + x, iy + y)] = pr; } });
+    let decorated = false; for (const g of gimmicks) if (g.room && g.room(L, r, rc)) decorated = true;
+    if (!decorated) {
+      const pat = rnd.int(7);
+      const blk = (x, y, t) => { if (lane(x, y)) return; L.set(ix + x, iy + y, t || TL.BRICK); };
+      const block = (d >= 4 && rnd() < 0.25) ? TL.LAVA : TL.BRICK;
+      if (pat === 1) { blk(3, 2); blk(9, 2); blk(3, 6); blk(9, 6); }
+      else if (pat === 2) { for (let x = 2; x <= 10; x += 2) { blk(x, 2, block); blk(x, 6, block); } }
+      else if (pat === 3) { blk(5, 3); blk(7, 3); blk(5, 5); blk(7, 5); }
+      else if (pat === 4) { for (let y = 2; y <= 6; y++) { blk(2, y, block); blk(10, y, block); } }
+      else if (pat === 5) { for (let x = 3; x <= 9; x++) { blk(x, 2, block); blk(x, 6, block); } }
+      else if (pat === 6) { L.props[L.idx(ix + 2, iy + 1)] = PR.STATUE; L.props[L.idx(ix + 10, iy + 1)] = PR.STATUE; }
+    }
     if (r.item) { r.enemies = []; L.props[L.idx(ix + 6, iy + 3)] = PR.PEDESTAL; const n = 1 + Math.floor(d / 3); for (let i = 0; i < n; i++) r.enemies.push(rnd.pick(pool)); continue; }
     const n = 2 + Math.floor(d / 2) + rnd.int(3);
     if (rnd() < 0.12 && !r.key && !r.map && !r.compass) continue; // empty room
     for (let i = 0; i < n; i++) r.enemies.push(rnd.pick(pool));
     r.shutter = rnd() < 0.25 || r.key;
   }
-  L.spawn = { x: order[0].rx * DSX + 6.5, y: order[0].ry * DSY + 6.2, a: -Math.PI / 2 };
+  for (const g of gimmicks) if (g.level) g.level(L, gctx);
+  L.gimmicks = def.gimmicks || [];
+  L.spawn = { x: start.rx * DSX + 6.5, y: start.ry * DSY + 6.2, a: -Math.PI / 2 };
   L.bossRoom = boss.id;
   const ent = W.dungeons[d]; L.exit = ent ? { lvl: 'ow', x: ent.x + 0.5, y: ent.y + 1.6, a: Math.PI / 2 } : { lvl: 'ow', x: W.levels.ow.spawn.x, y: W.levels.ow.spawn.y, a: 0 };
 }
@@ -15151,8 +15598,24 @@ function roomBounds(L, room) {
 // Only the host runs this. Clients send their position and actions; the host sends back snapshots.
 'use strict';
 // Enemy, item, projectile and elite definitions live in src/content and are looked up through core/registry.js.
+const SAVE_VERSION = 2;
+// Bring an old save up to date. v1 -> v2: dungeons were redrawn as shapes, so dungeon tile changes, cleared rooms,
+// keys and maps from v1 no longer fit; overworld progress, items and shards are kept. Tile/prop ids are remapped by name.
+function migrateSave(s) {
+  s = JSON.parse(JSON.stringify(s)); s.team = s.team || {}; s.mods = s.mods || {};
+  if (!s.v || s.v < 2) {
+    for (const lvl of Object.keys(s.mods)) if (lvl[0] === 'd') delete s.mods[lvl];
+    for (const t of ['cleared', 'taken']) for (const k of Object.keys(s.team[t] || {})) if (k[0] === 'd') delete s.team[t][k];
+    s.team.keys = {}; s.team.maps = {}; s.team.comps = {};
+  }
+  if (s.tileNames) for (const lvl in s.mods) for (const i in s.mods[lvl]) { const m = s.mods[lvl][i]; const tn = s.tileNames[m[0]]; if (tn && TL[tn] != null) m[0] = TL[tn]; const pn = s.propNames && s.propNames[m[1]]; if (pn) { const pi = PROPS.indexOf(pn); if (pi >= 0) m[1] = pi; } }
+  return s;
+}
 const REVIVE_TIME = 1.5, REVIVE_R2 = 2.6 * 2.6; // seconds to help a teammate up, and how close you must stand
-const SWORD_DMG = [1, 1, 2, 3];                // damage per sword level (0 = no sword, punches still do 1)
+const SWORD_DMG = [1, 1, 2, 3, 4];             // damage per sword level (0 = no sword, punches still do 1)
+// Enemy health multiplier by how many heroes are in the room (1, 2, 3, 4+). Adjusts live as people come and go.
+const PARTY_HP = [1, 1, 1.5, 2, 2.5];
+const partyMul = (n) => PARTY_HP[Math.min(4, Math.max(1, n))];
 
 function newPlayer(id, name, color, cls) {
   return {
@@ -15217,6 +15680,11 @@ class Sim {
       case 'revive': this.tryRevive(p); break;
       case 'sel': if (bItems().some(d => d.id === a.item)) p.sel = a.item; break;
       case 'hazard': this.hurtPlayer(p, 1, null); break;
+      case 'fall': { // fell into a pit: lose a heart, go back to the last safe spot (sent by the client, sanity-checked)
+        if (this.time - (p.fellAt || -9) < 0.8) break; p.fellAt = this.time;
+        const L = this.W.levels[p.lvl]; let x = +a.x, y = +a.y; if (!(dist2(x, y, p.x, p.y) < 64) || L.solidAt(x, y)) { x = L.spawn.x; y = L.spawn.y; }
+        p.inv = 0; this.hurtPlayer(p, 2, null); this.teleport(p, p.lvl, x, y, p.a); this.sfx('hurt', p.lvl); break;
+      }
       case 'warp': if (p.dbg) { const T = this.W.levels[a.to]; if (T) this.teleport(p, T.id, T.spawn.x, T.spawn.y, T.spawn.a); } break;
     }
   }
@@ -15284,7 +15752,7 @@ class Sim {
     const def = enemyDef(type); opts = opts || {}; const hp = opts.hp || def.hp;
     const e = this.spawn(Object.assign({ k: 'en', type, lvl, x, y, hp, maxHp: hp, f: Math.random() * TAU, b: opts.bounds || null, g: opts.group || null, st: 0, tm: 0.5, stun: 0, hurt: 0, spawnFx: 0.3, dmgMul: 1 }, opts));
     delete e.group; delete e.bounds; e.maxHp = e.hp;
-    const g = e.g && this.groups[e.g]; if (g && !g.cleared) g.ents.push(e);
+    const g = e.g && this.groups[e.g]; if (g && !g.cleared) { g.ents.push(e); e.hp *= g.mul || 1; e.maxHp *= g.mul || 1; }
     return e;
   }
   // drop an item on the ground
@@ -15294,7 +15762,10 @@ class Sim {
     this.time += dt;
     const plist = Object.values(this.players);
     const active = new Set(plist.map(p => p.lvl));
-    for (const lvl of active) this.initLevel(lvl);
+    for (const lvl of active) {
+      this.initLevel(lvl);
+      const L = this.W.levels[lvl]; for (const g of L.gimmicks || []) { const gm = Content.gimmicks[g]; if (gm && gm.update) gm.update(this, L, dt); }
+    }
     // groups activation
     for (const p of plist) if (p.alive) this.activateGroupFor(p);
     this.updateGroups(dt, plist);
@@ -15344,7 +15815,7 @@ class Sim {
     if (this.groups[key]) { this.groups[key].seen = this.time; return; }
     if (this.team.cleared[key] && L.kind === 'dungeon') { this.groups[key] = { key, ents: [], cleared: true, seen: this.time, room, lvl: L.id }; this.roomStatics(L, room, key, true); return; }
     if (L.kind === 'ow' && this.team.clearedAt[key] && this.time - this.team.clearedAt[key] < 90) { this.groups[key] = { key, ents: [], cleared: true, seen: this.time, room, lvl: L.id }; return; }
-    const g = { key, ents: [], cleared: false, seen: this.time, room, lvl: L.id }; this.groups[key] = g;
+    const g = { key, ents: [], cleared: false, seen: this.time, room, lvl: L.id, mul: 1 }; this.groups[key] = g;
     const b = roomBounds(L, room);
     const rnd = mulberry32(hashStr(key) + Math.floor(this.time * 1000));
     const tierMul = L.kind === 'dungeon' ? 1 + (L.dnum - 1) * 0.25 : 1 + room.tier * 0.4;
@@ -15360,6 +15831,10 @@ class Sim {
       const e = this.spawn({ k: 'en', type, lvl: L.id, x, y, hp, maxHp: hp, f: rnd() * TAU, b, g: key, st: 0, tm: rnd() * 2, stun: 0, hurt: 0, spawnFx: 0.5, dmgMul: L.kind === 'dungeon' ? Math.ceil(L.dnum / 3) : 1 + Math.floor(room.tier / 2) });
       if (!def.boss) { const ch = L.kind === 'dungeon' ? 0.05 + L.dnum * 0.015 : 0.06 + room.tier * 0.03; if (rnd() < ch) this.makeElite(e, rnd); }
       g.ents.push(e);
+    }
+    for (const s of room.dormant || []) { // statues that wake up when a hero walks close (gimmicks/statues.js)
+      const e = this.spawn({ k: 'en', type: s.type, lvl: L.id, x: s.x, y: s.y, hp: Math.ceil(enemyDef(s.type).hp * tierMul), f: Math.PI / 2, b, g: key, st: 0, tm: 0.5, stun: 0, hurt: 0, spawnFx: 0, dmgMul: L.kind === 'dungeon' ? Math.ceil(L.dnum / 3) : 1, dormant: true });
+      e.maxHp = e.hp; g.ents.push(e);
     }
     if (L.kind === 'dungeon') this.roomStatics(L, room, key, false);
     if (!g.ents.length) this.groupCleared(g, true);
@@ -15378,12 +15853,15 @@ class Sim {
     if (room.map) drop('map', -1);
     if (room.compass) drop('compass', 1);
     if (room.boss) { drop('hcont', -1.5); if (L.dnum < 9) drop('shard', 0); }
+    if (room.reward) drop(room.reward, 0); // hidden room treasure
   }
   updateGroups(dt, plist) {
     for (const k in this.groups) {
       const g = this.groups[k];
-      const inside = plist.some(p => p.room === k && p.lvl === g.lvl);
-      if (inside) g.seen = this.time;
+      const here = plist.filter(p => p.room === k && p.lvl === g.lvl).length;
+      if (here) g.seen = this.time;
+      // co-op scaling: rescale every enemy's health by the same share when the headcount changes
+      if (here && !g.cleared) { const m = partyMul(here); if (m !== g.mul) { for (const e of g.ents) { e.hp = e.hp * m / g.mul; e.maxHp = e.maxHp * m / g.mul; } g.mul = m; } }
       if (!g.cleared) {
         g.ents = g.ents.filter(e => !e.dead);
         if (!g.ents.length) this.groupCleared(g, false);
@@ -15435,7 +15913,7 @@ class Sim {
       if (e.b && (x < e.b.x0 + 0.2 || y < e.b.y0 + 0.2 || x > e.b.x1 - 0.2 || y > e.b.y1 - 0.2)) return true;
       for (const [ox, oy] of [[-r, -r], [r, -r], [-r, r], [r, r]]) {
         const tx = Math.floor(x + ox), ty = Math.floor(y + oy); const t = L.get(tx, ty); const ti = TINFO[t];
-        if (def && def.fly) { if (ti.solid && !ti.low) return true; } else { if (ti.solid || ti.hurt) return true; }
+        if (def && def.fly) { if (ti.solid && !ti.low) return true; } else { if (ti.solid || ti.hurt || ti.pit) return true; }
         const pr = L.props[ty * L.w + tx]; if (pr && PROP_INFO[pr].solid) return true;
       }
       return false;
@@ -15457,6 +15935,10 @@ class Sim {
   }
   updateEnemy(e, dt) {
     const def = enemyDef(e.type);
+    if (e.dormant) { // a statue until someone comes close
+      if (Object.values(this.players).some(p => p.alive && p.lvl === e.lvl && dist2(p.x, p.y, e.x, e.y) < 2.2 * 2.2)) this.wake(e);
+      return;
+    }
     if (e.spawnFx > 0) { e.spawnFx -= dt; return; }
     if (e.hurt > 0) e.hurt -= dt;
     if (e.stun > 0) { e.stun -= dt; return; }
@@ -15475,6 +15957,7 @@ class Sim {
       const rr = this.enemyRadius(e) + 0.28; if (dist2(pl.x, pl.y, e.x, e.y) < rr * rr) this.hurtPlayer(pl, def.dmg * (def.boss ? 1 : e.dmgMul), e);
     }
   }
+  wake(e) { e.dormant = false; e.spawnFx = 0.35; this.sfx('roar', e.lvl, e.x, e.y); this.puff(e, 1); }
   // ---- elites (content/elites.js) ----
   makeElite(e, rnd) {
     const list = Content.elites; let total = 0; for (const d of list) total += d.weight;
@@ -15501,6 +15984,7 @@ class Sim {
   // opt: pid (who hit it), silver, pierceShield, ignoreIframes, stunOnly. Returns true if the hit landed.
   damageEnemy(e, dmg, src, opt) {
     const def = enemyDef(e.type); opt = opt || {}; if (e.dead || e.spawnFx > 0) return false;
+    if (e.dormant) { this.sfx('clink', e.lvl, e.x, e.y); this.wake(e); return false; }
     if (e.hurt > 0 && !opt.ignoreIframes) return false;
     if (def.shield && src && !opt.pierceShield) { // blocks hits from the front
       const toSrc = Math.atan2(src.y - e.y, src.x - e.x); if (Math.abs(angDiff(e.f, toSrc)) < 0.9) { this.sfx('clink', e.lvl, e.x, e.y); e.stun = 0.15; return false; }
@@ -15550,6 +16034,7 @@ class Sim {
         if (p.cls === 'monk' && a.kind === 'punch3' && !def.boss) { e.kb = [Math.cos(p.a) * 14, Math.sin(p.a) * 14]; e.kbT = 0.2; e.stun = 0.5; }
       }
     }
+    this.cutAt(L, p.x + Math.cos(p.a) * 0.75, p.y + Math.sin(p.a) * 0.75); this.cutAt(L, p.x + Math.cos(p.a) * 1.25, p.y + Math.sin(p.a) * 1.25);
     if (hitAny && p.cls === 'monk') this.ev({ t: 'pow', lvl: p.lvl, x: p.x + Math.cos(p.a) * 0.9, y: p.y + Math.sin(p.a) * 0.9, big: a.kind === 'punch3' });
     // bush cutting / burn? sword cuts nothing; check bombable hint clink
     // beam at full health
@@ -15600,10 +16085,19 @@ class Sim {
       }
     }
   }
+  // tiles with cuttable: true (brambles) open when a sword or fist hits them
+  cutAt(L, x, y) {
+    const i = L.idx(Math.floor(x), Math.floor(y)); const ti = TINFO[L.tiles[i]];
+    if (ti && ti.cuttable) { this.setTile(L.id, i, TL[ti.opensTo] != null ? TL[ti.opensTo] : TL.DFLOOR); this.spawn({ k: 'fx', lvl: L.id, x: Math.floor(x) + 0.5, y: Math.floor(y) + 0.5, spr: 'puff', life: 0.3, sc: 0.9 }); this.sfx('hit', L.id); }
+  }
   burnAt(L, x, y) {
     const tx = Math.floor(x), ty = Math.floor(y);
     for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
       const bx = tx + dx, by = ty + dy; const i = L.idx(bx, by);
+      if (bx < 0 || by < 0 || bx >= L.w || by >= L.h) continue;
+      const ti = TINFO[L.tiles[i]];
+      if (ti && ti.burnable && dist2(bx + 0.5, by + 0.5, x, y) < 1.2) { this.setTile(L.id, i, TL[ti.opensTo] != null ? TL[ti.opensTo] : TL.DFLOOR); this.spawn({ k: 'fx', lvl: L.id, x: bx + 0.5, y: by + 0.5, spr: 'flame', life: 0.6, sc: 0.9 }); }
+      if (PR.TORCH != null && L.props[i] === PR.TORCH && dist2(bx + 0.5, by + 0.5, x, y) < 1.2) { this.setTile(L.id, i, null, PR.FLAME); this.sfx('fire', L.id); }
       if (L.props[i] === PR.BUSH && dist2(bx + 0.5, by + 0.5, x, y) < 0.7) {
         const rev = L.secretReveal[i];
         this.setTile(L.id, i, rev ? rev.tile : null, 0);
@@ -15653,7 +16147,7 @@ class Sim {
   entView(e) {
     let spr = e.spr, sc = e.sc || 0.8, z = e.z || 0, fl = 0;
     if (e.k === 'en') {
-      const def = enemyDef(e.type); spr = e.type; sc = def.sc * (e.scMul || 1); z = def.z || 0;
+      const def = enemyDef(e.type); spr = e.dormant ? 'statue' : e.type; sc = e.dormant ? 1.1 : def.sc * (e.scMul || 1); z = e.dormant ? 0 : def.z || 0;
       if (def.fly) z += Math.sin(e.t * 6) * 0.06;
       if (e.hurt > 0) fl |= 1; if (e.stun > 0) fl |= 2; if (def.phase) fl |= 4; if (e.spawnFx > 0) { spr = 'puff'; }
       if (def.view) z += def.view(e);
@@ -15679,9 +16173,12 @@ class Sim {
     const players = Object.assign({}, this.savedPlayers || {});
     for (const p of Object.values(this.players)) players[p.color] = this.playerSaveData(p);
     const cl = {}; for (const k in this.team.cleared) if (!k.startsWith('ow:')) cl[k] = true;
-    return { v: 1, seed: this.W.seed, mode: this.W.mode, team: { keys: this.team.keys, maps: this.team.maps, comps: this.team.comps, shards: this.team.shards, done: this.team.done, taken: this.team.taken, cleared: cl }, mods: this.mods, players, time: Date.now() };
+    const tileNames = []; for (const k in TL) tileNames[TL[k]] = k;
+    const propNames = PROPS.slice();
+    return { v: SAVE_VERSION, tileNames, propNames, seed: this.W.seed, mode: this.W.mode, team: { keys: this.team.keys, maps: this.team.maps, comps: this.team.comps, shards: this.team.shards, done: this.team.done, taken: this.team.taken, cleared: cl }, mods: this.mods, players, time: Date.now() };
   }
   loadSave(s) {
+    s = migrateSave(s);
     Object.assign(this.team, s.team); this.team.clearedAt = {}; this.mods = s.mods || {}; this.savedPlayers = s.players || {};
     for (const lvl in this.mods) { const L = this.W.levels[lvl]; if (!L) continue; for (const i in this.mods[lvl]) { const [t, pr] = this.mods[lvl][i]; L.tiles[i] = t; L.props[i] = pr; } }
     // never restore closed shutters
@@ -15743,8 +16240,17 @@ function lightFor(kind, d) {
   if (kind === 'cave') return clamp(1.2 - d / 10, 0.15, 1);
   return 1;
 }
+// Dark levels (L.dark): a small glow around you plus light from lit braziers (FLAME props) nearby.
+let _torches = [];
+function darkLight(wx, wy, camDist) {
+  let l = clamp(1.0 - camDist / 2.8, 0.02, 1);
+  for (let i = 0; i < _torches.length; i += 2) { const dx = wx - _torches[i], dy = wy - _torches[i + 1]; const tl = 1.2 - Math.sqrt(dx * dx + dy * dy) / 4.8; if (tl > l) l = tl; }
+  return l > 1 ? 1 : l;
+}
 function renderWorld(cam, L, ents, players, myId) {
   const W = R.W, H = R.H, buf = R.buf; const t = R.time;
+  const dark = !!L.dark; _torches = [];
+  if (dark) { const cx = Math.floor(cam.x), cy = Math.floor(cam.y); for (let y = Math.max(0, cy - 14); y <= Math.min(L.h - 1, cy + 14); y++) for (let x = Math.max(0, cx - 14); x <= Math.min(L.w - 1, cx + 14); x++) if (L.props[y * L.w + x] === PR.FLAME) _torches.push(x + 0.5, y + 0.5); }
   const dirX = Math.cos(cam.a), dirY = Math.sin(cam.a); const fov = 0.66 * (W / H) / 1.78;
   const plX = -dirY * fov, plY = dirX * fov;
   const hz = Math.round(H / 2 + cam.pitch); const eye = cam.eye;
@@ -15768,7 +16274,7 @@ function renderWorld(cam, L, ents, players, myId) {
   }
   // --- floor & ceiling casting ---
   const rdx0 = dirX - plX, rdy0 = dirY - plY, rdx1 = dirX + plX, rdy1 = dirY + plY;
-  const ceilTex = kind === 'dungeon' ? TEX.brick : TEX.cwall;
+  const ceilTex = kind === 'dungeon' ? texFor('brick', L) : TEX.cwall;
   for (let y = 0; y < H; y++) {
     const floorRow = y >= hz; if (!floorRow && outdoor) continue;
     const p = floorRow ? Math.max(0.5, y - hz) : hz - y; const posZ = (floorRow ? eye : 1 - eye) * H;
@@ -15782,12 +16288,12 @@ function renderWorld(cam, L, ents, players, myId) {
       let c;
       if (floorRow) {
         const tile = (cx < 0 || cy < 0 || cx >= L.w || cy >= L.h) ? (outdoor ? TL.GRASS : TL.DFLOOR) : L.tiles[cy * L.w + cx];
-        const ti = TINFO[tile]; let tex = TEX[ti.floor || 'grass'] || TEX.grass; if (Array.isArray(tex)) tex = tex[wf];
+        const ti = TINFO[tile]; let tex = texFor(ti.floor || 'grass', L) || TEX.grass; if (Array.isArray(tex)) tex = tex[wf];
         const tx = ((fx - cx) * TS) | 0, ty = ((fy - cy) * TS) | 0; c = tex[(ty & 31) * TS + (tx & 31)];
       } else {
         const tx = ((fx - cx) * TS) | 0, ty = ((fy - cy) * TS) | 0; c = shadeC(ceilTex[(ty & 31) * TS + (tx & 31)], 0.45);
       }
-      if (lf < 1) c = shadeC(c, lf); if (fogF > 0) c = fogC(c, fogF, fogR, fogG, fogB);
+      if (dark) c = shadeC(c, darkLight(fx, fy, rowD)); else if (lf < 1) c = shadeC(c, lf); if (fogF > 0) c = fogC(c, fogF, fogR, fogG, fogB);
       buf[row + x] = c; fx += stepX; fy += stepY;
     }
   }
@@ -15811,8 +16317,8 @@ function renderWorld(cam, L, ents, players, myId) {
     const lh = H / dist; const top = Math.round(hz - (1 - eye) * lh), bot = Math.round(hz + eye * lh);
     let wx = side === 0 ? cam.y + pd * rdy : cam.x + pd * rdx; wx -= Math.floor(wx);
     let tx = (wx * TS) | 0; if ((side === 0 && rdx > 0) || (side === 1 && rdy < 0)) tx = TS - 1 - tx;
-    const tex = TEX[TINFO[tile].wall] || TEX.brick;
-    let lf = lightFor(kind, dist) * (side ? 0.78 : 1); const fogF = outdoor ? clamp((dist - 9) / 9, 0, 0.85) : 0;
+    const tex = texFor(TINFO[tile].wall, L) || TEX.brick;
+    let lf = (dark ? darkLight(cam.x + rdx * pd, cam.y + rdy * pd, dist) : lightFor(kind, dist)) * (side ? 0.78 : 1); const fogF = outdoor ? clamp((dist - 9) / 9, 0, 0.85) : 0;
     const y0 = Math.max(0, top), y1 = Math.min(H, bot); const span = bot - top;
     for (let y = y0; y < y1; y++) {
       const ty = (((y - top) / span) * TS) | 0; let c = tex[(ty & 31) * TS + tx];
@@ -15854,7 +16360,7 @@ function renderWorld(cam, L, ents, players, myId) {
     const botY = hz + (eye - s.z) * (H / tY); const topY = botY - hgt;
     const x0 = Math.round(scrX - wid / 2), x1 = Math.round(scrX + wid / 2); const y0 = Math.round(topY), y1 = Math.round(botY);
     if (x1 < 0 || x0 >= W || y1 < 0 || y0 >= H) continue;
-    const dist = Math.sqrt(s.d); let lf = lightFor(kind, dist); if (s.fl & 8) lf = 1;
+    const dist = Math.sqrt(s.d); let lf = dark ? darkLight(s.x, s.y, dist) : lightFor(kind, dist); if (s.fl & 8) lf = 1;
     const fogF = outdoor ? clamp((dist - 9) / 9, 0, 0.85) : 0;
     const hurt = (s.fl & 1) && (Math.floor(t * 20) & 1); const stun = s.fl & 2; const ghost = s.fl & 4; const down = s.fl & 32;
     for (let x = Math.max(0, x0); x < Math.min(W, x1); x++) {
@@ -15995,12 +16501,12 @@ function drawMinimap(st, x0, y0, w, h) {
     const cw = Math.floor(w / DGW), ch = Math.floor(h / DGH); const hasMap = st.team.maps && st.team.maps[L.id], hasComp = st.team.comps && st.team.comps[L.id];
     for (const id in L.rooms) {
       const r = L.rooms[id]; const vis = st.seenRooms.has(L.id + ':' + id);
-      if (!vis && !hasMap) continue;
+      if (!vis && (!hasMap || r.hidden)) continue;
       const rx = x0 + r.rx * cw, ry = y0 + r.ry * ch;
       rect(rx + 1, ry + 1, cw - 2, ch - 2, vis ? rgb(90, 110, 200) : rgb(50, 56, 100));
       if (r.boss && hasComp && Math.floor(R.time * 3) & 1) rect(rx + cw / 2 - 1, ry + ch / 2 - 1, 3, 3, rgb(255, 50, 50));
       // doors
-      for (const oid in r.links) { const o = L.rooms[oid]; if (!o) continue; if (o.rx > r.rx) rect(rx + cw - 1, ry + ch / 2 - 1, 2, 2, rgb(160, 180, 255)); if (o.ry > r.ry) rect(rx + cw / 2 - 1, ry + ch - 1, 2, 2, rgb(160, 180, 255)); }
+      for (const oid in r.links) { const o = L.rooms[oid]; if (!o || (o.hidden && !st.seenRooms.has(L.id + ':' + oid)) || (r.hidden && !vis)) continue; if (o.rx > r.rx) rect(rx + cw - 1, ry + ch / 2 - 1, 2, 2, rgb(160, 180, 255)); if (o.ry > r.ry) rect(rx + cw / 2 - 1, ry + ch - 1, 2, 2, rgb(160, 180, 255)); }
     }
     for (const p of st.players) { if (p[1] !== L.id) continue; const c = p[0] === st.myId ? rgb(255, 255, 255) : c32(hexToRgb((PCOLORS.find(c => c.name === p[5]) || PCOLORS[0]).c)); const px0 = x0 + p[2] / DSX * cw, py0 = y0 + p[3] / DSY * ch; rect(px0 - 1, py0 - 1, 3, 3, c); }
     text('L' + L.dnum, x0 + 1, y0 + h - 8, rgb(255, 255, 255));
@@ -16029,9 +16535,9 @@ function drawBigMap(st) {
     textC('LEVEL-' + L.dnum + '  ' + dungeonName(L.dnum), W / 2, 8, rgb(255, 220, 120));
     const hasMap = st.team.maps[L.id], hasComp = st.team.comps[L.id];
     for (const id in L.rooms) {
-      const r = L.rooms[id]; const vis = st.seenRooms.has(L.id + ':' + id); if (!vis && !hasMap) continue;
+      const r = L.rooms[id]; const vis = st.seenRooms.has(L.id + ':' + id); if (!vis && (!hasMap || r.hidden)) continue;
       const rx = x0 + r.rx * cw, ry = y0 + r.ry * ch; rect(rx + 2, ry + 2, cw - 4, ch - 4, vis ? rgb(80, 100, 190) : rgb(40, 46, 90));
-      for (const oid in r.links) { const o = L.rooms[oid]; if (!o) continue; const t = r.links[oid]; const c = t === TL.LOCKED ? rgb(240, 200, 60) : t === TL.BRICK_BOMB ? 0 : rgb(160, 180, 255); if (!c) continue; if (o.rx > r.rx) rect(rx + cw - 3, ry + ch / 2 - 2, 6, 4, c); if (o.ry > r.ry) rect(rx + cw / 2 - 2, ry + ch - 3, 4, 6, c); }
+      for (const oid in r.links) { const o = L.rooms[oid]; if (!o || (o.hidden && !st.seenRooms.has(L.id + ':' + oid))) continue; const t = r.links[oid]; const c = t === TL.LOCKED ? rgb(240, 200, 60) : t === TL.BRICK_BOMB ? 0 : rgb(160, 180, 255); if (!c) continue; if (o.rx > r.rx) rect(rx + cw - 3, ry + ch / 2 - 2, 6, 4, c); if (o.ry > r.ry) rect(rx + cw / 2 - 2, ry + ch - 3, 4, 6, c); }
       if (r.boss && hasComp) rect(rx + cw / 2 - 2, ry + ch / 2 - 2, 5, 5, Math.floor(R.time * 3) & 1 ? rgb(255, 50, 50) : rgb(120, 20, 20));
       if (r.item && st.seenRooms.has(L.id + ':' + id)) blit(SPR[itemSprite(r.item)], rx + 2, ry + 1, 1);
     }
@@ -16112,6 +16618,7 @@ function sfx(name, vol) {
     case 'menu': tone(880, 0.05, 'square', 0.08 * v); break;
     case 'charge': tone(400, 0.12, 'sine', 0.06 * v, 800); break;
     case 'dash': noise(0.15, 0.2 * v, 6000); break;
+    case 'whisper': noise(0.9, 0.06 * v, 900); tone(220, 0.8, 'sine', 0.03 * v, 180); tone(330, 0.7, 'sine', 0.02 * v, 300); break;
   }
 }
 // ---- music: original procedural loops ----
@@ -16543,6 +17050,16 @@ function updateLocal(dt, inp) {
   const ct = L.get(Math.floor(Lc.x), Math.floor(Lc.y)); const cti = TINFO[ct];
   if ((cti.exit) && Lc.bumpT <= 0) { sendAction({ t: 'exit' }); Lc.bumpT = 0.8; }
   if (cti.stairs && L.portals[L.idx(Math.floor(Lc.x), Math.floor(Lc.y))] && Lc.bumpT <= 0) { sendAction({ t: 'enter', idx: L.idx(Math.floor(Lc.x), Math.floor(Lc.y)) }); Lc.bumpT = 0.8; }
+  // conveyor floors push you
+  if (cti.conveyor) { const cx = Lc.x + cti.conveyor[0] * dt, cy = Lc.y + cti.conveyor[1] * dt; if (!solid(cx, Lc.y)) Lc.x = cx; if (!solid(Lc.x, cy)) Lc.y = cy; }
+  // pits: fall in once your center is over one, and come back where you last stood safely
+  if (cti.pit) { const fx = Lc.x - Math.floor(Lc.x), fy = Lc.y - Math.floor(Lc.y); if (fx > 0.25 && fx < 0.75 && fy > 0.25 && fy < 0.75 && performance.now() - (Lc.fellAt || 0) > 900) { Lc.fellAt = performance.now(); sendAction({ t: 'fall', x: Lc.safeX, y: Lc.safeY }); Lc.flash = 0.4; Lc.flashC = rgb(0, 0, 0); } }
+  else if (!cti.hurt && !cti.glass && !cti.conveyor) { Lc.safeX = Lc.x; Lc.safeY = Lc.y; }
+  // walls you can walk through whisper when you're close
+  if (L.kind === 'dungeon' && R.time - (Lc.whisperAt || 0) > 2.5) {
+    let near = false; for (let dy = -2; dy <= 2 && !near; dy++) for (let dx = -2; dx <= 2; dx++) if (TINFO[L.get(Math.floor(Lc.x) + dx, Math.floor(Lc.y) + dy)].fake) { near = true; break; }
+    if (near) { Lc.whisperAt = R.time; sfx('whisper'); if (!Lc.whisperHint) { Lc.whisperHint = true; pushMsg('...SOMETHING WHISPERS NEARBY...', 3); } }
+  }
   // NPC auto-talk & sign
   for (const e of (snap.en || [])) { if (e[9] && dist2(e[2], e[3], Lc.x, Lc.y) < 6 && !Lc.npcTalked[e[0]]) { Lc.npcTalked[e[0]] = true; showDialog(e[9]); } }
   if (inp.interactP || (inp.atkP && me.sword === 0 && !monk)) {

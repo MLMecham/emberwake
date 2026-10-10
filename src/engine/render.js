@@ -51,8 +51,17 @@ function lightFor(kind, d) {
   if (kind === 'cave') return clamp(1.2 - d / 10, 0.15, 1);
   return 1;
 }
+// Dark levels (L.dark): a small glow around you plus light from lit braziers (FLAME props) nearby.
+let _torches = [];
+function darkLight(wx, wy, camDist) {
+  let l = clamp(1.0 - camDist / 2.8, 0.02, 1);
+  for (let i = 0; i < _torches.length; i += 2) { const dx = wx - _torches[i], dy = wy - _torches[i + 1]; const tl = 1.2 - Math.sqrt(dx * dx + dy * dy) / 4.8; if (tl > l) l = tl; }
+  return l > 1 ? 1 : l;
+}
 function renderWorld(cam, L, ents, players, myId) {
   const W = R.W, H = R.H, buf = R.buf; const t = R.time;
+  const dark = !!L.dark; _torches = [];
+  if (dark) { const cx = Math.floor(cam.x), cy = Math.floor(cam.y); for (let y = Math.max(0, cy - 14); y <= Math.min(L.h - 1, cy + 14); y++) for (let x = Math.max(0, cx - 14); x <= Math.min(L.w - 1, cx + 14); x++) if (L.props[y * L.w + x] === PR.FLAME) _torches.push(x + 0.5, y + 0.5); }
   const dirX = Math.cos(cam.a), dirY = Math.sin(cam.a); const fov = 0.66 * (W / H) / 1.78;
   const plX = -dirY * fov, plY = dirX * fov;
   const hz = Math.round(H / 2 + cam.pitch); const eye = cam.eye;
@@ -76,7 +85,7 @@ function renderWorld(cam, L, ents, players, myId) {
   }
   // --- floor & ceiling casting ---
   const rdx0 = dirX - plX, rdy0 = dirY - plY, rdx1 = dirX + plX, rdy1 = dirY + plY;
-  const ceilTex = kind === 'dungeon' ? TEX.brick : TEX.cwall;
+  const ceilTex = kind === 'dungeon' ? texFor('brick', L) : TEX.cwall;
   for (let y = 0; y < H; y++) {
     const floorRow = y >= hz; if (!floorRow && outdoor) continue;
     const p = floorRow ? Math.max(0.5, y - hz) : hz - y; const posZ = (floorRow ? eye : 1 - eye) * H;
@@ -90,12 +99,12 @@ function renderWorld(cam, L, ents, players, myId) {
       let c;
       if (floorRow) {
         const tile = (cx < 0 || cy < 0 || cx >= L.w || cy >= L.h) ? (outdoor ? TL.GRASS : TL.DFLOOR) : L.tiles[cy * L.w + cx];
-        const ti = TINFO[tile]; let tex = TEX[ti.floor || 'grass'] || TEX.grass; if (Array.isArray(tex)) tex = tex[wf];
+        const ti = TINFO[tile]; let tex = texFor(ti.floor || 'grass', L) || TEX.grass; if (Array.isArray(tex)) tex = tex[wf];
         const tx = ((fx - cx) * TS) | 0, ty = ((fy - cy) * TS) | 0; c = tex[(ty & 31) * TS + (tx & 31)];
       } else {
         const tx = ((fx - cx) * TS) | 0, ty = ((fy - cy) * TS) | 0; c = shadeC(ceilTex[(ty & 31) * TS + (tx & 31)], 0.45);
       }
-      if (lf < 1) c = shadeC(c, lf); if (fogF > 0) c = fogC(c, fogF, fogR, fogG, fogB);
+      if (dark) c = shadeC(c, darkLight(fx, fy, rowD)); else if (lf < 1) c = shadeC(c, lf); if (fogF > 0) c = fogC(c, fogF, fogR, fogG, fogB);
       buf[row + x] = c; fx += stepX; fy += stepY;
     }
   }
@@ -119,8 +128,8 @@ function renderWorld(cam, L, ents, players, myId) {
     const lh = H / dist; const top = Math.round(hz - (1 - eye) * lh), bot = Math.round(hz + eye * lh);
     let wx = side === 0 ? cam.y + pd * rdy : cam.x + pd * rdx; wx -= Math.floor(wx);
     let tx = (wx * TS) | 0; if ((side === 0 && rdx > 0) || (side === 1 && rdy < 0)) tx = TS - 1 - tx;
-    const tex = TEX[TINFO[tile].wall] || TEX.brick;
-    let lf = lightFor(kind, dist) * (side ? 0.78 : 1); const fogF = outdoor ? clamp((dist - 9) / 9, 0, 0.85) : 0;
+    const tex = texFor(TINFO[tile].wall, L) || TEX.brick;
+    let lf = (dark ? darkLight(cam.x + rdx * pd, cam.y + rdy * pd, dist) : lightFor(kind, dist)) * (side ? 0.78 : 1); const fogF = outdoor ? clamp((dist - 9) / 9, 0, 0.85) : 0;
     const y0 = Math.max(0, top), y1 = Math.min(H, bot); const span = bot - top;
     for (let y = y0; y < y1; y++) {
       const ty = (((y - top) / span) * TS) | 0; let c = tex[(ty & 31) * TS + tx];
@@ -162,7 +171,7 @@ function renderWorld(cam, L, ents, players, myId) {
     const botY = hz + (eye - s.z) * (H / tY); const topY = botY - hgt;
     const x0 = Math.round(scrX - wid / 2), x1 = Math.round(scrX + wid / 2); const y0 = Math.round(topY), y1 = Math.round(botY);
     if (x1 < 0 || x0 >= W || y1 < 0 || y0 >= H) continue;
-    const dist = Math.sqrt(s.d); let lf = lightFor(kind, dist); if (s.fl & 8) lf = 1;
+    const dist = Math.sqrt(s.d); let lf = dark ? darkLight(s.x, s.y, dist) : lightFor(kind, dist); if (s.fl & 8) lf = 1;
     const fogF = outdoor ? clamp((dist - 9) / 9, 0, 0.85) : 0;
     const hurt = (s.fl & 1) && (Math.floor(t * 20) & 1); const stun = s.fl & 2; const ghost = s.fl & 4; const down = s.fl & 32;
     for (let x = Math.max(0, x0); x < Math.min(W, x1); x++) {
@@ -303,12 +312,12 @@ function drawMinimap(st, x0, y0, w, h) {
     const cw = Math.floor(w / DGW), ch = Math.floor(h / DGH); const hasMap = st.team.maps && st.team.maps[L.id], hasComp = st.team.comps && st.team.comps[L.id];
     for (const id in L.rooms) {
       const r = L.rooms[id]; const vis = st.seenRooms.has(L.id + ':' + id);
-      if (!vis && !hasMap) continue;
+      if (!vis && (!hasMap || r.hidden)) continue;
       const rx = x0 + r.rx * cw, ry = y0 + r.ry * ch;
       rect(rx + 1, ry + 1, cw - 2, ch - 2, vis ? rgb(90, 110, 200) : rgb(50, 56, 100));
       if (r.boss && hasComp && Math.floor(R.time * 3) & 1) rect(rx + cw / 2 - 1, ry + ch / 2 - 1, 3, 3, rgb(255, 50, 50));
       // doors
-      for (const oid in r.links) { const o = L.rooms[oid]; if (!o) continue; if (o.rx > r.rx) rect(rx + cw - 1, ry + ch / 2 - 1, 2, 2, rgb(160, 180, 255)); if (o.ry > r.ry) rect(rx + cw / 2 - 1, ry + ch - 1, 2, 2, rgb(160, 180, 255)); }
+      for (const oid in r.links) { const o = L.rooms[oid]; if (!o || (o.hidden && !st.seenRooms.has(L.id + ':' + oid)) || (r.hidden && !vis)) continue; if (o.rx > r.rx) rect(rx + cw - 1, ry + ch / 2 - 1, 2, 2, rgb(160, 180, 255)); if (o.ry > r.ry) rect(rx + cw / 2 - 1, ry + ch - 1, 2, 2, rgb(160, 180, 255)); }
     }
     for (const p of st.players) { if (p[1] !== L.id) continue; const c = p[0] === st.myId ? rgb(255, 255, 255) : c32(hexToRgb((PCOLORS.find(c => c.name === p[5]) || PCOLORS[0]).c)); const px0 = x0 + p[2] / DSX * cw, py0 = y0 + p[3] / DSY * ch; rect(px0 - 1, py0 - 1, 3, 3, c); }
     text('L' + L.dnum, x0 + 1, y0 + h - 8, rgb(255, 255, 255));
@@ -337,9 +346,9 @@ function drawBigMap(st) {
     textC('LEVEL-' + L.dnum + '  ' + dungeonName(L.dnum), W / 2, 8, rgb(255, 220, 120));
     const hasMap = st.team.maps[L.id], hasComp = st.team.comps[L.id];
     for (const id in L.rooms) {
-      const r = L.rooms[id]; const vis = st.seenRooms.has(L.id + ':' + id); if (!vis && !hasMap) continue;
+      const r = L.rooms[id]; const vis = st.seenRooms.has(L.id + ':' + id); if (!vis && (!hasMap || r.hidden)) continue;
       const rx = x0 + r.rx * cw, ry = y0 + r.ry * ch; rect(rx + 2, ry + 2, cw - 4, ch - 4, vis ? rgb(80, 100, 190) : rgb(40, 46, 90));
-      for (const oid in r.links) { const o = L.rooms[oid]; if (!o) continue; const t = r.links[oid]; const c = t === TL.LOCKED ? rgb(240, 200, 60) : t === TL.BRICK_BOMB ? 0 : rgb(160, 180, 255); if (!c) continue; if (o.rx > r.rx) rect(rx + cw - 3, ry + ch / 2 - 2, 6, 4, c); if (o.ry > r.ry) rect(rx + cw / 2 - 2, ry + ch - 3, 4, 6, c); }
+      for (const oid in r.links) { const o = L.rooms[oid]; if (!o || (o.hidden && !st.seenRooms.has(L.id + ':' + oid))) continue; const t = r.links[oid]; const c = t === TL.LOCKED ? rgb(240, 200, 60) : t === TL.BRICK_BOMB ? 0 : rgb(160, 180, 255); if (!c) continue; if (o.rx > r.rx) rect(rx + cw - 3, ry + ch / 2 - 2, 6, 4, c); if (o.ry > r.ry) rect(rx + cw / 2 - 2, ry + ch - 3, 4, 6, c); }
       if (r.boss && hasComp) rect(rx + cw / 2 - 2, ry + ch / 2 - 2, 5, 5, Math.floor(R.time * 3) & 1 ? rgb(255, 50, 50) : rgb(120, 20, 20));
       if (r.item && st.seenRooms.has(L.id + ':' + id)) blit(SPR[itemSprite(r.item)], rx + 2, ry + 1, 1);
     }

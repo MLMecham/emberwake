@@ -2,8 +2,24 @@
 // Only the host runs this. Clients send their position and actions; the host sends back snapshots.
 'use strict';
 // Enemy, item, projectile and elite definitions live in src/content and are looked up through core/registry.js.
+const SAVE_VERSION = 2;
+// Bring an old save up to date. v1 -> v2: dungeons were redrawn as shapes, so dungeon tile changes, cleared rooms,
+// keys and maps from v1 no longer fit; overworld progress, items and shards are kept. Tile/prop ids are remapped by name.
+function migrateSave(s) {
+  s = JSON.parse(JSON.stringify(s)); s.team = s.team || {}; s.mods = s.mods || {};
+  if (!s.v || s.v < 2) {
+    for (const lvl of Object.keys(s.mods)) if (lvl[0] === 'd') delete s.mods[lvl];
+    for (const t of ['cleared', 'taken']) for (const k of Object.keys(s.team[t] || {})) if (k[0] === 'd') delete s.team[t][k];
+    s.team.keys = {}; s.team.maps = {}; s.team.comps = {};
+  }
+  if (s.tileNames) for (const lvl in s.mods) for (const i in s.mods[lvl]) { const m = s.mods[lvl][i]; const tn = s.tileNames[m[0]]; if (tn && TL[tn] != null) m[0] = TL[tn]; const pn = s.propNames && s.propNames[m[1]]; if (pn) { const pi = PROPS.indexOf(pn); if (pi >= 0) m[1] = pi; } }
+  return s;
+}
 const REVIVE_TIME = 1.5, REVIVE_R2 = 2.6 * 2.6; // seconds to help a teammate up, and how close you must stand
-const SWORD_DMG = [1, 1, 2, 3];                // damage per sword level (0 = no sword, punches still do 1)
+const SWORD_DMG = [1, 1, 2, 3, 4];             // damage per sword level (0 = no sword, punches still do 1)
+// Enemy health multiplier by how many heroes are in the room (1, 2, 3, 4+). Adjusts live as people come and go.
+const PARTY_HP = [1, 1, 1.5, 2, 2.5];
+const partyMul = (n) => PARTY_HP[Math.min(4, Math.max(1, n))];
 
 function newPlayer(id, name, color, cls) {
   return {
@@ -68,6 +84,11 @@ class Sim {
       case 'revive': this.tryRevive(p); break;
       case 'sel': if (bItems().some(d => d.id === a.item)) p.sel = a.item; break;
       case 'hazard': this.hurtPlayer(p, 1, null); break;
+      case 'fall': { // fell into a pit: lose a heart, go back to the last safe spot (sent by the client, sanity-checked)
+        if (this.time - (p.fellAt || -9) < 0.8) break; p.fellAt = this.time;
+        const L = this.W.levels[p.lvl]; let x = +a.x, y = +a.y; if (!(dist2(x, y, p.x, p.y) < 64) || L.solidAt(x, y)) { x = L.spawn.x; y = L.spawn.y; }
+        p.inv = 0; this.hurtPlayer(p, 2, null); this.teleport(p, p.lvl, x, y, p.a); this.sfx('hurt', p.lvl); break;
+      }
       case 'warp': if (p.dbg) { const T = this.W.levels[a.to]; if (T) this.teleport(p, T.id, T.spawn.x, T.spawn.y, T.spawn.a); } break;
     }
   }
@@ -135,7 +156,7 @@ class Sim {
     const def = enemyDef(type); opts = opts || {}; const hp = opts.hp || def.hp;
     const e = this.spawn(Object.assign({ k: 'en', type, lvl, x, y, hp, maxHp: hp, f: Math.random() * TAU, b: opts.bounds || null, g: opts.group || null, st: 0, tm: 0.5, stun: 0, hurt: 0, spawnFx: 0.3, dmgMul: 1 }, opts));
     delete e.group; delete e.bounds; e.maxHp = e.hp;
-    const g = e.g && this.groups[e.g]; if (g && !g.cleared) g.ents.push(e);
+    const g = e.g && this.groups[e.g]; if (g && !g.cleared) { g.ents.push(e); e.hp *= g.mul || 1; e.maxHp *= g.mul || 1; }
     return e;
   }
   // drop an item on the ground
@@ -145,7 +166,10 @@ class Sim {
     this.time += dt;
     const plist = Object.values(this.players);
     const active = new Set(plist.map(p => p.lvl));
-    for (const lvl of active) this.initLevel(lvl);
+    for (const lvl of active) {
+      this.initLevel(lvl);
+      const L = this.W.levels[lvl]; for (const g of L.gimmicks || []) { const gm = Content.gimmicks[g]; if (gm && gm.update) gm.update(this, L, dt); }
+    }
     // groups activation
     for (const p of plist) if (p.alive) this.activateGroupFor(p);
     this.updateGroups(dt, plist);
@@ -195,7 +219,7 @@ class Sim {
     if (this.groups[key]) { this.groups[key].seen = this.time; return; }
     if (this.team.cleared[key] && L.kind === 'dungeon') { this.groups[key] = { key, ents: [], cleared: true, seen: this.time, room, lvl: L.id }; this.roomStatics(L, room, key, true); return; }
     if (L.kind === 'ow' && this.team.clearedAt[key] && this.time - this.team.clearedAt[key] < 90) { this.groups[key] = { key, ents: [], cleared: true, seen: this.time, room, lvl: L.id }; return; }
-    const g = { key, ents: [], cleared: false, seen: this.time, room, lvl: L.id }; this.groups[key] = g;
+    const g = { key, ents: [], cleared: false, seen: this.time, room, lvl: L.id, mul: 1 }; this.groups[key] = g;
     const b = roomBounds(L, room);
     const rnd = mulberry32(hashStr(key) + Math.floor(this.time * 1000));
     const tierMul = L.kind === 'dungeon' ? 1 + (L.dnum - 1) * 0.25 : 1 + room.tier * 0.4;
@@ -211,6 +235,10 @@ class Sim {
       const e = this.spawn({ k: 'en', type, lvl: L.id, x, y, hp, maxHp: hp, f: rnd() * TAU, b, g: key, st: 0, tm: rnd() * 2, stun: 0, hurt: 0, spawnFx: 0.5, dmgMul: L.kind === 'dungeon' ? Math.ceil(L.dnum / 3) : 1 + Math.floor(room.tier / 2) });
       if (!def.boss) { const ch = L.kind === 'dungeon' ? 0.05 + L.dnum * 0.015 : 0.06 + room.tier * 0.03; if (rnd() < ch) this.makeElite(e, rnd); }
       g.ents.push(e);
+    }
+    for (const s of room.dormant || []) { // statues that wake up when a hero walks close (gimmicks/statues.js)
+      const e = this.spawn({ k: 'en', type: s.type, lvl: L.id, x: s.x, y: s.y, hp: Math.ceil(enemyDef(s.type).hp * tierMul), f: Math.PI / 2, b, g: key, st: 0, tm: 0.5, stun: 0, hurt: 0, spawnFx: 0, dmgMul: L.kind === 'dungeon' ? Math.ceil(L.dnum / 3) : 1, dormant: true });
+      e.maxHp = e.hp; g.ents.push(e);
     }
     if (L.kind === 'dungeon') this.roomStatics(L, room, key, false);
     if (!g.ents.length) this.groupCleared(g, true);
@@ -229,12 +257,15 @@ class Sim {
     if (room.map) drop('map', -1);
     if (room.compass) drop('compass', 1);
     if (room.boss) { drop('hcont', -1.5); if (L.dnum < 9) drop('shard', 0); }
+    if (room.reward) drop(room.reward, 0); // hidden room treasure
   }
   updateGroups(dt, plist) {
     for (const k in this.groups) {
       const g = this.groups[k];
-      const inside = plist.some(p => p.room === k && p.lvl === g.lvl);
-      if (inside) g.seen = this.time;
+      const here = plist.filter(p => p.room === k && p.lvl === g.lvl).length;
+      if (here) g.seen = this.time;
+      // co-op scaling: rescale every enemy's health by the same share when the headcount changes
+      if (here && !g.cleared) { const m = partyMul(here); if (m !== g.mul) { for (const e of g.ents) { e.hp = e.hp * m / g.mul; e.maxHp = e.maxHp * m / g.mul; } g.mul = m; } }
       if (!g.cleared) {
         g.ents = g.ents.filter(e => !e.dead);
         if (!g.ents.length) this.groupCleared(g, false);
@@ -286,7 +317,7 @@ class Sim {
       if (e.b && (x < e.b.x0 + 0.2 || y < e.b.y0 + 0.2 || x > e.b.x1 - 0.2 || y > e.b.y1 - 0.2)) return true;
       for (const [ox, oy] of [[-r, -r], [r, -r], [-r, r], [r, r]]) {
         const tx = Math.floor(x + ox), ty = Math.floor(y + oy); const t = L.get(tx, ty); const ti = TINFO[t];
-        if (def && def.fly) { if (ti.solid && !ti.low) return true; } else { if (ti.solid || ti.hurt) return true; }
+        if (def && def.fly) { if (ti.solid && !ti.low) return true; } else { if (ti.solid || ti.hurt || ti.pit) return true; }
         const pr = L.props[ty * L.w + tx]; if (pr && PROP_INFO[pr].solid) return true;
       }
       return false;
@@ -308,6 +339,10 @@ class Sim {
   }
   updateEnemy(e, dt) {
     const def = enemyDef(e.type);
+    if (e.dormant) { // a statue until someone comes close
+      if (Object.values(this.players).some(p => p.alive && p.lvl === e.lvl && dist2(p.x, p.y, e.x, e.y) < 2.2 * 2.2)) this.wake(e);
+      return;
+    }
     if (e.spawnFx > 0) { e.spawnFx -= dt; return; }
     if (e.hurt > 0) e.hurt -= dt;
     if (e.stun > 0) { e.stun -= dt; return; }
@@ -326,6 +361,7 @@ class Sim {
       const rr = this.enemyRadius(e) + 0.28; if (dist2(pl.x, pl.y, e.x, e.y) < rr * rr) this.hurtPlayer(pl, def.dmg * (def.boss ? 1 : e.dmgMul), e);
     }
   }
+  wake(e) { e.dormant = false; e.spawnFx = 0.35; this.sfx('roar', e.lvl, e.x, e.y); this.puff(e, 1); }
   // ---- elites (content/elites.js) ----
   makeElite(e, rnd) {
     const list = Content.elites; let total = 0; for (const d of list) total += d.weight;
@@ -352,6 +388,7 @@ class Sim {
   // opt: pid (who hit it), silver, pierceShield, ignoreIframes, stunOnly. Returns true if the hit landed.
   damageEnemy(e, dmg, src, opt) {
     const def = enemyDef(e.type); opt = opt || {}; if (e.dead || e.spawnFx > 0) return false;
+    if (e.dormant) { this.sfx('clink', e.lvl, e.x, e.y); this.wake(e); return false; }
     if (e.hurt > 0 && !opt.ignoreIframes) return false;
     if (def.shield && src && !opt.pierceShield) { // blocks hits from the front
       const toSrc = Math.atan2(src.y - e.y, src.x - e.x); if (Math.abs(angDiff(e.f, toSrc)) < 0.9) { this.sfx('clink', e.lvl, e.x, e.y); e.stun = 0.15; return false; }
@@ -401,6 +438,7 @@ class Sim {
         if (p.cls === 'monk' && a.kind === 'punch3' && !def.boss) { e.kb = [Math.cos(p.a) * 14, Math.sin(p.a) * 14]; e.kbT = 0.2; e.stun = 0.5; }
       }
     }
+    this.cutAt(L, p.x + Math.cos(p.a) * 0.75, p.y + Math.sin(p.a) * 0.75); this.cutAt(L, p.x + Math.cos(p.a) * 1.25, p.y + Math.sin(p.a) * 1.25);
     if (hitAny && p.cls === 'monk') this.ev({ t: 'pow', lvl: p.lvl, x: p.x + Math.cos(p.a) * 0.9, y: p.y + Math.sin(p.a) * 0.9, big: a.kind === 'punch3' });
     // bush cutting / burn? sword cuts nothing; check bombable hint clink
     // beam at full health
@@ -451,10 +489,19 @@ class Sim {
       }
     }
   }
+  // tiles with cuttable: true (brambles) open when a sword or fist hits them
+  cutAt(L, x, y) {
+    const i = L.idx(Math.floor(x), Math.floor(y)); const ti = TINFO[L.tiles[i]];
+    if (ti && ti.cuttable) { this.setTile(L.id, i, TL[ti.opensTo] != null ? TL[ti.opensTo] : TL.DFLOOR); this.spawn({ k: 'fx', lvl: L.id, x: Math.floor(x) + 0.5, y: Math.floor(y) + 0.5, spr: 'puff', life: 0.3, sc: 0.9 }); this.sfx('hit', L.id); }
+  }
   burnAt(L, x, y) {
     const tx = Math.floor(x), ty = Math.floor(y);
     for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
       const bx = tx + dx, by = ty + dy; const i = L.idx(bx, by);
+      if (bx < 0 || by < 0 || bx >= L.w || by >= L.h) continue;
+      const ti = TINFO[L.tiles[i]];
+      if (ti && ti.burnable && dist2(bx + 0.5, by + 0.5, x, y) < 1.2) { this.setTile(L.id, i, TL[ti.opensTo] != null ? TL[ti.opensTo] : TL.DFLOOR); this.spawn({ k: 'fx', lvl: L.id, x: bx + 0.5, y: by + 0.5, spr: 'flame', life: 0.6, sc: 0.9 }); }
+      if (PR.TORCH != null && L.props[i] === PR.TORCH && dist2(bx + 0.5, by + 0.5, x, y) < 1.2) { this.setTile(L.id, i, null, PR.FLAME); this.sfx('fire', L.id); }
       if (L.props[i] === PR.BUSH && dist2(bx + 0.5, by + 0.5, x, y) < 0.7) {
         const rev = L.secretReveal[i];
         this.setTile(L.id, i, rev ? rev.tile : null, 0);
@@ -504,7 +551,7 @@ class Sim {
   entView(e) {
     let spr = e.spr, sc = e.sc || 0.8, z = e.z || 0, fl = 0;
     if (e.k === 'en') {
-      const def = enemyDef(e.type); spr = e.type; sc = def.sc * (e.scMul || 1); z = def.z || 0;
+      const def = enemyDef(e.type); spr = e.dormant ? 'statue' : e.type; sc = e.dormant ? 1.1 : def.sc * (e.scMul || 1); z = e.dormant ? 0 : def.z || 0;
       if (def.fly) z += Math.sin(e.t * 6) * 0.06;
       if (e.hurt > 0) fl |= 1; if (e.stun > 0) fl |= 2; if (def.phase) fl |= 4; if (e.spawnFx > 0) { spr = 'puff'; }
       if (def.view) z += def.view(e);
@@ -530,9 +577,12 @@ class Sim {
     const players = Object.assign({}, this.savedPlayers || {});
     for (const p of Object.values(this.players)) players[p.color] = this.playerSaveData(p);
     const cl = {}; for (const k in this.team.cleared) if (!k.startsWith('ow:')) cl[k] = true;
-    return { v: 1, seed: this.W.seed, mode: this.W.mode, team: { keys: this.team.keys, maps: this.team.maps, comps: this.team.comps, shards: this.team.shards, done: this.team.done, taken: this.team.taken, cleared: cl }, mods: this.mods, players, time: Date.now() };
+    const tileNames = []; for (const k in TL) tileNames[TL[k]] = k;
+    const propNames = PROPS.slice();
+    return { v: SAVE_VERSION, tileNames, propNames, seed: this.W.seed, mode: this.W.mode, team: { keys: this.team.keys, maps: this.team.maps, comps: this.team.comps, shards: this.team.shards, done: this.team.done, taken: this.team.taken, cleared: cl }, mods: this.mods, players, time: Date.now() };
   }
   loadSave(s) {
+    s = migrateSave(s);
     Object.assign(this.team, s.team); this.team.clearedAt = {}; this.mods = s.mods || {}; this.savedPlayers = s.players || {};
     for (const lvl in this.mods) { const L = this.W.levels[lvl]; if (!L) continue; for (const i in this.mods[lvl]) { const [t, pr] = this.mods[lvl][i]; L.tiles[i] = t; L.props[i] = pr; } }
     // never restore closed shutters

@@ -139,6 +139,16 @@ function updateLocal(dt, inp) {
   const ct = L.get(Math.floor(Lc.x), Math.floor(Lc.y)); const cti = TINFO[ct];
   if ((cti.exit) && Lc.bumpT <= 0) { sendAction({ t: 'exit' }); Lc.bumpT = 0.8; }
   if (cti.stairs && L.portals[L.idx(Math.floor(Lc.x), Math.floor(Lc.y))] && Lc.bumpT <= 0) { sendAction({ t: 'enter', idx: L.idx(Math.floor(Lc.x), Math.floor(Lc.y)) }); Lc.bumpT = 0.8; }
+  // conveyor floors push you
+  if (cti.conveyor) { const cx = Lc.x + cti.conveyor[0] * dt, cy = Lc.y + cti.conveyor[1] * dt; if (!solid(cx, Lc.y)) Lc.x = cx; if (!solid(Lc.x, cy)) Lc.y = cy; }
+  // pits: fall in once your center is over one, and come back where you last stood safely
+  if (cti.pit) { const fx = Lc.x - Math.floor(Lc.x), fy = Lc.y - Math.floor(Lc.y); if (fx > 0.25 && fx < 0.75 && fy > 0.25 && fy < 0.75 && performance.now() - (Lc.fellAt || 0) > 900) { Lc.fellAt = performance.now(); sendAction({ t: 'fall', x: Lc.safeX, y: Lc.safeY }); Lc.flash = 0.4; Lc.flashC = rgb(0, 0, 0); } }
+  else if (!cti.hurt && !cti.glass && !cti.conveyor) { Lc.safeX = Lc.x; Lc.safeY = Lc.y; }
+  // walls you can walk through whisper when you're close
+  if (L.kind === 'dungeon' && R.time - (Lc.whisperAt || 0) > 2.5) {
+    let near = false; for (let dy = -2; dy <= 2 && !near; dy++) for (let dx = -2; dx <= 2; dx++) if (TINFO[L.get(Math.floor(Lc.x) + dx, Math.floor(Lc.y) + dy)].fake) { near = true; break; }
+    if (near) { Lc.whisperAt = R.time; sfx('whisper'); if (!Lc.whisperHint) { Lc.whisperHint = true; pushMsg('...SOMETHING WHISPERS NEARBY...', 3); } }
+  }
   // NPC auto-talk & sign
   for (const e of (snap.en || [])) { if (e[9] && dist2(e[2], e[3], Lc.x, Lc.y) < 6 && !Lc.npcTalked[e[0]]) { Lc.npcTalked[e[0]] = true; showDialog(e[9]); } }
   if (inp.interactP || (inp.atkP && me.sword === 0 && !monk)) {

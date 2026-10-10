@@ -101,9 +101,69 @@ Need a color that isn't there? Give the sprite its own palette: `pal: { Q: '#ff0
 
 Stunned enemies freeze on their first frame. The heroes' silly run cycle is in `content/sprites/heroes.js` (`RUN_FRONT`, `RUN_SIDE`, `RUN_SEQ`, `RUN_SCALE`).
 
+## Dungeons: shapes, colors, gimmicks
+
+Each dungeon in `content/dungeons.js` is **drawn**:
+
+```js
+shape: [        // up to 8 rows of 8
+  '....##..',   // '#' a room
+  '...###..',   // 'S' the entrance (keep the space directly below it empty)
+  '..###H..',   // 'H' a hidden room: behind a secret wall, holds a heart piece (4 = +1 heart) and a lore tablet
+  '...S....',   // '.' nothing
+],
+theme: { wall, mortar, hi, floor, edge, fhi, trim },   // [r, g, b] colors for bricks, floor tiles and door frames
+gimmicks: ['glass'],                                    // ids from content/gimmicks/
+secret: 'FAKEWALL',                                     // the tile hiding the H rooms (default: a bombable wall)
+lore: ['TEXT ON THE FIRST HIDDEN TABLET', '...'],
+```
+
+The generator builds a random tree of doors inside the shape. The boss goes in the deepest room and the treasure in the deepest dead end; it then places keys, locks (always solvable), the map and the compass. Roguelike runs sometimes mirror the shape. Missing chunks in the drawn outline give players a hint that a hidden room is there.
+
+## Gimmicks
+
+Each file in `src/content/gimmicks/` is one dungeon mechanic: brambles, cracked, drain, conveyors, fakewalls, glass, statues, darkness. A gimmick can define:
+- `doors(L, doors, ctx)` changes door tiles. Brambles uses it to block doorways.
+- `room(L, r, ctx)` decorates a room. `ctx` has `set(x, y, 'TILE')`, `prop(x, y, PR.X)`, `lane(x, y)` (keep the door paths clear), `rnd` and `d`. Return true to skip the default block layout.
+- `level(L, ctx)` runs once per dungeon, for example to set `L.dark = true`.
+- `update(sim, L, dt)` runs every tick while heroes are inside: switches, cracking glass and so on.
+
+Then add its id to a dungeon's `gimmicks` list. Statues work by giving rooms `r.dormant = [{ type, x, y }]`, and the engine wakes them when a hero gets close.
+
+## Tiles, textures and props
+
+- **`defineTile('NAME', { ... })`** creates `TL.NAME`. The engine understands these flags:
+
+  | Flag | Effect |
+  |---|---|
+  | `solid` | Blocks movement |
+  | `wall: 'texture'` | Drawn as a wall |
+  | `floor: 'texture'` | Drawn as a floor |
+  | `water` | Water; the raft lets you cross it |
+  | `hurt` | Damages you while you stand on it, like lava |
+  | `pit` | You fall in and lose a heart |
+  | `conveyor: [dx, dy]` | Pushes you |
+  | `cuttable` / `burnable` + `opensTo: 'TILE'` | A sword or fire turns it into the `opensTo` tile |
+  | `bomb` + `opensTo` | A bomb turns it into the `opensTo` tile |
+  | `fake` | Looks solid, you can walk through it, and it whispers |
+  | `glass`, `pressure` | Read by gimmick code |
+
+- **`defineTexture('name', fn, opts)`:** `fn(x, y, rnd, ctx)` returns `[r, g, b]` for each pixel of a 32×32 texture. With `{ themed: true }`, fn also receives the dungeon's theme colors, and you get one copy per dungeon. With `{ frames: 4 }` it's animated.
+- **`defineProp('NAME', 'spriteId', { solid, scale })`** creates `PR.NAME`, an object drawn on a tile.
+
+Saves store tile and prop names, so adding new tiles never breaks old saves.
+
+## Co-op scaling
+
+Enemy health scales with how many heroes are in the room, set by `PARTY_HP` in `game/sim.js`: 1×, 1.5×, 2× and 2.5× for 1 to 4 heroes. It adjusts live as people come and go, and each enemy keeps the share of health it has left.
+
+## Dev tools
+
+Start with the debug loadout on and you get a **Warp Stone** (B-item). Each use jumps to the next dungeon's entrance, then back to the overworld.
+
 ## Projectiles, drops, dungeons, caves
 
 - **`content/projectiles.js`:** `defineProjectile({ id, spr, spd, dmg, ... })`. Options include `player`, `range`, `pierce`, `fire`, `blockable`, `pierceShield` and `endFx`.
 - **`content/drops.js`:** `defineDropTable(id, weightOfNothing, [{ item, w, when? }])`. Point an enemy at a table with `drops: 'id'`.
-- **`content/dungeons.js`:** each dungeon's name and pedestal treasure.
+- **`content/dungeons.js`:** each dungeon's name, pedestal treasure, shape, colors, gimmicks and lore (see above).
 - **`content/caves.js`:** what each cave kind says and sells. Which caves appear on the map is `CAVE_MIX` in `game/world.js`.

@@ -1,23 +1,75 @@
 {
   "_readme": "Load order for the bundle. A path ending in /*.js includes every .js file in that folder, alphabetically, so new content files are picked up automatically. 'scoped' files run in their own scope so their helper names can't clash. 'browser' files are skipped by tools/check.js.",
   "files": [
-    { "path": "src/core/util.js" },
-    { "path": "src/core/font.js" },
-    { "path": "src/engine/spritekit.js" },
-    { "path": "src/engine/tex.js" },
-    { "path": "src/core/registry.js" },
-    { "path": "src/content/sprites/*.js" },
-    { "path": "src/content/ai.js" },
-    { "path": "src/content/*.js", "scoped": true, "skip": ["src/content/ai.js"] },
-    { "path": "src/content/enemies/*.js", "scoped": true },
-    { "path": "src/content/items/*.js", "scoped": true },
-    { "path": "src/game/world.js" },
-    { "path": "src/game/sim.js" },
-    { "path": "src/engine/render.js", "browser": true },
-    { "path": "src/engine/audio.js", "browser": true },
-    { "path": "src/engine/input.js", "browser": true },
-    { "path": "src/net/net.js", "browser": true },
-    { "path": "src/ui/debug.js", "browser": true },
-    { "path": "src/ui/main.js", "browser": true }
+    {
+      "path": "src/core/util.js"
+    },
+    {
+      "path": "src/core/font.js"
+    },
+    {
+      "path": "src/engine/spritekit.js"
+    },
+    {
+      "path": "src/engine/tex.js"
+    },
+    {
+      "path": "src/core/registry.js"
+    },
+    {
+      "path": "src/content/sprites/*.js"
+    },
+    {
+      "path": "src/content/ai.js"
+    },
+    {
+      "path": "src/content/*.js",
+      "scoped": true,
+      "skip": [
+        "src/content/ai.js"
+      ]
+    },
+    {
+      "path": "src/content/gimmicks/*.js",
+      "scoped": true
+    },
+    {
+      "path": "src/content/enemies/*.js",
+      "scoped": true
+    },
+    {
+      "path": "src/content/items/*.js",
+      "scoped": true
+    },
+    {
+      "path": "src/game/world.js"
+    },
+    {
+      "path": "src/game/sim.js"
+    },
+    {
+      "path": "src/engine/render.js",
+      "browser": true
+    },
+    {
+      "path": "src/engine/audio.js",
+      "browser": true
+    },
+    {
+      "path": "src/engine/input.js",
+      "browser": true
+    },
+    {
+      "path": "src/net/net.js",
+      "browser": true
+    },
+    {
+      "path": "src/ui/debug.js",
+      "browser": true
+    },
+    {
+      "path": "src/ui/main.js",
+      "browser": true
+    }
   ]
 }

@@ -1,7 +1,7 @@
 // ===== game/world.js : level generation (overworld, caves, dungeons) =====
 'use strict';
 const RW = 8, RH = 6, RSX = 16, RSY = 11; // overworld region grid & stride
-const DGW = 6, DGH = 6, DSX = 12, DSY = 8;  // dungeon room grid & stride
+const DGW = 8, DGH = 8, DSX = 12, DSY = 8;  // dungeon room grid (8x8 rooms, drawn as shapes in content/dungeons.js) & room size
 
 class Level {
   constructor(id, kind, w, h) {
@@ -304,80 +304,99 @@ function genCave(W, id, kind, exit, rnd) {
 
 // ---------- DUNGEONS ----------
 function genDungeon(W, d, rnd) {
-  const w = DGW * DSX + 1, h = DGH * DSY + 1; const L = new Level('d' + d, 'dungeon', w, h); W.levels['d' + d] = L; L.dnum = d;
+  const def = Content.dungeons[d] || {};
+  const w = DGW * DSX + 1, h = DGH * DSY + 1; const L = new Level('d' + d, 'dungeon', w, h); W.levels['d' + d] = L; L.dnum = d; L.theme = 'd' + d;
   for (let i = 0; i < w * h; i++) L.tiles[i] = TL.BRICK;
-  const nRooms = Math.min(30, 9 + Math.floor(d * 1.6) + rnd.int(3));
-  const start = { x: rnd.range(2, 3), y: DGH - 1 };
+  // ---- read the shape (roguelike runs may mirror it) ----
+  let shape = (def.shape || ['S']).map(r => r.padEnd(DGW, '.'));
+  if (W.mode === 'rogue' && rnd() < 0.5) shape = shape.map(r => r.split('').reverse().join(''));
+  const ox = 0, oy = DGH - shape.length; // shapes sit at the bottom of the 8x8 grid
+  const cellAt = (x, y) => { const r = shape[y - oy]; return r ? (r[x - ox] || '.') : '.'; };
   const rooms = {}; const key = (x, y) => y * DGW + x; const order = [];
-  const add = (x, y, parent) => { const r = { rx: x, ry: y, id: key(x, y), parent, children: [], depth: parent ? parent.depth + 1 : 0, enemies: [], links: {} }; rooms[r.id] = r; order.push(r); if (parent) parent.children.push(r); return r; };
-  add(start.x, start.y, null);
-  let guard = 0;
-  while (order.length < nRooms && guard++ < 2000) {
-    // prefer extending from deeper rooms for long dungeons
-    const base = rnd() < 0.6 ? order[order.length - 1 - rnd.int(Math.min(4, order.length))] : rnd.pick(order);
-    const dirs = rnd.shuffle([[1, 0], [-1, 0], [0, -1], [0, 1]]);
-    for (const [dx, dy] of dirs) { const nx = base.rx + dx, ny = base.ry + dy; if (nx < 0 || ny < 0 || nx >= DGW || ny >= DGH || rooms[key(nx, ny)]) continue; if (base === order[0] && dy === 1) continue; add(nx, ny, base); break; }
+  const mk = (x, y, hidden) => { const r = { rx: x, ry: y, id: key(x, y), parent: null, children: [], depth: 0, enemies: [], links: {}, hidden: !!hidden }; rooms[r.id] = r; return r; };
+  let start = null;
+  for (let y = 0; y < DGH; y++) for (let x = 0; x < DGW; x++) { const c = cellAt(x, y); if (c === '#' || c === 'S') { const r = mk(x, y); if (c === 'S') start = r; } else if (c === 'H') mk(x, y, true); }
+  const normal = (x, y) => { const r = rooms[key(x, y)]; return r && !r.hidden ? r : null; };
+  // ---- random spanning tree over the shape, grown depth-first so paths wind ----
+  start.depth = 0; order.push(start); const inTree = new Set([start.id]); const stack = [start];
+  while (stack.length) {
+    const cur = stack[stack.length - 1];
+    const nb = rnd.shuffle([[1, 0], [-1, 0], [0, -1], [0, 1]]).map(([dx, dy]) => normal(cur.rx + dx, cur.ry + dy)).filter(o => o && !inTree.has(o.id) && !(cur === start && o.ry > cur.ry));
+    if (!nb.length) { stack.pop(); continue; }
+    const o = nb[0]; o.parent = cur; o.depth = cur.depth + 1; cur.children.push(o); inTree.add(o.id); order.push(o); stack.push(o);
   }
-  L.rooms = rooms; L.startRoom = order[0];
-  // carve rooms
-  for (const r of order) { for (let y = r.ry * DSY + 1; y < r.ry * DSY + DSY; y++) for (let x = r.rx * DSX + 1; x < r.rx * DSX + DSX; x++) L.set(x, y, TL.DFLOOR); }
-  // doors from tree
-  const doorPos = (a, b) => { // returns tile coords of door between rooms a,b
-    if (a.ry === b.ry) { const x = Math.max(a.rx, b.rx) * DSX; return [x, a.ry * DSY + 4]; }
-    const y = Math.max(a.ry, b.ry) * DSY; return [a.rx * DSX + 6, y];
-  };
-  const setDoor = (a, b, t) => { const [x, y] = doorPos(a, b); L.set(x, y, t); a.links[b.id] = t; b.links[a.id] = t; };
-  for (const r of order) if (r.parent) setDoor(r.parent, r, TL.OPENDOOR);
-  // extra loops (some secret bomb walls)
+  L.rooms = rooms; L.startRoom = start;
+  for (const r of Object.values(rooms)) for (let y = r.ry * DSY + 1; y < r.ry * DSY + DSY; y++) for (let x = r.rx * DSX + 1; x < r.rx * DSX + DSX; x++) L.set(x, y, TL.DFLOOR);
+  const doorPos = (a, b) => a.ry === b.ry ? [Math.max(a.rx, b.rx) * DSX, a.ry * DSY + 4] : [a.rx * DSX + 6, Math.max(a.ry, b.ry) * DSY];
+  const doors = [];
+  const setDoor = (a, b, t, tree) => { const [x, y] = doorPos(a, b); L.set(x, y, t); a.links[b.id] = t; b.links[a.id] = t; let dr = doors.find(q => q.x === x && q.y === y); if (!dr) doors.push(dr = { a, b, x, y, t, tree }); else dr.t = t; };
+  for (const r of order) if (r.parent) setDoor(r.parent, r, TL.OPENDOOR, true);
+  // extra loops between neighbors (some behind cracked walls)
+  const loopChance = def.loops != null ? def.loops : 0.18;
   for (const r of order) for (const [dx, dy] of [[1, 0], [0, 1]]) {
-    const o = rooms[key(r.rx + dx, r.ry + dy)]; if (!o || o.parent === r || r.parent === o) continue;
-    if (rnd() < 0.18) setDoor(r, o, rnd() < 0.5 ? TL.BRICK_BOMB : TL.OPENDOOR);
+    const o = normal(r.rx + dx, r.ry + dy); if (!o || o.parent === r || r.parent === o || (r === start && dy === 1)) continue;
+    if (rnd() < loopChance) setDoor(r, o, rnd() < (def.bombLoops != null ? def.bombLoops : 0.5) ? TL.BRICK_BOMB : TL.OPENDOOR, false);
   }
-  // boss = deepest room; item room = deepest leaf not boss
+  // ---- boss, treasure, locks, keys (every key reachable without opening a lock, so no softlocks) ----
   const sorted = order.slice().sort((a, b) => b.depth - a.depth);
   const boss = sorted[0]; boss.boss = bossFor(d);
-  const leaves = order.filter(r => r !== boss && r !== order[0] && r.children.length === 0).sort((a, b) => b.depth - a.depth);
-  const itemRoom = leaves[0] || sorted[1]; const treasure = (Content.dungeons[d] || {}).item; if (treasure) itemRoom.item = treasure;
-  // locks: boss door + some others
-  const locked = new Set();
-  locked.add(boss.id);
+  const leaves = order.filter(r => r !== boss && r !== start && r.children.length === 0).sort((a, b) => b.depth - a.depth);
+  const itemRoom = leaves[0] || sorted[1]; if (def.item && itemRoom) itemRoom.item = def.item;
+  const locked = new Set([boss.id]);
   const lockN = Math.min(1 + Math.floor(d / 2), 5);
   const lockCand = rnd.shuffle(order.filter(r => r.depth >= 2 && r !== boss && r !== itemRoom));
   for (let i = 0; i < lockN - 1 && i < lockCand.length; i++) locked.add(lockCand[i].id);
   if (itemRoom && rnd() < 0.6) locked.add(itemRoom.id);
-  // key placement: every key is reachable without opening any lock, so no order of key use can softlock
-  const reach = new Set(); { const st = [order[0]]; while (st.length) { const r = st.pop(); if (reach.has(r.id)) continue; reach.add(r.id); for (const oid in r.links) { const o = rooms[oid]; if (locked.has(o.id) && o.parent === r) continue; if (locked.has(r.id) && r.parent === o) continue; st.push(o); } } }
+  const reach = new Set(); { const st = [start]; while (st.length) { const r = st.pop(); if (reach.has(r.id)) continue; reach.add(r.id); for (const oid in r.links) { const o = rooms[oid]; if (locked.has(o.id) && o.parent === r) continue; if (locked.has(r.id) && r.parent === o) continue; st.push(o); } } }
   let lockList = [...locked].filter(id => !reach.has(id));
-  const keySpots = rnd.shuffle(order.filter(r => reach.has(r.id) && r !== order[0] && !r.item && !r.boss));
+  const keySpots = rnd.shuffle(order.filter(r => reach.has(r.id) && r !== start && !r.item && !r.boss));
   while (lockList.length > keySpots.length) { const drop = lockList.find(id => id !== boss.id) || lockList[0]; lockList = lockList.filter(id => id !== drop); }
   for (let i = 0; i < lockList.length; i++) keySpots[i].key = true;
-  for (const id of lockList) { const r = rooms[id]; if (r.parent) setDoor(r.parent, r, TL.LOCKED); }
-  // map & compass
-  const mc = rnd.shuffle(order.filter(r => r !== order[0] && !r.boss && !r.item));
+  for (const id of lockList) { const r = rooms[id]; if (r.parent) setDoor(r.parent, r, TL.LOCKED, true); }
+  const mc = rnd.shuffle(order.filter(r => r !== start && !r.boss && !r.item));
   if (mc[0]) mc[0].map = true; if (mc[1]) mc[1].compass = true;
-  // contents
+  // ---- hidden rooms: joined to one neighbor through a secret wall; each holds a heart piece and a lore tablet ----
+  const secretT = TL[def.secret || 'BRICK_BOMB'] != null ? TL[def.secret || 'BRICK_BOMB'] : TL.BRICK_BOMB;
+  const hidden = Object.values(rooms).filter(r => r.hidden);
+  hidden.forEach((r, i) => {
+    const nb = rnd.shuffle([[1, 0], [-1, 0], [0, 1], [0, -1]]).map(([dx, dy]) => normal(r.rx + dx, r.ry + dy)).filter(Boolean)[0];
+    if (!nb) return; r.parent = nb; r.depth = nb.depth + 1; setDoor(nb, r, secretT, false);
+    r.reward = i === 0 ? 'hpiece' : 'gems100';
+    const lore = (def.lore || [])[i]; if (lore) { const si = L.idx(r.rx * DSX + 6, r.ry * DSY + 2); L.props[si] = PR.SIGN; L.signText = L.signText || {}; L.signText[si] = lore; }
+  });
+  // ---- gimmicks ----
+  const gimmicks = (def.gimmicks || []).map(g => Content.gimmicks[g]).filter(Boolean);
+  const gctx = { rnd, d, def };
+  for (const g of gimmicks) if (g.doors) g.doors(L, doors, gctx);
+  // ---- room contents ----
   const pool = enemiesFor('dungeons', d);
   for (const r of order) {
     const ix = r.rx * DSX, iy = r.ry * DSY;
-    if (r === order[0]) { L.set(ix + 6, iy + DSY, TL.DEXIT); continue; }
+    if (r === start) { L.set(ix + 6, iy + DSY, TL.DEXIT); continue; }
     if (r.boss) { r.enemies = [r.boss]; if (d >= 4) r.enemies.push(rnd.pick(pool)); r.shutter = true; continue; }
-    // layout pattern
-    const pat = rnd.int(7);
-    const blk = (x, y, t) => { if (x === 6 || y === 4) return; L.set(ix + x, iy + y, t || TL.BRICK); };
-    const block = (d >= 4 && rnd() < 0.25) ? TL.LAVA : TL.BRICK;
-    if (pat === 1) { blk(3, 2); blk(9, 2); blk(3, 6); blk(9, 6); }
-    else if (pat === 2) { for (let x = 2; x <= 10; x += 2) { blk(x, 2, block); blk(x, 6, block); } }
-    else if (pat === 3) { blk(5, 3); blk(7, 3); blk(5, 5); blk(7, 5); }
-    else if (pat === 4) { for (let y = 2; y <= 6; y++) { blk(2, y, block); blk(10, y, block); } }
-    else if (pat === 5) { for (let x = 3; x <= 9; x++) { blk(x, 2, block); blk(x, 6, block); } }
-    else if (pat === 6) { L.props[L.idx(ix + 2, iy + 1)] = PR.STATUE; L.props[L.idx(ix + 10, iy + 1)] = PR.STATUE; }
+    const lane = (x, y) => x === 6 || y === 4; // keep the cross through each room's doors clear
+    const rc = Object.assign({}, gctx, { ix, iy, lane, set: (x, y, t) => L.set(ix + x, iy + y, typeof t === 'string' ? TL[t] : t), prop: (x, y, pr) => { L.props[L.idx(ix + x, iy + y)] = pr; } });
+    let decorated = false; for (const g of gimmicks) if (g.room && g.room(L, r, rc)) decorated = true;
+    if (!decorated) {
+      const pat = rnd.int(7);
+      const blk = (x, y, t) => { if (lane(x, y)) return; L.set(ix + x, iy + y, t || TL.BRICK); };
+      const block = (d >= 4 && rnd() < 0.25) ? TL.LAVA : TL.BRICK;
+      if (pat === 1) { blk(3, 2); blk(9, 2); blk(3, 6); blk(9, 6); }
+      else if (pat === 2) { for (let x = 2; x <= 10; x += 2) { blk(x, 2, block); blk(x, 6, block); } }
+      else if (pat === 3) { blk(5, 3); blk(7, 3); blk(5, 5); blk(7, 5); }
+      else if (pat === 4) { for (let y = 2; y <= 6; y++) { blk(2, y, block); blk(10, y, block); } }
+      else if (pat === 5) { for (let x = 3; x <= 9; x++) { blk(x, 2, block); blk(x, 6, block); } }
+      else if (pat === 6) { L.props[L.idx(ix + 2, iy + 1)] = PR.STATUE; L.props[L.idx(ix + 10, iy + 1)] = PR.STATUE; }
+    }
     if (r.item) { r.enemies = []; L.props[L.idx(ix + 6, iy + 3)] = PR.PEDESTAL; const n = 1 + Math.floor(d / 3); for (let i = 0; i < n; i++) r.enemies.push(rnd.pick(pool)); continue; }
     const n = 2 + Math.floor(d / 2) + rnd.int(3);
     if (rnd() < 0.12 && !r.key && !r.map && !r.compass) continue; // empty room
     for (let i = 0; i < n; i++) r.enemies.push(rnd.pick(pool));
     r.shutter = rnd() < 0.25 || r.key;
   }
-  L.spawn = { x: order[0].rx * DSX + 6.5, y: order[0].ry * DSY + 6.2, a: -Math.PI / 2 };
+  for (const g of gimmicks) if (g.level) g.level(L, gctx);
+  L.gimmicks = def.gimmicks || [];
+  L.spawn = { x: start.rx * DSX + 6.5, y: start.ry * DSY + 6.2, a: -Math.PI / 2 };
   L.bossRoom = boss.id;
   const ent = W.dungeons[d]; L.exit = ent ? { lvl: 'ow', x: ent.x + 0.5, y: ent.y + 1.6, a: Math.PI / 2 } : { lvl: 'ow', x: W.levels.ow.spawn.x, y: W.levels.ow.spawn.y, a: 0 };
 }

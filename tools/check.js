@@ -106,6 +106,43 @@ for (const id in Content.items) attempt('giving "' + id + '"', () => {
 });
 // drop tables only produce real items
 for (const t in Content.drops) for (let i = 0; i < 200; i++) { const sim = freshSim(); const it = rollDrop(t, sim); if (it) __ok(!!Content.items[it], 'drop table "' + t + '" rolled unknown item ' + it); }
+// tour every dungeon: visit each room, stand on every gimmick tile, attack and burn everything nearby
+for (let d = 1; d <= 9; d++) attempt('dungeon ' + d + ' tour', () => {
+  const sim = freshSim(); const a = sim.players.p1, b = sim.players.p2; const D = sim.W.levels['d' + d];
+  a.items.candle = true; a.items.rod = true;
+  for (const pl of [a, b]) sim.teleport(pl, D.id, D.spawn.x, D.spawn.y, -Math.PI / 2);
+  for (const r of Object.values(D.rooms)) {
+    const cx = r.rx * DSX + 6.5, cy = r.ry * DSY + 4.5;
+    for (const pl of [a, b]) { pl.x = cx; pl.y = cy; }
+    run(sim, 0.3);
+    for (let y = r.ry * DSY + 1; y < r.ry * DSY + DSY; y++) for (let x = r.rx * DSX + 1; x < r.rx * DSX + DSX; x++) {
+      const ti = TINFO[D.get(x, y)]; if (ti.pressure || ti.glass || ti.conveyor) { a.x = x + 0.5; a.y = y + 0.5; run(sim, ti.glass ? 1.4 : 0.1); }
+      if (ti.pit) sim.onAction('p1', { t: 'fall', x: cx, y: cy });
+      if (ti.cuttable) { a.x = x + 0.5; a.y = y + 1.4; a.a = -Math.PI / 2; sim.playerAttack(a, { kind: 'sword' }); }
+    }
+    a.x = cx; a.y = cy; for (const ang of [0, Math.PI / 2, Math.PI, -Math.PI / 2]) { a.a = ang; sim.useItem(a, 'candle'); run(sim, 0.6); }
+    for (const e of sim.ents) if (e.k === 'en' && e.lvl === D.id && !e.dead) sim.damageEnemy(e, 999, a, { pid: 'p1', silver: true, pierceShield: true, ignoreIframes: true });
+    run(sim, 0.3);
+  }
+  __ok(D.rooms[D.bossRoom] && Object.values(D.rooms).some(r => r.hidden) === (D.rooms && Object.values(D.rooms).some(r => r.hidden)), 'dungeon ' + d);
+});
+// every dungeon has the right number of hidden rooms, and they're reachable through their secret wall
+for (let d = 1; d <= 9; d++) { const W = genWorld(7319, 'adv'); const D = W.levels['d' + d]; const want = (Content.dungeons[d].shape.join('').match(/H/g) || []).length; const hid = Object.values(D.rooms).filter(r => r.hidden); __ok(hid.length === want, 'dungeon ' + d + ' should have ' + want + ' hidden rooms, has ' + hid.length); for (const r of hid) __ok(Object.keys(r.links).length > 0, 'dungeon ' + d + ' hidden room is not connected'); }
+// old (version 1) saves still load
+attempt('old save migration', () => { const W = genWorld(7319, 'adv'); const sim = new Sim(W, { v: 1, seed: 7319, mode: 'adv', team: { keys: { d1: 2 }, maps: {}, comps: {}, shards: [1, 2], done: [1, 2], taken: { 'd1:3:key': true, 'c0:shop0': true }, cleared: { 'd1:3': true } }, mods: { d1: { 100: [11, 0] }, ow: { 500: [6, 0] } }, players: {} }); __ok(sim.team.shards.length === 2 && !sim.team.keys.d1 && sim.team.taken['c0:shop0'] && !sim.mods.d1, 'v1 save not migrated correctly'); });
+// co-op scaling: health follows the headcount in the room (1x, 1.5x, 2x, 2.5x), keeping damage already dealt
+attempt('party scaling', () => {
+  const W = genWorld(7319, 'adv'); const sim = new Sim(W, null); const D = W.levels.d2;
+  const room = Object.values(D.rooms).find(r => r.enemies.length >= 2 && !r.boss); const cx = room.rx * DSX + 6.5, cy = room.ry * DSY + 4.5;
+  const ps = ['p1', 'p2', 'p3', 'p4'].map((id, i) => { const p = sim.addPlayer(id, id, PCOLORS[i].name, 'sword'); p.god = true; return p; });
+  for (const p of ps) { sim.teleport(p, 'd2', D.spawn.x, D.spawn.y, 0); }
+  ps[0].x = cx; ps[0].y = cy; sim.tick(1 / 60); sim.tick(1 / 60);
+  const g = sim.groups['d2:' + room.id]; const e = g.ents[0]; const base = e.maxHp;
+  const want = [1, 1.5, 2, 2.5];
+  for (let n = 2; n <= 4; n++) { ps[n - 1].x = cx; ps[n - 1].y = cy; sim.tick(1 / 60); __ok(Math.abs(e.maxHp - base * want[n - 1]) < 1e-6, 'party of ' + n + ': enemy max health should be ' + want[n - 1] + 'x, got ' + (e.maxHp / base).toFixed(2) + 'x'); }
+  e.hp = e.maxHp / 2; ps[3].x = D.spawn.x; ps[3].y = D.spawn.y; sim.tick(1 / 60);
+  __ok(Math.abs(e.hp / e.maxHp - 0.5) < 1e-6 && Math.abs(e.maxHp - base * 2) < 1e-6, 'when someone leaves, enemies keep the same share of health');
+});
 // a full minute of play in a dungeon with everything going on
 attempt('dungeon minute', () => {
   const sim = freshSim(); for (const pid of ['p1', 'p2']) { const p = sim.players[pid]; const D = sim.W.levels.d5; sim.teleport(p, 'd5', D.spawn.x, D.spawn.y, -Math.PI / 2); }
