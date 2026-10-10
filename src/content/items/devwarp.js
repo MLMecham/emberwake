@@ -25,3 +25,31 @@ defineItem({
     sim.hint(p, 'WARP STONE: ' + (T.id === 'ow' ? 'THE WILDS' : 'LEVEL-' + T.dnum + ' ' + dungeonName(T.dnum)) + '. USE AGAIN FOR THE NEXT.');
   },
 });
+// DRAGON BELL, a developer tool like the Warp Stone: drops you straight into a dragon fight, at the bottom of the
+// boss room facing the dragon. First use: the Hearthwyrm (the Hearth); again: the Frost Matriarch, then the Fire Patriarch.
+defineSprite('dragonbell', [
+  '................', '................',
+  '.......kk.......',
+  '......kyyk......',
+  '.....kyYYyk.....',
+  '....kyYwYYyk....',
+  '....kyYYYYyk....',
+  '....kyYYYYyk....',
+  '...kyYYYYYYyk...',
+  '..kkkkkkkkkkkk..',
+  '......kRRk......',
+  '.......kk.......',
+  '................', '................', '................', '................',
+]);
+defineItem({
+  id: 'devboss', name: 'DRAGON BELL', sprite: 'dragonbell', slot: 'b', order: 0.5,
+  owned: (p) => !!p.dbg,
+  give(sim, p) { },
+  use(sim, p) {
+    const order = [12, 10, 11].filter(d => sim.W.levels['d' + d]); if (!order.length) return;
+    const cur = order.indexOf(+String(p.lvl).slice(1)); const d = order[(cur + 1) % order.length];
+    const D = sim.W.levels['d' + d]; const r = D.rooms[D.bossRoom];
+    sim.teleport(p, D.id, r.rx * DSX + 6.5, r.ry * DSY + 6.4, -Math.PI / 2); sim.sfx('dragonroar', D.id);
+    sim.hint(p, 'DRAGON BELL: ' + dungeonName(d) + '. USE AGAIN FOR THE NEXT DRAGON.');
+  },
+});
