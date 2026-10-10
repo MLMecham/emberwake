@@ -14,8 +14,22 @@ WASD move · mouse look (click to lock, or hold a button and drag) · click/Spac
 ## Debug mode
 Title screen → DEBUG. Pick a starting loadout (sword, tunic, hearts, items, shards), a start location and god mode. The pause menu then has warp buttons for every dungeon. It also applies to friends who join with debug on.
 
-## Project layout
-- `index.html` – the built game (one self-contained file)
-- `src/` – game source (`shell.html` is the page template)
-- `vendor/` – qrcode-generator, jsQR, PeerJS
-- `build.py` – run `python build.py` after editing `src/` to rebuild `index.html`
+## Working on the game
+```
+node tools/check.js     # validate content + headless tests (add --full for 300 worlds)
+python build.py         # rebuild index.html from src/
+```
+**See all the art and animations:** [docs/art](docs/art/README.md).
+
+New enemies, items, elites, sprites and animations are one file each. Start with **[docs/ADDING_CONTENT.md](docs/ADDING_CONTENT.md)** and the copy-paste files in `docs/templates/`.
+
+| Folder | What's in it |
+|---|---|
+| `src/content/` | All game content: enemies, items, elites, projectiles, drops, dungeons, caves, art |
+| `src/engine/` | Drawing, textures, sound, input |
+| `src/game/` | World generation and the game rules |
+| `src/net/`, `src/ui/` | Co-op networking; menus and the client loop |
+| `src/core/` | Shared helpers and the content registry |
+| `tools/check.js` | The automated checks |
+| `tools/export_art.js`, `docs/art/` | Animated GIF gallery of every sprite and animation |
+| `vendor/` | qrcode-generator, jsQR, PeerJS |

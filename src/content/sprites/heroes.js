@@ -1,0 +1,118 @@
+// ===== content/sprites/heroes.js : Hero and martial-artist art. T/t/h are tunic colors, recolored per player and armor tier. =====
+'use strict';
+defineSprite('hero_front', [
+  '................',
+  '.....HHHHHH.....',
+  '....HHHHHHHH....',
+  '....HHssssHH....',
+  '....HskssksH....',
+  '.....ssssss.....',
+  '......sSSs......',
+  '....hTTTTTTt....',
+  '...shTTTTTTts...',
+  '...s.TnyynTt.s..',
+  '...S.TTTTTTt.S..',
+  '.....TTTTTtt....',
+  '.....TTT.ttt....',
+  '.....ss...ss....',
+  '.....NN...NN....',
+  '................',
+]);
+defineSprite('hero_back', [
+  '................',
+  '.....HHHHHH.....',
+  '....HHHHHHHH....',
+  '....HHHHHHHH....',
+  '....HHHHHHHH....',
+  '.....HHHHHH.....',
+  '......sSSs......',
+  '....tTTTTTTt....',
+  '...stUnnnnUts...',
+  '...s.tUuuUtt.s..',
+  '...S.tTUUTtt.S..',
+  '.....tTTTTtt....',
+  '.....tTT.ttt....',
+  '.....ss...ss....',
+  '.....NN...NN....',
+  '................',
+]);
+defineSprite('hero_side', [
+  '................',
+  '......HHHHH.....',
+  '.....HHHHHHH....',
+  '.....HHHsssH....',
+  '.....HHHsksS....',
+  '......HHssss....',
+  '.......sSS......',
+  '.....tTTTTh.....',
+  '....UtTTTThs....',
+  '....UtnyyTT.s...',
+  '....UtTTTTt.Su..',
+  '.....tTTTTt..u..',
+  '.....tTT.Tt..u..',
+  '.....ss...ss....',
+  '.....NN...NN....',
+  '................',
+]);
+defineSprite('monk_front', [
+  '.......kk.......',
+  '......kHHk......',
+  '.....HHHHHH.....',
+  '....rrrrrrrr....',
+  '....HskssksH....',
+  '.....ssssss.....',
+  '......sSSs......',
+  '...ssTTssTTss...',
+  '..sS.TTssTT.Ss..',
+  '..s..TTssTT..s..',
+  '..ww.TkkkkT..ww.',
+  '..ww.NNNNNN..ww.',
+  '.....NNN.NNN....',
+  '.....NN...NN....',
+  '.....kk...kk....',
+  '................',
+]);
+defineSprite('monk_back', [
+  '.......kk.......',
+  '......kHHk......',
+  '.....HHHHHH.....',
+  '....rrrrrrrrr...',
+  '....HHHHHHHH.r..',
+  '.....HHHHHH..r..',
+  '......sSSs......',
+  '...ssTTTTTTss...',
+  '..sS.TTTTTT.Ss..',
+  '..s..TThhTT..s..',
+  '..ww.TkkkkT..ww.',
+  '..ww.NNNNNN..ww.',
+  '.....NNN.NNN....',
+  '.....NN...NN....',
+  '.....kk...kk....',
+  '................',
+]);
+defineSprite('monk_side', [
+  '........kk......',
+  '.......kHHk.....',
+  '......HHHHHH....',
+  '...rrrrrrrrr....',
+  '..r..HHHsksS....',
+  '.....HHHssss....',
+  '.......sSS......',
+  '.....sTTTsss....',
+  '.....sTTTs.sww..',
+  '.....sTTTs..ww..',
+  '.....ww.kkT.....',
+  '.....ww.NNN.....',
+  '......NNN.NN....',
+  '......NN..NN....',
+  '......kk..kk....',
+  '................',
+]);
+
+// ---- run cycle (A -> B -> C -> B), drawn as limb overlays on the idle sprite ----
+// A: one arm thrown up, other tucked.  B: squished, both arms tucked.  C: arms flung wide, one leg kicked way out.
+// Each entry is [x, y, part] with part A=arm, H=hand, L=leg, F=foot.
+const RUN_FRONT = [[[4, 8, 'A'], [3, 9, 'A'], [3, 10, 'H'], [11, 8, 'A'], [12, 7, 'A'], [12, 6, 'A'], [12, 5, 'H'], [5, 13, 'L'], [6, 13, 'L'], [5, 14, 'F'], [6, 14, 'F'], [9, 13, 'L'], [10, 13, 'L'], [9, 14, 'F'], [10, 14, 'F']], [[4, 8, 'A'], [3, 9, 'A'], [4, 10, 'H'], [11, 8, 'A'], [12, 9, 'A'], [11, 10, 'H'], [6, 13, 'L'], [7, 13, 'L'], [6, 14, 'F'], [7, 14, 'F'], [8, 13, 'L'], [9, 13, 'L'], [8, 14, 'F'], [9, 14, 'F']], [[4, 8, 'A'], [3, 8, 'A'], [2, 8, 'A'], [1, 8, 'A'], [1, 7, 'A'], [1, 6, 'H'], [11, 8, 'A'], [12, 8, 'A'], [13, 8, 'A'], [14, 8, 'A'], [15, 9, 'H'], [5, 13, 'L'], [6, 13, 'L'], [5, 14, 'F'], [6, 14, 'F'], [9, 13, 'L'], [10, 13, 'L'], [11, 14, 'L'], [12, 14, 'L'], [13, 15, 'F'], [14, 15, 'F']]];
+const RUN_SIDE = [[[11, 8, 'A'], [12, 7, 'A'], [13, 6, 'H'], [6, 13, 'L'], [6, 14, 'F'], [5, 14, 'F'], [8, 13, 'L'], [9, 14, 'F'], [10, 14, 'F']], [[11, 9, 'A'], [11, 10, 'H'], [7, 13, 'L'], [8, 13, 'L'], [7, 14, 'F'], [8, 14, 'F'], [9, 14, 'F']], [[11, 8, 'A'], [12, 8, 'A'], [13, 8, 'A'], [14, 7, 'H'], [9, 13, 'L'], [10, 13, 'L'], [11, 14, 'L'], [12, 14, 'F'], [13, 14, 'F'], [5, 13, 'L'], [4, 14, 'L'], [3, 14, 'F'], [2, 14, 'F']]];
+const RUN_SEQ = [0, 1, 2, 1];             // frame order: A B C B
+const RUN_SCALE = [1.0, 0.9, 1.1, 0.9];    // squash in the middle, stretch on the big kick

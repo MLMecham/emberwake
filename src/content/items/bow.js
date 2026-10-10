@@ -1,0 +1,22 @@
+// ===== content/items/bow.js : bow, arrows and silver arrows =====
+// Martial artist version: SPIRIT DARTS, three at once.
+'use strict';
+defineItem({
+  id: 'bow', name: 'BOW', sprite: 'bow', monk: { name: 'SPIRIT DARTS' }, slot: 'b', order: 3, team: true, debug: true,
+  owned: (p) => !!p.items.bow,
+  give(sim, p, ctx) { p.items.bow = true; p.arrows = Math.max(p.arrows, 10); ctx.banner(); },
+  use(sim, p) {
+    if (p.arrows <= 0) return sim.hint(p, 'NO ARROWS.');
+    const monk = p.cls === 'monk';
+    if (sim.ents.filter(e => e.k === 'proj' && e.pid === p.id && (e.type === 'arrow' || e.type === 'dart')).length >= (monk ? 3 : 1)) return;
+    p.arrows--;
+    const silver = !!p.items.silver; const dmg = silver ? 4 : 2;
+    if (monk) for (const s of [-0.12, 0, 0.12]) sim.fireProj('dart', p.lvl, p.x, p.y, p.a + s, 'p', p.id, { dmg: dmg - 1, silver, life: 1.5 });
+    else sim.fireProj('arrow', p.lvl, p.x, p.y, p.a, 'p', p.id, { dmg, silver });
+    sim.sfx('arrow', p.lvl);
+  },
+});
+defineItem({ id: 'arrows', name: 'ARROWS', sprite: 'arrow', give(sim, p, ctx) { p.arrows = Math.min(30, p.arrows + 15); ctx.banner(); } }); // shop bundle
+defineItem({ id: 'arrow', name: 'ARROWS', sprite: 'arrow', give(sim, p) { p.arrows = Math.min(30, p.arrows + 5); sim.sfx('gem', p.lvl); } }); // enemy drop
+// dungeon 8 treasure: arrows hit harder, and only silver can finish the Hollow King
+defineItem({ id: 'silver', name: 'SILVER ARROWS', sprite: 'arrow', team: true, debug: true, give(sim, p, ctx) { p.items.silver = true; ctx.banner(); } });
