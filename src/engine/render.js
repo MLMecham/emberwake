@@ -272,11 +272,12 @@ function drawViewmodel(st) {
   // across the back of the shield through a strap, with the fist closed on an upright grip near the far edge.
   // Standing still it comes up bigger (ready to block); running it swings low with your stride; a block knocks it back.
   {
-    const mk = st.moveK, ready = 1 - mk; const bk = st.blockT > 0 ? Math.sin(Math.min(1, st.blockT / 0.32) * Math.PI) : 0;
-    const sc = 1 + ready * 0.2 - mk * 0.05 - bk * 0.08;
-    const sway = Math.sin(st.bob) * 7 * mk, lift = Math.abs(Math.cos(st.bob)) * 6 * mk;
-    const shx = W * 0.22 + ready * W * 0.03 + sway + bk * 7 + (Math.random() - 0.5) * bk * 4;
-    const shy = H - 40 - ready * 8 + lift + mk * 6 + bk * 10;
+    // low and out of the way while you move or fight; after a moment standing still it comes up and out, ready to block
+    const mk = st.moveK, ready = st.readyK != null ? st.readyK : 1 - mk; const bk = st.blockT > 0 ? Math.sin(Math.min(1, st.blockT / 0.32) * Math.PI) : 0;
+    const sc = 0.92 + ready * 0.32 - bk * 0.08;
+    const sway = Math.sin(st.bob) * 6 * mk, lift = Math.abs(Math.cos(st.bob)) * 5 * mk;
+    const shx = W * 0.27 - ready * W * 0.02 + sway + bk * 7 + (Math.random() - 0.5) * bk * 4;
+    const shy = H - 12 - ready * 34 + lift + bk * 10;
     const sw = Math.round(50 * sc), sh = Math.round(58 * sc); const x0 = Math.round(shx - sw / 2), y0 = Math.round(shy - sh / 2);
     const rim = bk > 0.3 ? rgb(255, 255, 255) : rgb(176, 178, 194), rimD = rgb(96, 98, 116), wood = rgb(116, 76, 40), woodD = rgb(78, 50, 26), woodH = rgb(140, 94, 52);
     const halfW = (j) => { const f = j / sh; if (j < 2) return sw / 2 - (2 - j); return f < 0.42 ? sw / 2 : (sw / 2) * (1 - Math.pow((f - 0.42) / 0.58, 1.7)); }; // round top corners, sides curving into the point
@@ -330,8 +331,8 @@ function drawViewmodel(st) {
   }
   if (me.sword > 0) {
     let ang, hx, hy;
-    if (k >= 0) { ang = lerp(-0.4, -2.6, k); hx = lerp(W * 0.78, W * 0.42, k) + bx; hy = lerp(H - 28, H - 40, Math.sin(k * Math.PI)) + by; }
-    else { ang = -1.15; hx = W * 0.75 + bx; hy = H - 28 + by; }
+    if (k >= 0) { ang = lerp(-0.4, -2.6, k); hx = lerp(W * 0.78, W * 0.42, k) + bx; hy = lerp(H - 22, H - 44, Math.sin(k * Math.PI)) + by; }
+    else { ang = -0.95; hx = W * 0.8 + bx; hy = H - 10 + by; } // resting low at your side
     const len = 70; const tipX = hx + Math.cos(ang) * len, tipY = hy + Math.sin(ang) * len;
     const blade = me.sword === 1 ? rgb(170, 120, 60) : me.sword === 2 ? rgb(220, 226, 240) : me.sword === 3 ? rgb(130, 240, 255) : rgb(255, 236, 150);
     const bladeD = me.sword === 1 ? rgb(110, 70, 30) : me.sword === 2 ? rgb(130, 136, 160) : me.sword === 3 ? rgb(40, 150, 200) : rgb(230, 140, 40);

@@ -17215,11 +17215,12 @@ function drawViewmodel(st) {
   // across the back of the shield through a strap, with the fist closed on an upright grip near the far edge.
   // Standing still it comes up bigger (ready to block); running it swings low with your stride; a block knocks it back.
   {
-    const mk = st.moveK, ready = 1 - mk; const bk = st.blockT > 0 ? Math.sin(Math.min(1, st.blockT / 0.32) * Math.PI) : 0;
-    const sc = 1 + ready * 0.2 - mk * 0.05 - bk * 0.08;
-    const sway = Math.sin(st.bob) * 7 * mk, lift = Math.abs(Math.cos(st.bob)) * 6 * mk;
-    const shx = W * 0.22 + ready * W * 0.03 + sway + bk * 7 + (Math.random() - 0.5) * bk * 4;
-    const shy = H - 40 - ready * 8 + lift + mk * 6 + bk * 10;
+    // low and out of the way while you move or fight; after a moment standing still it comes up and out, ready to block
+    const mk = st.moveK, ready = st.readyK != null ? st.readyK : 1 - mk; const bk = st.blockT > 0 ? Math.sin(Math.min(1, st.blockT / 0.32) * Math.PI) : 0;
+    const sc = 0.92 + ready * 0.32 - bk * 0.08;
+    const sway = Math.sin(st.bob) * 6 * mk, lift = Math.abs(Math.cos(st.bob)) * 5 * mk;
+    const shx = W * 0.27 - ready * W * 0.02 + sway + bk * 7 + (Math.random() - 0.5) * bk * 4;
+    const shy = H - 12 - ready * 34 + lift + bk * 10;
     const sw = Math.round(50 * sc), sh = Math.round(58 * sc); const x0 = Math.round(shx - sw / 2), y0 = Math.round(shy - sh / 2);
     const rim = bk > 0.3 ? rgb(255, 255, 255) : rgb(176, 178, 194), rimD = rgb(96, 98, 116), wood = rgb(116, 76, 40), woodD = rgb(78, 50, 26), woodH = rgb(140, 94, 52);
     const halfW = (j) => { const f = j / sh; if (j < 2) return sw / 2 - (2 - j); return f < 0.42 ? sw / 2 : (sw / 2) * (1 - Math.pow((f - 0.42) / 0.58, 1.7)); }; // round top corners, sides curving into the point
@@ -17273,8 +17274,8 @@ function drawViewmodel(st) {
   }
   if (me.sword > 0) {
     let ang, hx, hy;
-    if (k >= 0) { ang = lerp(-0.4, -2.6, k); hx = lerp(W * 0.78, W * 0.42, k) + bx; hy = lerp(H - 28, H - 40, Math.sin(k * Math.PI)) + by; }
-    else { ang = -1.15; hx = W * 0.75 + bx; hy = H - 28 + by; }
+    if (k >= 0) { ang = lerp(-0.4, -2.6, k); hx = lerp(W * 0.78, W * 0.42, k) + bx; hy = lerp(H - 22, H - 44, Math.sin(k * Math.PI)) + by; }
+    else { ang = -0.95; hx = W * 0.8 + bx; hy = H - 10 + by; } // resting low at your side
     const len = 70; const tipX = hx + Math.cos(ang) * len, tipY = hy + Math.sin(ang) * len;
     const blade = me.sword === 1 ? rgb(170, 120, 60) : me.sword === 2 ? rgb(220, 226, 240) : me.sword === 3 ? rgb(130, 240, 255) : rgb(255, 236, 150);
     const bladeD = me.sword === 1 ? rgb(110, 70, 30) : me.sword === 2 ? rgb(130, 136, 160) : me.sword === 3 ? rgb(40, 150, 200) : rgb(230, 140, 40);
@@ -18019,6 +18020,7 @@ function updateLocal(dt, inp) {
   mvx += Lc.kx; mvy += Lc.ky; Lc.kx *= Math.pow(0.0005, dt); Lc.ky *= Math.pow(0.0005, dt); if (Math.abs(Lc.kx) < 0.1) Lc.kx = 0; if (Math.abs(Lc.ky) < 0.1) Lc.ky = 0;
   const moving = Math.abs(inp.fwd) + Math.abs(inp.str) > 0.1; if (moving) Lc.bob += dt * spd * 2.6;
   Lc.moveK = lerp(Lc.moveK || 0, moving ? 1 : 0, Math.min(1, dt * 8)); if (Lc.blockT > 0) Lc.blockT -= dt;
+  Lc.stillT = moving || Lc.swing != null ? 0 : (Lc.stillT || 0) + dt; Lc.readyK = lerp(Lc.readyK || 0, Lc.stillT > 0.3 ? 1 : 0, Math.min(1, dt * (Lc.stillT > 0.3 ? 5 : 10))); // shield comes up after standing still
   const raft = !!me.items.raft; const rad = 0.22; const sop = { raft, mx: Lc.x, my: Lc.y };
   const solid = (x, y) => { for (const [ox, oy] of [[-rad, -rad], [rad, -rad], [-rad, rad], [rad, rad]]) if (L.solidAt(x + ox, y + oy, sop)) return true; return false; };
   const nx = Lc.x + mvx * dt, ny = Lc.y + mvy * dt; let blockedX = false, blockedY = false;
@@ -18175,7 +18177,7 @@ function draw(dt) {
   // pow words
   for (const p of Lc.pow) { const sc = projectPt(cam, p.x, p.y); if (sc) { const c = p.big ? rgb(255, 230, 60) : rgb(255, 255, 255); text(p.word, sc.x - p.word.length * 3, sc.y - 30 - p.t * 30, Math.floor(p.t * 20) & 1 ? c : rgb(255, 80, 40)); } }
   const bossE = ents.find(e => e[8] >= 0);
-  const st = { me, bob: Lc.bob, moveK: Lc.moveK || 0, blockT: Lc.blockT || 0, swing: Lc.swing, punch: Lc.punch, charge: Lc.charge, useFlash: Lc.useFlash, useSpr: Lc.useSpr, level: L, cam, players: snap ? snap.pl : [], myId: G.myId, team: snap ? snap.team : { keys: {}, maps: {}, comps: {}, shards: [], done: [] }, seen: G.seen[L.id] || new Uint8Array(L.w * L.h), seenOW: G.seen.ow || new Uint8Array(1), seenRooms: G.seenRooms, selItem: Lc.sel, pitch: Lc.pitch, lvlKind: L.kind, bossHp: bossE ? bossE[8] : -1, bossName: bossE && enemyDef(bossE[1]) ? enemyDef(bossE[1]).title : null, world: G.world };
+  const st = { me, bob: Lc.bob, moveK: Lc.moveK || 0, readyK: Lc.readyK || 0, blockT: Lc.blockT || 0, swing: Lc.swing, punch: Lc.punch, charge: Lc.charge, useFlash: Lc.useFlash, useSpr: Lc.useSpr, level: L, cam, players: snap ? snap.pl : [], myId: G.myId, team: snap ? snap.team : { keys: {}, maps: {}, comps: {}, shards: [], done: [] }, seen: G.seen[L.id] || new Uint8Array(L.w * L.h), seenOW: G.seen.ow || new Uint8Array(1), seenRooms: G.seenRooms, selItem: Lc.sel, pitch: Lc.pitch, lvlKind: L.kind, bossHp: bossE ? bossE[8] : -1, bossName: bossE && enemyDef(bossE[1]) ? enemyDef(bossE[1]).title : null, world: G.world };
   if (me && !down) drawViewmodel(st);
   if (me && me.cls === 'monk' && me.armor > 0 && !down) { const ac = me.armor === 2 ? rgb(255, 248, 200) : rgb(100, 190, 255); for (let i = 0; i < 18; i++) { const side = Math.random() < 0.5; const x = side ? (Math.random() < 0.5 ? Math.random() * 10 : R.W - Math.random() * 10) : Math.random() * R.W; const y = side ? Math.random() * R.H : R.H - Math.random() * 8; px(x, y, ac); } }
   if (Lc.dashT > 0) rectA(0, 0, R.W, R.H, rgb(200, 240, 255), 0.15);
