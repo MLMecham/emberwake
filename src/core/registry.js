@@ -39,6 +39,7 @@ function defineAnim(id, fps, frames) { _dupe('anim', Content.anims, id); Content
 //           drops: drop table id (default 'common'), onDamage(sim, e, dmg, opt) -> false to ignore the hit,
 //           onDeath(sim, e) -> 'win' ends the game, view(e) -> extra height for the sprite,
 //           boomerangKills: a boomerang hit kills it instead of stunning.
+//           title: name on the boss health bar.  hot: fire-born (frost arrows do double damage).
 // ai(sim, e, dt, ctx): ctx = { p: nearest hero or null, spd: speed after modifiers, def }
 function defineEnemy(def) {
   _need('enemy', def, ['id', 'hp', 'spd', 'dmg', 'r', 'sc', 'sprite', 'ai']); _dupe('enemy', Content.enemies, def.id);

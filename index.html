@@ -124,7 +124,7 @@ summary:hover { color:var(--gold); }
     <label class="chk big"><input type="checkbox" id="dbgOn"> USE DEBUG LOADOUT</label>
     <div id="dbgBody">
       <div class="grid2">
-        <div><label for="dbgSword">SWORD</label><select id="dbgSword"><option value="0">NONE</option><option value="1">WOODEN</option><option value="2">SILVER</option><option value="3">MYTHRIL</option></select></div>
+        <div><label for="dbgSword">SWORD</label><select id="dbgSword"><option value="0">NONE</option><option value="1">WOODEN</option><option value="2">SILVER</option><option value="3">MYTHRIL</option><option value="4">DAWNBLADE</option></select></div>
         <div><label for="dbgArmor">TUNIC</label><select id="dbgArmor"><option value="0">CLOTH</option><option value="1">CHAIN</option><option value="2">PLATE</option></select></div>
         <div><label for="dbgHearts">HEARTS</label><input id="dbgHearts" type="number" min="3" max="16" value="3"></div>
         <div><label for="dbgShards">EMBER SHARDS</label><input id="dbgShards" type="number" min="0" max="8" value="0"></div>
@@ -12917,6 +12917,11 @@ function initTextures() {
   // the southern sea: dark, choppy, whitecaps everywhere; 'surf' is the breaking foam right off the beach
   TEX.ocean = []; for (let f = 0; f < 4; f++) TEX.ocean.push(makeTex((x, y) => { const ph = f * Math.PI / 2; const w = Math.sin(x * 0.45 + ph + Math.sin(y * 0.35 + ph) * 2.2) + Math.sin(y * 0.6 - ph * 1.5 + x * 0.2) * 0.7; let c = [22, 52, 120]; if (w > 1.35) c = [236, 244, 255]; else if (w > 1.0) c = [130, 170, 220]; else if (w > 0.4) c = [34, 76, 160]; else if (w < -0.9) c = [14, 34, 86]; return vary(c, x, y, 0.1); }));
   TEX.surf = []; for (let f = 0; f < 4; f++) TEX.surf.push(makeTex((x, y) => { const ph = f * Math.PI / 2; const w = Math.sin(x * 0.5 + ph + Math.sin(y * 0.5) * 1.5) + Math.sin(y * 0.9 + ph * 2) * 0.8; let c = [40, 92, 180]; if (w > 0.6) c = [240, 248, 255]; else if (w > 0.1) c = [170, 205, 240]; return vary(c, x, y, 0.1); }));
+  TEX.snow = makeTex((x, y) => { let c = [236, 242, 250]; if (n8(x, y) > 0.88) c = [206, 218, 236]; if (n4(x * 2, y * 3) > 0.95) c = [255, 255, 255]; return vary(c, x, y, 0.06); });
+  TEX.ice = makeTex((x, y) => { const streak = Math.abs(((x + y * 0.6) % 14) - 7) < 0.7; let c = streak ? [235, 250, 255] : [150, 205, 235]; if (n8(x >> 1, y >> 1) > 0.85) c = [120, 180, 220]; return vary(c, x, y, 0.06); });
+  TEX.ash = makeTex((x, y) => { let c = [74, 66, 66]; if (n8(x, y) > 0.86) c = [104, 92, 90]; if (n4(x * 3, y * 2) > 0.96) c = [255, 120, 40]; return vary(c, x, y, 0.15); });
+  TEX.icewall = makeTex((x, y) => { const by = y >> 3, off = by % 2 ? 7 : 0; const edge = (y & 7) === 0 || ((x + off) % 14) === 0; let c = edge ? [120, 170, 210] : [190, 225, 245]; if (!edge && ((x + y) % 9) === 0) c = [245, 252, 255]; if (y < 4) c = [250, 252, 255]; return vary(c, x, y, 0.08); }, 19);
+  TEX.basalt = makeTex((x, y) => { const col = Math.floor(x / 6); const edge = (x % 6) === 0 || ((y + col * 5) % 13) === 0; let c = edge ? [26, 22, 26] : (col % 2 ? [58, 50, 54] : [70, 60, 62]); if (edge && n8(x, y) > 0.8) c = [230, 90, 30]; return vary(c, x, y, 0.15); }, 23);
   TEX.cwall = makeTex((x, y) => vary(n8(x >> 2, y >> 2) > 0.5 ? [60, 46, 40] : [80, 62, 52], x, y, 0.3), 9);
   TEX.cwall_bomb = makeTex((x, y) => { let c = n8(x >> 2, y >> 2) > 0.5 ? [60, 46, 40] : [80, 62, 52]; if (Math.abs((x - 16) - Math.sin(y * 0.6) * 3) < 0.8 && y > 6 && y < 28) c = [30, 22, 18]; return vary(c, x, y, 0.3); }, 9);
   TEX.shop = makeTex((x, y) => { let c = [120, 80, 44]; if ((y & 7) === 0) c = [70, 44, 24]; if (y < 4) c = [200, 60, 40]; return vary(c, x, y, 0.1); });
@@ -12928,6 +12933,9 @@ function initTextures() {
     else TEX[name] = makeTex((x, y, r) => t.fn(x, y, r, ctx), t.seed);
   }
   TEX.cexit = makeTex((x, y) => { const dx = (x - 15.5) / 10, dy = (y - 31) / 26; const d = dx * dx + dy * dy; if (d < 1) return d > 0.8 ? [120, 96, 70] : shade([250, 240, 200], 0.85 + 0.15 * (y / 31)); return ctx.texPx('cwall', x, y); });
+  TEX.hearthgate = makeTex((x, y) => { const dx = x - 15.5, dy = y - 15; const r = Math.sqrt(dx * dx + dy * dy); const ang = Math.atan2(dy, dx);
+    if (r < 11) { if (r < 4) return [255, 240, 200]; const third = Math.floor(((ang + Math.PI) / (Math.PI * 2)) * 3) % 3; return third === 0 ? [120, 200, 255] : third === 1 ? [255, 120, 40] : [160, 80, 230]; }
+    if (r < 13) return [40, 30, 30]; const v = TEX.brick[y * TS + x]; return shade([v & 255, (v >> 8) & 255, (v >> 16) & 255], 0.6); });
   TEX.shardwall = makeTex((x, y) => { const d = Math.abs(x - 16) + Math.abs(y - 16); if (d < 9) return d < 5 ? [255, 230, 120] : [240, 140, 40]; const i = y * TS + x; const v = TEX.brick[i]; return shade([v & 255, (v >> 8) & 255, (v >> 16) & 255], 0.7); });
 }
 
@@ -12950,7 +12958,7 @@ defTile(TL.PATH, { floor: 'path' });
 defTile(TL.SAND, { floor: 'sand' });
 defTile(TL.BRIDGE, { floor: 'bridge' });
 defTile(TL.WATER, { solid: true, floor: 'water', water: true, low: true });
-defTile(TL.LAVA, { floor: 'lava', hurt: 1 });
+defTile(TL.LAVA, { floor: 'lava', hurt: 1, lava: true });
 defTile(TL.TREEWALL, { solid: true, wall: 'treewall' });
 defTile(TL.ROCK, { solid: true, wall: 'rock' });
 defTile(TL.ROCK_BOMB, { solid: true, wall: 'rock_bomb', bomb: true });
@@ -12979,6 +12987,13 @@ defTile(TL.PEAKS = 29, { solid: true, wall: 'mountain', tall: 3.4, jag: 'peak', 
 defTile(TL.FIREPEAKS = 30, { solid: true, wall: 'volcrock', tall: 2.8, jag: 'peak' });
 defTile(TL.BIGWOOD = 31, { solid: true, wall: 'treewall', tall: 2.6, jag: 'trees' });
 defTile(TL.TOWER = 32, { solid: true, wall: 'brick', tall: 2.3, jag: 'battlement' });
+// the frontier lands beyond the passes: the Frozen Reach (west) and the Cinder Wastes (east)
+defTile(TL.SNOW = 33, { floor: 'snow' });
+defTile(TL.ICE = 34, { floor: 'ice', slippery: true }); // you slide on it
+defTile(TL.ASH = 35, { floor: 'ash' });
+defTile(TL.ICEWALL = 36, { solid: true, wall: 'icewall' });
+defTile(TL.BASALT = 37, { solid: true, wall: 'basalt' });
+defTile(TL.HEARTHGATE = 38, { solid: true, wall: 'hearthgate', hearthGate: true }); // opens for the Frost Fang + Ember Heart
 
 // props drawn as sprites on tiles
 const PROPS = [null, 'tree', 'pine', 'boulder', 'bush', 'cactus', 'grave', 'statue', 'sign', 'flame', 'pedestal'];
@@ -13034,6 +13049,7 @@ function defineAnim(id, fps, frames) { _dupe('anim', Content.anims, id); Content
 //           drops: drop table id (default 'common'), onDamage(sim, e, dmg, opt) -> false to ignore the hit,
 //           onDeath(sim, e) -> 'win' ends the game, view(e) -> extra height for the sprite,
 //           boomerangKills: a boomerang hit kills it instead of stunning.
+//           title: name on the boss health bar.  hot: fire-born (frost arrows do double damage).
 // ai(sim, e, dt, ctx): ctx = { p: nearest hero or null, spd: speed after modifiers, def }
 function defineEnemy(def) {
   _need('enemy', def, ['id', 'hp', 'spd', 'dmg', 'r', 'sc', 'sprite', 'ai']); _dupe('enemy', Content.enemies, def.id);
@@ -13253,6 +13269,205 @@ defineSprite('puff', [
   '................',
   '................',
 ]);
+
+// ---- src/content/sprites/frontier.js ----
+// ===== content/sprites/frontier.js : art for the Frozen Reach, the Cinder Wastes and the dragons =====
+// The dragon parts use four custom colors (A body, B shadow, C belly / glow, E eyes) so each dragon is a recolor.
+'use strict';
+defineSprite('snowpine', [
+  '.......w........',
+  '......wEw.......',
+  '.....wEEEw......',
+  '......EEE.......',
+  '....wwEEEww.....',
+  '.....EEEEE......',
+  '...wwEEEEEww....',
+  '....EEEEEEE.....',
+  '..wwwEEEEEwww...',
+  '...EEEEEEEEE....',
+  '.wwEEEEEEEEEww..',
+  '..EEEEEEEEEEE...',
+  '.......NN.......',
+  '.......NN.......',
+  '......wNNw......',
+  '.....wwwwww.....',
+]);
+defineSprite('deadtree', [
+  '................',
+  '..N.......N.....',
+  '...N..N..N...N..',
+  '....N.N.N...N...',
+  '..N..NNN...N....',
+  '...N..NN..N.....',
+  '....N.NN.N......',
+  '.....NNNN.......',
+  '.......NN.......',
+  '.......NN.......',
+  '......NNN.......',
+  '.......NN.......',
+  '.......NNx......',
+  '......NNNN......',
+  '.....NGGNNN.....',
+  '....GGGGGGGG....',
+]);
+defineSprite('icebolt', [
+  '................',
+  '................',
+  '................',
+  '.......v........',
+  '......vcv.......',
+  '.....vcwcv......',
+  '....vcwwwcv.....',
+  '...vccwwwccv....',
+  '....vcwwwcv.....',
+  '.....vcwcv......',
+  '......vcv.......',
+  '.......v........',
+  '................',
+  '................',
+  '................',
+  '................',
+]);
+defineSprite('icefx', [
+  '................',
+  '.......w........',
+  '...w...c...w....',
+  '....c..c..c.....',
+  '.....c.c.c......',
+  '......ccc.......',
+  '.wcccccwccccw...',
+  '......ccc.......',
+  '.....c.c.c......',
+  '....c..c..c.....',
+  '...w...c...w....',
+  '.......w........',
+  '................',
+  '................',
+  '................',
+  '................',
+]);
+defineSprite('boots', [
+  '................',
+  '................',
+  '....kkkkk.......',
+  '...kRRRRRk......',
+  '...kRoxoRk......',
+  '...kRRRRRk......',
+  '...kRoxoRk......',
+  '...kRRRRRk......',
+  '...kRRRRRRkkk...',
+  '...kRRRRRRRRRk..',
+  '..kxRRRRRRRRRRk.',
+  '..kxxxxxxxxxxxk.',
+  '..kkkkkkkkkkkkk.',
+  '................',
+  '................',
+  '................',
+]);
+defineSprite('fang', [
+  '................',
+  '.......kk.......',
+  '......kvwk......',
+  '......kvwk......',
+  '.....kcvwwk.....',
+  '.....kcvwwk.....',
+  '.....kcvvwk.....',
+  '....kccvvwwk....',
+  '....kccvvvwk....',
+  '....kCcccvwk....',
+  '.....kCccvk.....',
+  '.....kCcck......',
+  '......kCck......',
+  '......kCk.......',
+  '.......k........',
+  '................',
+]);
+defineSprite('emberheart', [
+  '................',
+  '................',
+  '..kkkk....kkkk..',
+  '.kRrrrk..kRrrrk.',
+  'kRrrooykkyoorrRk',
+  'kRroyyyyyyyyorRk',
+  'kRroyywwwwyyorRk',
+  'kRrroyywwyyorrRk',
+  '.kRrroyyyyorrRk.',
+  '..kRrrooooorRk..',
+  '...kRrrrrrrRk...',
+  '....kRrrrrRk....',
+  '.....kRrrRk.....',
+  '......kRRk......',
+  '.......kk.......',
+  '................',
+]);
+// dragon parts in ice colors; fire and hollow versions below are recolors
+const DRAKE_ICE = { A: '#86ccf0', B: '#2c62a0', C: '#e8f8ff', E: '#40ffff' };
+const DRAKE_FIRE = { A: '#d83c20', B: '#741410', C: '#ffb444', E: '#ffff60' };
+const DRAKE_HOLLOW = { A: '#5c2e8c', B: '#22103a', C: '#b478ff', E: '#ff50ff' };
+defineSprite('drake_head_ice', [
+  '..k..........k..',
+  '.kvk........kvk.',
+  '.kvAk......kAvk.',
+  '..kAAkkkkkkAAk..',
+  '..kAAAAAAAAAAk..',
+  '.kAAEkAAAAkEAAk.',
+  '.kAAkkAAAAkkAAk.',
+  '.kBAAAAAAAAAABk.',
+  '..kBAAAAAAAABk..',
+  '..kBBwkwwkwBBk..',
+  '...kkCCCCCCkk...',
+  '...kwkCCCCkwk...',
+  '....kBwkkwBk....',
+  '.....kBBBBk.....',
+  '......kkkk......',
+  '................',
+], DRAKE_ICE);
+defineSpriteVariant('drake_head_fire', 'drake_head_ice', DRAKE_FIRE); defineSpriteVariant('drake_head_hollow', 'drake_head_ice', DRAKE_HOLLOW);
+defineSprite('drake_neck_ice', [
+  '................',
+  '................',
+  '................',
+  '.....kkkkkk.....',
+  '...kkAAAAAAkk...',
+  '..kAAvAAAAAAAk..',
+  '..kAvAAAAAAAAk..',
+  '.kAAAAAAAAAAAAk.',
+  '.kBAAAAAAAAAABk.',
+  '.kBCCCCCCCCCCBk.',
+  '..kBCkCCkCCkBk..',
+  '..kkBBBBBBBBkk..',
+  '....kkkkkkkk....',
+  '................',
+  '................',
+  '................',
+], DRAKE_ICE);
+defineSpriteVariant('drake_neck_fire', 'drake_neck_ice', DRAKE_FIRE); defineSpriteVariant('drake_neck_hollow', 'drake_neck_ice', DRAKE_HOLLOW);
+defineSprite('drake_body_ice', [
+  '................',
+  '..k..........k..',
+  '.kBk...kk...kBk.',
+  'kBAAk.kAAk.kAABk',
+  'kBAAAkAAAAkAAABk',
+  'kBAAAAAAAAAAAABk',
+  '.kBAAAAAAAAAABk.',
+  '.kBAACCCCCCAABk.',
+  'kBAACCCCCCCCAABk',
+  'kBAACCkCCkCCAABk',
+  'kBAACCCCCCCCAABk',
+  '.kBAACCCCCCAABk.',
+  '.kBBAAAAAAAABBk.',
+  '.kvkBBk..kBBkvk.',
+  '.kkkkk....kkkkk.',
+  '................',
+], DRAKE_ICE);
+defineSpriteVariant('drake_body_fire', 'drake_body_ice', DRAKE_FIRE); defineSpriteVariant('drake_body_hollow', 'drake_body_ice', DRAKE_HOLLOW);
+defineSpriteVariant('drake_body_hearth', 'drake_body_ice', { A: '#b07a40', B: '#4a2a18', C: '#ffe0a0', E: '#ffffff' }); // the Hearthwyrm's great body
+// recolors of existing art
+defineSpriteVariant('arrow_ice', 'arrow', { u: '#c8f4ff', n: '#4aa8e0', w: '#e8f8ff' });
+defineSpriteVariant('dawnblade', 'sword', { v: '#fff2b0', y: '#ffffff', n: '#e8a040' });
+defineSpriteVariant('beam_dawn', 'beam', { c: '#ffb040', v: '#fff2b0', w: '#ffffff' });
+defineSpriteVariant('oldman_frost', 'oldman', { R: '#3c78c0' });
+defineSpriteVariant('oldman_fire', 'oldman', { R: '#b03a14' });
 
 // ---- src/content/sprites/heroes.js ----
 // ===== content/sprites/heroes.js : Hero and martial-artist art. T/t/h are tunic colors, recolored per player and armor tier. =====
@@ -14101,6 +14316,8 @@ defineDropTable('common', 34, [
 // Hidden rooms sit behind a secret wall (secret: tile name) and hold a heart piece (or gems) plus a lore tablet.
 // theme: wall / mortar / hi (brick), floor / edge / fhi (floor tiles), trim (door frames) as [r, g, b].
 // gimmicks: ids from content/gimmicks/. Enemies and bosses come from each enemy's spawns / bossOf.
+// Optional dungeons (10+) can also set: mapLabel (letter on the maps), bossDrop (item the boss leaves),
+// bossParty (several bosses at once, instead of the single bossOf one).
 'use strict';
 defineDungeon(1, {
   name: 'THE MOSSY HOLLOW', item: 'boomerang', gimmicks: ['brambles'], secret: 'BRAMBLE',
@@ -14114,7 +14331,7 @@ defineDungeon(1, {
     '...#....',
     '...S....',
   ],
-  lore: ['THE WYRMLING OF THIS HOLLOW HATCHED FROM A FROST-BLUE EGG. ITS MOTHER SLEEPS FAR TO THE NORTH, BEYOND THE PASS.'],
+  lore: ['THE WYRMLING OF THIS HOLLOW HATCHED FROM A FROST-BLUE EGG. ITS MOTHER SLEEPS FAR TO THE WEST, BEYOND THE PASS.'],
 });
 defineDungeon(2, {
   name: 'BRAMBLE KEEP', item: 'bombbag', gimmicks: ['cracked'], loops: 0.4, bombLoops: 1,
@@ -14233,6 +14450,52 @@ defineDungeon(9, {
   lore: ['HERE THE KING WEARS WHAT HE STOLE.', 'EVEN A HOLLOW CROWN CASTS A SHADOW.'],
 });
 
+// ---- the optional dungeons: beyond the passes, and the Hearth they unlock ----
+defineDungeon(10, {
+  name: 'RIMEFANG HOLLOW', mapLabel: 'R', item: 'frostarrows', bossDrop: 'fang', gimmicks: ['ice'],
+  theme: { wall: [150, 190, 220], mortar: [70, 100, 140], hi: [220, 240, 255], floor: [170, 200, 225], edge: [100, 130, 170], fhi: [230, 245, 255], trim: [90, 160, 220] },
+  shape: [ // a fang
+    '.######.',
+    '..####..',
+    '..##H#..',
+    '...##...',
+    '...##...',
+    '...#....',
+    '...S....',
+  ],
+  lore: ['THE MATRIARCH LAID THREE EGGS. ONE HATCHED IN THE MOSSY HOLLOW. ONE WAS NEVER FOUND. ONE IS STILL WARM.'],
+});
+defineDungeon(11, {
+  name: 'CINDER CALDERA', mapLabel: 'C', item: 'magmaboots', bossDrop: 'emberheart', gimmicks: ['vents'],
+  theme: { wall: [70, 46, 40], mortar: [24, 12, 10], hi: [120, 70, 50], floor: [60, 44, 40], edge: [30, 18, 16], fhi: [140, 70, 30], trim: [255, 120, 40] },
+  shape: [ // a volcano
+    '...#....',
+    '..###...',
+    '..#H#...',
+    '.#####..',
+    '.#####..',
+    '##.#.##.',
+    '...S....',
+  ],
+  lore: ['THE PATRIARCH FORGED THE EMBER SHARDS IN HIS OWN BELLY, AND THE HOLLOW KING STOLE EVERY ONE.'],
+});
+defineDungeon(12, {
+  name: 'THE HEARTH', mapLabel: 'H', item: null, bossDrop: 'dawnblade', gimmicks: ['ice', 'vents'],
+  bossParty: ['hearth_frost', 'hearth_fire', 'hearth_hollow'],
+  theme: { wall: [96, 70, 60], mortar: [30, 20, 18], hi: [200, 150, 90], floor: [110, 90, 80], edge: [50, 38, 34], fhi: [240, 200, 120], trim: [255, 220, 140] },
+  shape: [ // a flame
+    '...##...',
+    '..####..',
+    '.##..##.',
+    '.#H..##.',
+    '.######.',
+    '..####..',
+    '...##...',
+    '...S....',
+  ],
+  lore: ['FROST, FIRE AND THE LIGHT THAT WAS STOLEN. WHEN ALL THREE BURN AS ONE, A BLADE OF DAWN IS FORGED.'],
+});
+
 })();
 // ---- src/content/elites.js ----
 (function () {
@@ -14299,6 +14562,27 @@ defineEntity('efire', {                                                         
 });
 
 })();
+// ---- src/content/frontier.js ----
+(function () {
+// ===== content/frontier.js : the lands beyond the two mountain passes =====
+// The Frozen Reach (west, biome 'snow') and the Cinder Wastes (east, biome 'ash') are the outer columns of the Wilds
+// (FRONTIER in game/world.js). Each has one pass, a hermit's cave just inside it, and an optional dungeon deep inside.
+'use strict';
+defineProp('SNOWPINE', 'snowpine', { solid: true, scale: 1.6 });
+defineProp('DEADTREE', 'deadtree', { solid: true, scale: 1.5 });
+defineCave('frosthint', { name: 'HERMIT', npc: 'oldman_frost',
+  text: 'THE MATRIARCH SLEEPS IN RIMEFANG HOLLOW, FAR FROM THIS PASS. HER NECK REACHES FARTHER THAN YOU THINK, AND HER BREATH FREEZES YOUR LEGS. STRIKE THE HEAD. AND ON THE ICE, NEVER RUN TOWARD A PIT.',
+  stock: [{ x: 4, item: 'potion', price: 40 }, { x: 8, item: 'arrows', price: 30 }] });
+defineCave('firehint', { name: 'HERMIT', npc: 'oldman_fire',
+  text: 'THE PATRIARCH BROODS IN THE CINDER CALDERA. THE VENTS BREATHE EVERY FEW HEARTBEATS: WATCH THEM GLOW, THEN STEP. COLD ARROWS BITE FIRE-BORN THINGS TWICE AS DEEP.',
+  stock: [{ x: 4, item: 'potion', price: 40 }, { x: 8, item: 'bombs', price: 25 }] });
+defineHints([
+  'BEYOND THE WESTERN PEAKS THE GROUND IS GLASS. WHAT SLIDES, STOPS ONLY WHEN SOMETHING STOPS IT.',
+  'THE HEARTH HAS THREE LOCKS: A FANG OF FROST, A HEART OF EMBER, AND ONE THAT WAS STOLEN LONG AGO.',
+  'THE WYRMLINGS IN THE NUMBERED GATES ARE ONLY CHILDREN. THEIR PARENTS ARE FAR LARGER.',
+]);
+
+})();
 // ---- src/content/projectiles.js ----
 (function () {
 // ===== content/projectiles.js : everything that flies =====
@@ -14311,11 +14595,16 @@ defineProjectile({ id: 'rock', spr: 'rock', spd: 5, dmg: 1, sc: 0.6, blockable: 
 defineProjectile({ id: 'spear', spr: 'arrow', spd: 6, dmg: 1, z: 0.1, blockable: true });
 defineProjectile({ id: 'magic', spr: 'magic', spd: 4.5, dmg: 2, sc: 0.6 });
 defineProjectile({ id: 'fire', spr: 'fireball', spd: 4.5, dmg: 2 });
+// chill: seconds the hero is slowed when it hits
+defineProjectile({ id: 'icebolt', spr: 'icebolt', spd: 5, dmg: 1, sc: 0.7, chill: 1.5 });
+defineProjectile({ id: 'icebreath', spr: 'icebolt', spd: 6.5, dmg: 2, sc: 0.75, chill: 2.5 });
+defineProjectile({ id: 'firebreath', spr: 'fireball', spd: 6.5, dmg: 2, sc: 0.85 });
 // hero shots
 defineProjectile({ id: 'beam', spr: 'beam', spd: 9, dmg: 1, sc: 0.8, player: true, range: 7, beam: true });
 defineProjectile({ id: 'ki', spr: 'ki', spd: 10, dmg: 1, sc: 0.6, player: true, range: 7, beam: true });
 defineProjectile({ id: 'wave', spr: 'ki', spd: 9, dmg: 4, sc: 1.4, z: 0.1, player: true, pierce: true, pierceShield: true, endFx: 'boom' });
 defineProjectile({ id: 'arrow', spr: 'arrow', spd: 11, dmg: 2, z: 0.1, player: true });
+defineProjectile({ id: 'dawnbeam', spr: 'beam_dawn', spd: 11, dmg: 1, sc: 1.0, player: true, range: 9, beam: true, pierce: true, pierceShield: true });
 defineProjectile({ id: 'dart', spr: 'beam', spd: 12, dmg: 2, sc: 0.5, player: true });
 defineProjectile({ id: 'candle', spr: 'flame', spd: 4, dmg: 1, sc: 0.8, z: -0.05, player: true, range: 2.2, fire: true });
 defineProjectile({ id: 'palm', spr: 'flame', spd: 6, dmg: 2, sc: 1.1, z: -0.05, player: true, range: 3.5, fire: true, pierce: true });
@@ -14494,6 +14783,26 @@ defineGimmick('glass', {
 });
 
 })();
+// ---- src/content/gimmicks/ice.js ----
+(function () {
+// ===== content/gimmicks/ice.js : icy rooms. You slide on ICE (see the client movement), straight into spikes and pits =====
+'use strict';
+defineTexture('spikes', (x, y, r, ctx) => { const cx = x % 8, cy = y % 8; const tip = Math.abs(cx - 3.5) + Math.abs(cy - 3.5) < 2.5; return tip ? (cx < 4 && cy < 4 ? [235, 245, 255] : [150, 170, 200]) : ctx.vary([60, 70, 90], x, y, 0.2); });
+defineTile('SPIKES', { floor: 'spikes', hurt: 1 }); // ice spikes: they hurt while you stand on them
+defineGimmick('ice', {
+  room(L, r, { rnd, set, lane }) {
+    if (rnd() < 0.25) return false; // some rooms stay plain
+    for (let y = 1; y < DSY; y++) for (let x = 1; x < DSX; x++) set(x, y, 'ICE');
+    const pat = rnd.int(3);
+    const hazard = (x, y, t) => { if (!lane(x, y)) set(x, y, t); };
+    if (pat === 0) { for (const [x, y] of [[1, 1], [2, 1], [1, 2], [10, 1], [11, 1], [11, 2], [1, 6], [1, 7], [2, 7], [11, 6], [10, 7], [11, 7]]) hazard(x, y, 'PIT'); }
+    else if (pat === 1) { for (let x = 2; x <= 10; x++) { hazard(x, 2, 'SPIKES'); hazard(x, 6, 'SPIKES'); } }
+    else { for (const [x, y] of [[3, 2], [9, 2], [3, 6], [9, 6]]) hazard(x, y, 'ICEWALL'); for (const [x, y] of [[4, 4], [8, 4], [6, 2], [6, 6]]) if (!lane(x, y)) hazard(x, y, 'SPIKES'); hazard(2, 4, 'PIT'); hazard(10, 4, 'PIT'); }
+    return true;
+  },
+});
+
+})();
 // ---- src/content/gimmicks/statues.js ----
 (function () {
 // ===== content/gimmicks/statues.js : knight statues that come to life when you walk past =====
@@ -14505,6 +14814,27 @@ defineGimmick('statues', {
     const spots = rnd.shuffle([[2, 1], [10, 1], [2, 7], [10, 7], [3, 3], [9, 5]]);
     r.dormant = spots.slice(0, 1 + rnd.int(2)).map(([x, y]) => ({ type: 'knight', x: r.rx * DSX + x + 0.5, y: r.ry * DSY + y + 0.5 }));
     return false;
+  },
+});
+
+})();
+// ---- src/content/gimmicks/vents.js ----
+(function () {
+// ===== content/gimmicks/vents.js : fire vents that blow on a shared rhythm (sim.ventPhase: cool, glowing, blowing) =====
+// Standing on a VENT while it blows hurts (unless you wear the Magma Boots). Watch them glow, then cross.
+'use strict';
+defineTexture('vent', (x, y, r, ctx) => { const bar = (x % 6) < 2 || (y % 6) < 2; return bar ? ctx.vary([50, 44, 46], x, y, 0.2) : [24, 16, 16]; });
+defineTexture('vent_warm', (x, y, r, ctx) => { const bar = (x % 6) < 2 || (y % 6) < 2; return bar ? ctx.vary([90, 50, 40], x, y, 0.2) : [200, 70, 20]; });
+defineTexture('vent_hot', (x, y, r, ctx) => { const bar = (x % 6) < 2 || (y % 6) < 2; const d = Math.hypot(x - 15.5, y - 15.5); return bar ? [255, 140, 40] : d < 8 ? [255, 250, 200] : [255, 190, 60]; });
+defineTile('VENT', { floor: 'vent', vent: true });
+defineGimmick('vents', {
+  room(L, r, { rnd, set, lane }) {
+    if (rnd() < 0.3) return false;
+    const pat = rnd.int(3);
+    if (pat === 0) { for (let y = 2; y <= 6; y++) for (let x = 2; x <= 10; x++) if ((x + y) % 2 === 0) set(x, y, 'VENT'); }       // checkerboard
+    else if (pat === 1) { for (let x = 1; x < DSX; x++) { set(x, 3, 'VENT'); set(x, 4, 'VENT'); set(x, 5, 'VENT'); } }             // a band across
+    else { for (let y = 1; y < DSY; y++) { set(4, y, 'VENT'); set(8, y, 'VENT'); } for (const [x, y] of [[2, 2], [10, 2], [2, 6], [10, 6]]) if (!lane(x, y)) set(x, y, 'LAVA'); }
+    return true;
   },
 });
 
@@ -14535,6 +14865,188 @@ defineEnemy({
     '..kPPk.kk.kPPk..',
     '...kk..w..w.kk..',
     '................',
+    '................',
+    '................',
+    '................',
+  ],
+});
+
+})();
+// ---- src/content/enemies/dragons.js ----
+(function () {
+// ===== content/enemies/dragons.js : the great dragons, built from parts =====
+// The Frost Matriarch (Rimefang Hollow, 10), the Fire Patriarch (Cinder Caldera, 11) and the three-headed
+// Hearthwyrm (the Hearth, 12). Each head is the actual enemy: it's what you hit, and what bites you.
+// A big body sits at the back of the boss room and a chain of neck segments ('neck' entities) runs from it to
+// the head, so the long neck sways, reaches out to point at you, rears back, and snaps forward.
+'use strict';
+const HEAD_ROWS = [
+  '..k..........k..',
+  '.kvk........kvk.',
+  '.kvAk......kAvk.',
+  '..kAAkkkkkkAAk..',
+  '..kAAAAAAAAAAk..',
+  '.kAAEkAAAAkEAAk.',
+  '.kAAkkAAAAkkAAk.',
+  '.kBAAAAAAAAAABk.',
+  '..kBAAAAAAAABk..',
+  '..kBBwkwwkwBBk..',
+  '...kkCCCCCCkk...',
+  '...kwkCCCCkwk...',
+  '....kBwkkwBk....',
+  '.....kBBBBk.....',
+  '......kkkk......',
+  '................',
+];
+const PALS = { ice: { A: '#86ccf0', B: '#2c62a0', C: '#e8f8ff', E: '#40ffff' }, fire: { A: '#d83c20', B: '#741410', C: '#ffb444', E: '#ffff60' }, hollow: { A: '#5c2e8c', B: '#22103a', C: '#b478ff', E: '#ff50ff' } };
+// body and neck segments: positioned by their head every tick; they vanish with it
+defineEntity('neck', {
+  update(sim, n) {
+    if (n.role === 'seg') { if (!n.head || n.head.dead) n.dead = true; return; }
+    if (!n.heads.some(h => !h.dead)) { n.dead = true; sim.spawn({ k: 'fx', lvl: n.lvl, x: n.x, y: n.y, spr: 'boom', life: 0.9, sc: 2.6 }); sim.sfx('bossdie', n.lvl, n.x, n.y); }
+  },
+});
+function rig(sim, e, cfg) {
+  const ax = e.x, ay = e.y - 0.4; // the boss spawns at the top-centre of its room
+  let body = sim.ents.find(n => n.k === 'neck' && n.role === 'body' && n.lvl === e.lvl && !n.dead && dist2(n.x, n.y, ax, ay - 0.3) < 4);
+  if (!body) body = sim.spawn({ k: 'neck', role: 'body', lvl: e.lvl, x: ax, y: ay - 0.3, spr: 'drake_body_' + (cfg.bodyTint || cfg.tint), sc: cfg.bodySc || 2.5, z: 0, heads: [] });
+  body.heads.push(e); e.body = body;
+  e.base = { x: ax + (cfg.baseDx || 0), y: ay + 0.2 };
+  e.segs = []; const n = cfg.segs || 7;
+  for (let i = 0; i < n; i++) e.segs.push(sim.spawn({ k: 'neck', role: 'seg', head: e, lvl: e.lvl, x: e.base.x, y: e.base.y, spr: 'drake_neck_' + cfg.tint, sc: lerp(1.0, 0.7, i / n), z: 0.3 }));
+  e.mode = 'sway'; e.tm = 1.2 + Math.random(); e.hz = cfg.headZ || 0.7; e.y = e.base.y + 1.5; e.x = e.base.x;
+}
+// cfg: tint, home (angle the neck rests at), reach, breath(sim, e) one puff, breathGap, special(sim, e, p) when hurt
+function dragonAi(cfg) {
+  return (sim, e, dt, { p }) => {
+    if (!e.segs) rig(sim, e, cfg);
+    const B = e.base, hurt = e.hp < e.maxHp / 2, fast = hurt ? 1.4 : 1; const reach = cfg.reach || 4.6;
+    const toward = (tx, ty, rate) => {
+      let dx = tx - B.x, dy = ty - B.y; const d = Math.hypot(dx, dy); if (d > reach) { dx *= reach / d; dy *= reach / d; }
+      e.x += (B.x + dx - e.x) * Math.min(1, dt * rate); e.y += (B.y + dy - e.y) * Math.min(1, dt * rate);
+      if (e.b) { e.x = clamp(e.x, e.b.x0 + 0.5, e.b.x1 - 0.5); e.y = clamp(e.y, e.b.y0 + 0.5, e.b.y1 - 0.5); }
+    };
+    switch (e.mode) {
+      case 'sway': { const a = cfg.home + Math.sin(e.t * 0.9 + (cfg.phase || 0)) * 0.7; const r = 2 + Math.sin(e.t * 1.7) * 0.5; toward(B.x + Math.cos(a) * r, B.y + Math.sin(a) * r, 3);
+        if (e.tm <= 0 && p) { e.mode = 'aim'; e.tm = 0.75 / fast; sim.sfx('roar', e.lvl, e.x, e.y); } break; }
+      case 'aim': { if (!p) { e.mode = 'sway'; break; } const d = Math.hypot(p.x - B.x, p.y - B.y) || 1; const k = Math.min(reach * 0.6, d);
+        toward(B.x + (p.x - B.x) / d * k, B.y + (p.y - B.y) / d * k, 4); e.f = Math.atan2(p.y - e.y, p.x - e.x);
+        if (e.tm <= 0) { if (dist2(p.x, p.y, e.x, e.y) < 7 && Math.random() < 0.7) { e.mode = 'bite'; e.tm = 0.5; e.bx = p.x; e.by = p.y; sim.sfx('roar', e.lvl, e.x, e.y); } else { e.mode = 'breath'; e.tm = 1.0; e.shot = 0; } }
+        break; }
+      case 'bite': toward(e.bx, e.by, 10); if (e.tm <= 0) { e.mode = 'recoil'; e.tm = 0.7; } break;
+      case 'breath': if (p) e.f += clamp(angDiff(e.f, Math.atan2(p.y - e.y, p.x - e.x)), -dt * 1.4, dt * 1.4);
+        e.shot -= dt; if (e.shot <= 0) { e.shot = (cfg.breathGap || 0.12) / fast; cfg.breath(sim, e); }
+        if (e.tm <= 0) { e.mode = 'recoil'; e.tm = 0.8; } break;
+      default: toward(B.x + Math.cos(cfg.home) * 1.6, B.y + Math.sin(cfg.home) * 1.6, 3);
+        if (e.tm <= 0) { e.mode = 'sway'; e.tm = (1.3 + Math.random()) / fast; e.n = (e.n || 0) + 1; if (hurt && cfg.special && e.n % 2 === 0) cfg.special(sim, e, p); }
+    }
+    // head height: rears up to breathe, dips to bite
+    e.hz += ((e.mode === 'bite' ? 0.2 : e.mode === 'breath' ? (cfg.headZ || 0.7) + 0.15 : (cfg.headZ || 0.7)) - e.hz) * Math.min(1, dt * 5);
+    // the neck: a swaying arch from the body to the head
+    const n = e.segs.length, dx = e.x - B.x, dy = e.y - B.y, len = Math.hypot(dx, dy) || 1;
+    for (let i = 0; i < n; i++) {
+      const t = (i + 1) / (n + 1), s = e.segs[i]; const sway = Math.sin(e.t * 2.2 + i * 0.7 + (cfg.phase || 0)) * 0.2 * Math.sin(t * Math.PI);
+      s.x = B.x + dx * t - dy / len * sway; s.y = B.y + dy * t + dx / len * sway;
+      s.z = lerp(0.3, e.hz, t) + Math.sin(t * Math.PI) * (cfg.arch || 0.7) * (1 - Math.min(1, len / reach) * 0.6);
+    }
+  };
+}
+const stream = (proj, jitter) => (sim, e) => { sim.fireProj(proj, e.lvl, e.x, e.y, e.f + (Math.random() - 0.5) * jitter, 'e', null, { dmg: Content.projectiles[proj].dmg }); if (Math.random() < 0.3) sim.sfx('fire', e.lvl, e.x, e.y); };
+const eruption = (sim, e) => { // lava bursts out of the floor all over the room
+  if (!e.b) return; const L = sim.W.levels[e.lvl];
+  for (let i = 0; i < 7; i++) { const x = e.b.x0 + 1 + Math.random() * (e.b.x1 - e.b.x0 - 2), y = e.b.y0 + 2 + Math.random() * (e.b.y1 - e.b.y0 - 3); if (!L.solidAt(x, y)) sim.spawn({ k: 'efire', lvl: e.lvl, x, y, life: 2.2, spr: 'flame', sc: 1.0, z: -0.05 }); }
+  sim.sfx('boom', e.lvl, e.x, e.y);
+};
+const headDef = (o) => defineEnemy(Object.assign({ hp: 12, spd: 0, dmg: 2, r: 0.6, sc: 1.3, boss: true, sprite: HEAD_ROWS, view: (e) => e.hz || 0.7,
+  anim: { fps: 4, frames: (s, kit) => [s, kit.squash(s, 0.94), s, kit.squash(s, 1.05)] } }, o));
+headDef({
+  id: 'matriarch', title: 'THE FROST MATRIARCH', bossOf: [10], pal: PALS.ice,
+  ai: dragonAi({ tint: 'ice', home: Math.PI / 2, reach: 4.8, breath: stream('icebreath', 0.5), breathGap: 0.11,
+    special(sim, e) { AI.ring(sim, e, 'icebolt', 12, Math.random(), { dmg: 1 }); for (let i = 0; i < 2; i++) sim.spawnMinion(e, 'frostling'); } }),
+  onDeath(sim) { sim.msg('THE FROST MATRIARCH FALLS. THE HOLLOW THAWS.'); },
+});
+headDef({
+  id: 'patriarch', title: 'THE FIRE PATRIARCH', bossOf: [11], pal: PALS.fire, hot: true, hp: 13,
+  ai: dragonAi({ tint: 'fire', home: Math.PI / 2, reach: 4.8, breath: stream('firebreath', 0.45), breathGap: 0.12, special: eruption }),
+  onDeath(sim) { sim.msg('THE FIRE PATRIARCH FALLS. THE CALDERA GOES QUIET.'); },
+});
+// the Hearthwyrm: three heads on one body. Every head must fall.
+const lastHead = (sim, e, line) => { const left = (e.body ? e.body.heads : []).filter(h => !h.dead && h !== e).length; sim.msg(left ? line : 'THE HEARTHWYRM FALLS. ITS THREE FLAMES BURN AS ONE.'); };
+headDef({
+  id: 'hearth_frost', title: 'THE HEARTHWYRM', pal: PALS.ice, hp: 9,
+  ai: dragonAi({ bodyTint: 'hearth', tint: 'ice', home: Math.PI / 2 + 0.75, baseDx: -0.8, phase: 0, reach: 4.4, breath: stream('icebreath', 0.5), breathGap: 0.14,
+    special(sim, e) { AI.ring(sim, e, 'icebolt', 8, 0, { dmg: 1 }); } }),
+  onDeath(sim, e) { lastHead(sim, e, 'THE FROST HEAD FALLS.'); },
+});
+headDef({
+  id: 'hearth_fire', title: 'THE HEARTHWYRM', bossOf: [12], pal: PALS.fire, hot: true, hp: 9,
+  ai: dragonAi({ bodyTint: 'hearth', tint: 'fire', home: Math.PI / 2, baseDx: 0, phase: 2, reach: 4.6, breath: stream('firebreath', 0.45), breathGap: 0.14, special: eruption }),
+  onDeath(sim, e) { lastHead(sim, e, 'THE FIRE HEAD FALLS.'); },
+});
+headDef({
+  id: 'hearth_hollow', title: 'THE HEARTHWYRM', pal: PALS.hollow, hp: 9,
+  ai: dragonAi({ bodyTint: 'hearth', tint: 'hollow', home: Math.PI / 2 - 0.75, baseDx: 0.8, phase: 4, reach: 4.4, breath: stream('magic', 0.7), breathGap: 0.22,
+    special(sim, e) { for (let i = 0; i < 2; i++) sim.spawnMinion(e, 'bat'); } }),
+  onDeath(sim, e) { lastHead(sim, e, 'THE HOLLOW HEAD FALLS... AND THE STOLEN LIGHT RETURNS.'); },
+});
+
+})();
+// ---- src/content/enemies/frostling.js ----
+(function () {
+// ===== content/enemies/frostling.js =====
+// Little ice imps of the Frozen Reach. Hop at you and spit ice that slows your legs.
+'use strict';
+const hopSpit = (proj) => (sim, e, dt, ctx) => {
+  AI.hop(sim, e, dt, ctx);
+  e.spit = (e.spit == null ? 1 + Math.random() * 2 : e.spit) - dt;
+  if (e.spit <= 0 && ctx.p && dist2(ctx.p.x, ctx.p.y, e.x, e.y) < 49) { e.spit = 2 + Math.random() * 1.5; sim.fireProj(proj, e.lvl, e.x, e.y, Math.atan2(ctx.p.y - e.y, ctx.p.x - e.x), 'e', null, { dmg: Content.projectiles[proj].dmg * e.dmgMul }); sim.sfx('shoot', e.lvl, e.x, e.y); }
+};
+defineEnemy({
+  id: 'frostling', hp: 3, spd: 1.6, dmg: 1, r: 0.32, sc: 0.8,
+  spawns: { biomes: ['snow'], dungeons: [10, 12] },
+  ai: hopSpit('icebolt'),
+  anim: { fps: 6, frames: (s, kit) => [s, kit.squash(s, 0.85), s, kit.squash(s, 1.1)] },
+  view: (e) => e.hop > 0 ? 0.18 * Math.sin((0.4 - e.hop) / 0.4 * Math.PI) : 0,
+  sprite: [
+    '................',
+    '.....k....k.....',
+    '....kvk..kvk....',
+    '....kcvkkvck....',
+    '...kcccccccck...',
+    '..kccwkcckwcck..',
+    '..kcckkcckkcck..',
+    '..kccccccccccck.',
+    '..kCcckwwkcccCk.',
+    '...kCccccccCCk..',
+    '...kCCccccCCk...',
+    '..kvkCCCCCCkvk..',
+    '..kk.kkkkkk.kk..',
+    '................',
+    '................',
+    '................',
+  ],
+});
+// its fiery cousin from the Cinder Wastes
+defineEnemy({
+  id: 'cinderling', hp: 3, spd: 1.6, dmg: 1, r: 0.32, sc: 0.8, hot: true,
+  spawns: { biomes: ['ash'], dungeons: [11, 12] },
+  ai: hopSpit('fire'),
+  anim: { fps: 6, frames: (s, kit) => [s, kit.squash(s, 0.85), s, kit.squash(s, 1.1)] },
+  view: (e) => e.hop > 0 ? 0.18 * Math.sin((0.4 - e.hop) / 0.4 * Math.PI) : 0,
+  sprite: [
+    '................',
+    '......k..k......',
+    '.....kyk.kyk....',
+    '....kyokkoyk....',
+    '...koooooooook..',
+    '..korrwkookwrrk.',
+    '..korrkkookkrrk.',
+    '..koooooooooook.',
+    '..kRookxxkooRk..',
+    '...kRooooooRk...',
+    '...kRRooooRRk...',
+    '..kxkRRRRRRkxk..',
+    '..kk.kkkkkk.kk..',
     '................',
     '................',
     '................',
@@ -14653,6 +15165,38 @@ defineEnemy({
 });
 
 })();
+// ---- src/content/enemies/magmite.js ----
+(function () {
+// ===== content/enemies/magmite.js =====
+// Slow, heavy lumps of cooling rock that plod toward you and burst into flame when they die.
+'use strict';
+defineEnemy({
+  id: 'magmite', hp: 7, spd: 1.0, dmg: 2, r: 0.42, sc: 1.05, hot: true,
+  spawns: { biomes: ['ash'], dungeons: [11, 12] },
+  ai: AI.chase,
+  onDeath(sim, e) { for (let i = 0; i < 4; i++) { const a = i * Math.PI / 2 + 0.4; sim.spawn({ k: 'efire', lvl: e.lvl, x: e.x + Math.cos(a) * 0.7, y: e.y + Math.sin(a) * 0.7, life: 1.6, spr: 'flame', sc: 0.8, z: -0.05 }); } },
+  anim: { fps: 3, frames: (s, kit) => [s, kit.squash(s, 0.92), kit.bob(s, 1)] },
+  sprite: [
+    '................',
+    '................',
+    '.....kkkkkk.....',
+    '...kkGGGGGGkk...',
+    '..kGGxGGGGxGGk..',
+    '.kGGGGGGGGGGGGk.',
+    '.kGxGGykkyGGxGk.',
+    '.kGGGGkkkkGGGGk.',
+    'kGGGxGGGGGGxGGGk',
+    'kGGGGGGGGGGGGGGk',
+    'kGxGGGGxGGGGxGGk',
+    '.kGGGGGGGGGGGGk.',
+    '.kGGkkGGGGkkGGk.',
+    '..kk..kkkk..kk..',
+    '................',
+    '................',
+  ],
+});
+
+})();
 // ---- src/content/enemies/orb.js ----
 (function () {
 // ===== content/enemies/orb.js =====
@@ -14750,6 +15294,37 @@ defineEnemy({
     '.kleelllllleeek.',
     '.keeeeeeeeeeeek.',
     '..kkkkkkkkkkkk..',
+    '................',
+  ],
+});
+
+})();
+// ---- src/content/enemies/snowwolf.js ----
+(function () {
+// ===== content/enemies/snowwolf.js =====
+// White wolves that circle, then lunge. Fast on the snow.
+'use strict';
+defineEnemy({
+  id: 'snowwolf', hp: 4, spd: 6.5, dmg: 2, r: 0.38, sc: 0.95,
+  spawns: { biomes: ['snow'], dungeons: [10] },
+  ai: AI.lunge(0.45, 0.9, 1.8),
+  anim: { fps: 8, frames: (s, kit) => [s, kit.step(s, 12, -1, 1), s, kit.step(s, 12, 1, -1)] },
+  sprite: [
+    '................',
+    '................',
+    '..kk........kk..',
+    '..kgk......kgk..',
+    '..kgwkkkkkkwgk..',
+    '.kwwwwwwwwwwwwk.',
+    '.kwwckwwwwkcwwk.',
+    '.kwwkkwwwwkkwwk.',
+    '..kwwwwkkwwwwk..',
+    '..kgwwkrrkwwgk..',
+    '...kgwwwwwwgk...',
+    '..kgwwwwwwwwgk..',
+    '..kwwgwwwwgwwk..',
+    '..kwk.kwwk.kwk..',
+    '..kk...kk...kk..',
     '................',
   ],
 });
@@ -14886,19 +15461,22 @@ defineEnemy({
 // ---- src/content/enemies/wyrm.js ----
 (function () {
 // ===== content/enemies/wyrm.js =====
-// Boss of levels 1, 4 and 7. Sways side to side breathing fans of fire.
+// The wyrmlings: bosses of levels 1, 4 and 7, children of the great dragons (see dragons.js).
+// Level 1's hatched from a frost egg, level 4's from the Patriarch's magma, level 7's was born of the Hollow head.
+// They sway side to side breathing fans of their element.
 'use strict';
+const wyrmAi = (proj) => (sim, e, dt, { p, spd, def }) => {
+  if (e.tm <= 0) {
+    e.tm = e.hp < e.maxHp / 2 ? 1.3 : 2; // angrier when hurt
+    if (p) { AI.fan(sim, e, proj, Math.atan2(p.y - e.y, p.x - e.x), 3, 0.7, { dmg: 2 }); sim.sfx('roar', e.lvl, e.x, e.y); }
+  }
+  if (sim.moveEnt(e, Math.cos(e.st ? 0 : Math.PI) * spd * dt, Math.sin(e.t * 1.3) * spd * 0.6 * dt, def)) e.st = e.st ? 0 : 1;
+};
 defineEnemy({
-  id: 'wyrm',
-  hp: 10, spd: 1.2, dmg: 2, r: 0.7, sc: 1.8, boss: true,
-  bossOf: [1, 4, 7],
-  ai: (sim, e, dt, { p, spd, def }) => {
-    if (e.tm <= 0) {
-      e.tm = e.hp < e.maxHp / 2 ? 1.3 : 2; // angrier when hurt
-      if (p) { AI.fan(sim, e, 'fire', Math.atan2(p.y - e.y, p.x - e.x), 3, 0.7, { dmg: 2 }); sim.sfx('roar', e.lvl, e.x, e.y); }
-    }
-    if (sim.moveEnt(e, Math.cos(e.st ? 0 : Math.PI) * spd * dt, Math.sin(e.t * 1.3) * spd * 0.6 * dt, def)) e.st = e.st ? 0 : 1;
-  },
+  id: 'wyrm', title: 'MAGMA WYRMLING',
+  hp: 10, spd: 1.2, dmg: 2, r: 0.7, sc: 1.8, boss: true, hot: true,
+  bossOf: [4],
+  ai: wyrmAi('fire'),
   anim: { fps: 3, frames: (s, kit) => [s, kit.bob(s, 1), kit.step(s, 12, -1, 0)] },
   sprite: [
     '....k......k....',
@@ -14919,6 +15497,10 @@ defineEnemy({
     'kk.....kk.....kk',
   ],
 });
+// the frost hatchling (level 1) and the hollow hatchling (level 7): same body, their parents' colors and breath
+for (const [id, bossOf, proj, pal] of [['wyrm_frost', [1], 'icebolt', { r: '#86ccf0', R: '#2c62a0', o: '#e8f8ff', y: '#40ffff' }], ['wyrm_hollow', [7], 'magic', { r: '#7a44b0', R: '#2e1450', o: '#d0a0ff', y: '#ff60ff' }]]) {
+  defineEnemy(Object.assign({}, enemyDef('wyrm'), { id, bossOf, title: id === 'wyrm_frost' ? 'FROST WYRMLING' : 'HOLLOW WYRMLING', hot: false, pal, ai: wyrmAi(proj), anim: { fps: 3, frames: (s, kit) => [s, kit.bob(s, 1), kit.step(s, 12, -1, 0)] } }));
+}
 
 })();
 // ---- src/content/items/bombs.js ----
@@ -15023,9 +15605,9 @@ defineItem({
     const monk = p.cls === 'monk';
     if (sim.ents.filter(e => e.k === 'proj' && e.pid === p.id && (e.type === 'arrow' || e.type === 'dart')).length >= (monk ? 3 : 1)) return;
     p.arrows--;
-    const silver = !!p.items.silver; const dmg = silver ? 4 : 2;
-    if (monk) for (const s of [-0.12, 0, 0.12]) sim.fireProj('dart', p.lvl, p.x, p.y, p.a + s, 'p', p.id, { dmg: dmg - 1, silver, life: 1.5 });
-    else sim.fireProj('arrow', p.lvl, p.x, p.y, p.a, 'p', p.id, { dmg, silver });
+    const silver = !!p.items.silver; const dmg = silver ? 4 : 2; const frost = !!p.items.frostarrows; // frost arrows (Rimefang Hollow) freeze
+    if (monk) for (const s of [-0.12, 0, 0.12]) sim.fireProj('dart', p.lvl, p.x, p.y, p.a + s, 'p', p.id, Object.assign({ dmg: dmg - 1, silver, life: 1.5, frost }, frost ? { spr: 'icebolt' } : {}));
+    else sim.fireProj('arrow', p.lvl, p.x, p.y, p.a, 'p', p.id, Object.assign({ dmg, silver, frost }, frost ? { spr: 'arrow_ice' } : {}));
     sim.sfx('arrow', p.lvl);
   },
 });
@@ -15073,7 +15655,7 @@ defineItem({
   owned: (p) => !!p.dbg,
   give(sim, p) { },
   use(sim, p) {
-    const stops = []; for (let d = 1; d <= 9; d++) if (sim.W.levels['d' + d]) stops.push('d' + d); stops.push('ow');
+    const stops = []; for (let d = 1; d <= NDUNGEONS(); d++) if (sim.W.levels['d' + d]) stops.push('d' + d); stops.push('ow');
     const i = (stops.indexOf(p.lvl) + 1) % stops.length; const T = sim.W.levels[stops[i]];
     sim.teleport(p, T.id, T.spawn.x, T.spawn.y, T.spawn.a); sim.sfx('whistle', T.id);
     sim.hint(p, 'WARP STONE: ' + (T.id === 'ow' ? 'THE WILDS' : 'LEVEL-' + T.dnum + ' ' + dungeonName(T.dnum)) + '. USE AGAIN FOR THE NEXT.');
@@ -15105,6 +15687,36 @@ defineItem({
 // ===== content/items/fists.js : the secret class. Taking it turns you into the martial artist. =====
 'use strict';
 defineItem({ id: 'fists', name: 'THE OPEN HAND', sprite: 'ki', give(sim, p, ctx) { p.cls = 'monk'; sim.ev({ t: 'monk', pid: p.id }); ctx.banner(); } });
+
+})();
+// ---- src/content/items/frontier.js ----
+(function () {
+// ===== content/items/frontier.js : treasures of the optional dungeons =====
+// Rimefang Hollow: FROST ARROWS (treasure) and the FROST FANG (from the Matriarch).
+// Cinder Caldera: MAGMA BOOTS (treasure) and the EMBER HEART (from the Patriarch).
+// The Hearth (opened by the Fang + the Heart): the DAWNBLADE, from the Hearthwyrm.
+'use strict';
+defineItem({ id: 'frostarrows', name: 'FROST ARROWS', sprite: 'arrow_ice', monk: { name: 'FROST DARTS' }, team: true, debug: true,
+  give(sim, p, ctx) { p.items.frostarrows = true; p.arrows = Math.max(p.arrows, 20); ctx.banner('FROST ARROWS: THEY FREEZE WHAT THEY HIT'); } });
+defineItem({ id: 'magmaboots', name: 'MAGMA BOOTS', sprite: 'boots', team: true, debug: true,
+  give(sim, p, ctx) { p.items.magmaboots = true; ctx.banner('MAGMA BOOTS: WALK ON LAVA AND VENTS'); } });
+// relics: shared by the party, shown under the shards, and both are needed for the Hearth gate
+const relic = (id, name, sprite, line) => defineItem({ id, name, sprite, team: true, debug: true,
+  debugGrant(p, sim) { if (!sim.team.relics.includes(id)) sim.team.relics.push(id); },
+  give(sim, p, ctx) {
+    const t = sim.team; if (!t.relics.includes(id)) t.relics.push(id);
+    const d = +p.lvl.slice(1); if (d && !t.done.includes(d)) t.done.push(d);
+    ctx.banner(name + (t.relics.includes('fang') && t.relics.includes('emberheart') ? ': THE HEARTH WILL OPEN' : ': ' + line), true);
+    sim.pendingExit = { lvl: p.lvl, at: sim.time + 3.5 }; sim.autosave = true;
+  } });
+relic('fang', 'FROST FANG', 'fang', 'ONE OF TWO HEARTH KEYS');
+relic('emberheart', 'EMBER HEART', 'emberheart', 'ONE OF TWO HEARTH KEYS');
+defineItem({ id: 'dawnblade', name: 'DAWNBLADE', sprite: 'dawnblade', monk: { name: 'DAWN FISTS' }, team: true,
+  give(sim, p, ctx) {
+    p.sword = Math.max(p.sword, 4); const d = +p.lvl.slice(1); if (d && !sim.team.done.includes(d)) sim.team.done.push(d);
+    ctx.banner(p.cls === 'monk' ? 'DAWN FISTS: THE LAST FLAME IS YOURS' : 'DAWNBLADE: ITS LIGHT CUTS THROUGH ANYTHING', true);
+    sim.pendingExit = { lvl: p.lvl, at: sim.time + 4 }; sim.autosave = true;
+  } });
 
 })();
 // ---- src/content/items/gems.js ----
@@ -15211,7 +15823,9 @@ defineItem({
 // ---- src/game/world.js ----
 // ===== game/world.js : level generation (overworld, caves, dungeons) =====
 'use strict';
-const RW = 8, RH = 6, RSX = 16, RSY = 11; // overworld region grid & stride
+const RW = 10, RH = 6, RSX = 16, RSY = 11; // overworld region grid & stride. Column 0 is the Frozen Reach, column RW-1 the Cinder Wastes.
+const FRONTIER = { 0: 'snow', [RW - 1]: 'ash' }; // the lands beyond the passes, by column
+const NDUNGEONS = () => Math.max(9, Content.dungeons.length - 1); // 1-9 main, 10+ optional
 const DGW = 8, DGH = 8, DSX = 12, DSY = 8;  // dungeon room grid (8x8 rooms, drawn as shapes in content/dungeons.js) & room size
 
 class Level {
@@ -15240,7 +15854,7 @@ class Level {
   }
 }
 
-const BIOMES = ['plains', 'forest', 'mountain', 'lake', 'desert', 'graveyard'];
+const BIOMES = ['plains', 'forest', 'mountain', 'lake', 'desert', 'graveyard', 'snow', 'ash'];
 // Which enemies appear where comes from each enemy's `spawns` (content/enemies). Dungeon names and
 // treasures come from content/dungeons.js. These helpers keep the old shapes for the generator.
 const dungeonName = (d) => (Content.dungeons[d] || {}).name || ('LEVEL ' + d);
@@ -15253,7 +15867,7 @@ function genWorld(seed, mode) {
   const W = { seed, mode, levels: {}, caveCount: 0, dungeons: [] };
   const rnd = mulberry32(seed);
   genOverworld(W, rnd);
-  for (let d = 1; d <= 9; d++) genDungeon(W, d, mulberry32(seed * 31 + d * 977));
+  for (let d = 1; d <= NDUNGEONS(); d++) genDungeon(W, d, mulberry32(seed * 31 + d * 977));
   return W;
 }
 
@@ -15268,10 +15882,11 @@ function genOverworld(W, rnd) {
   for (let ry = 0; ry < RH; ry++) for (let rx = 0; rx < RW; rx++) {
     let b;
     const v = Math.sin(rx * 0.9 + bn[0] * 6) + Math.cos(ry * 1.1 + bn[1] * 6) + (rnd() - 0.5) * 0.9;
-    if ((rx === 0 || rx === RW - 1) && rnd() < 0.45) b = 'mountain'; // foothills of the edge ranges
+    if (FRONTIER[rx]) b = FRONTIER[rx];
+    else if ((rx === 1 || rx === RW - 2) && rnd() < 0.45) b = 'mountain'; // foothills of the edge ranges
     else if (ry === 0 && rnd() < 0.5) b = 'forest'; // the edge of the great wood
-    else if (v > 1.0) b = 'forest'; else if (v < -1.1) b = 'lake'; else if (rx >= RW - 2 && ry >= 3 && rnd() < 0.6) b = 'desert';
-    else if (rx <= 1 && ry >= 2 && ry <= 4 && rnd() < 0.5) b = 'graveyard'; else b = rnd() < 0.55 ? 'plains' : rnd() < 0.5 ? 'forest' : 'desert';
+    else if (v > 1.0) b = 'forest'; else if (v < -1.1) b = 'lake'; else if (rx >= RW - 3 && ry >= 3 && rnd() < 0.6) b = 'desert';
+    else if (rx <= 2 && ry >= 2 && ry <= 4 && rnd() < 0.5) b = 'graveyard'; else b = rnd() < 0.55 ? 'plains' : rnd() < 0.5 ? 'forest' : 'desert';
     if (rx === startR.x && ry === startR.y) b = 'plains';
     L.regions.push({ rx, ry, biome: b, enemies: [], tier: 0, features: [] });
   }
@@ -15283,22 +15898,29 @@ function genOverworld(W, rnd) {
   const seen = new Set(); const stack = [startR.y * RW + startR.x]; seen.add(stack[0]);
   while (stack.length) {
     const cur = stack[stack.length - 1]; const cx = cur % RW, cy = Math.floor(cur / RW);
-    const nb = [[1, 0], [-1, 0], [0, 1], [0, -1]].map(([dx, dy]) => [cx + dx, cy + dy]).filter(([x, y]) => x >= 0 && y >= 0 && x < RW && y < RH && !seen.has(y * RW + x));
+    const nb = [[1, 0], [-1, 0], [0, 1], [0, -1]].map(([dx, dy]) => [cx + dx, cy + dy]).filter(([x, y]) => x >= 0 && y >= 0 && x < RW && y < RH && !FRONTIER[x] && !seen.has(y * RW + x));
     if (!nb.length) { stack.pop(); continue; }
     const [nx, ny] = rnd.pick(nb); const ni = ny * RW + nx; seen.add(ni); edges[ek(cur, ni)] = 1; stack.push(ni);
   }
   for (let ry = 0; ry < RH; ry++) for (let rx = 0; rx < RW; rx++) {
     const i = ry * RW + rx;
-    if (rx < RW - 1 && rnd() < 0.35) edges[ek(i, i + 1)] = 1;
+    if (FRONTIER[rx]) { if (ry < RH - 1) edges[ek(i, i + RW)] = 1; continue; } // the frontier lands are open north-south
+    if (rx < RW - 1 && !FRONTIER[rx + 1] && rnd() < 0.35) edges[ek(i, i + 1)] = 1;
     if (ry < RH - 1 && rnd() < 0.35) edges[ek(i, i + RW)] = 1;
   }
+  // one mountain pass into each frontier land
+  L.passes = {};
+  for (const fx of [0, RW - 1]) { const ry = rnd.range(1, RH - 2); const inner = fx === 0 ? 1 : RW - 2; edges[ek(ry * RW + fx, ry * RW + inner)] = 1; L.passes[FRONTIER[fx]] = { ry, fx, inner }; }
   L.edges = edges;
   // region distances from start (for difficulty)
   const dist = new Array(RW * RH).fill(99); dist[startR.y * RW + startR.x] = 0; const q = [startR.y * RW + startR.x];
   while (q.length) { const c = q.shift(); const cx = c % RW, cy = Math.floor(c / RW); for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { const nx = cx + dx, ny = cy + dy; if (nx < 0 || ny < 0 || nx >= RW || ny >= RH) continue; const n = ny * RW + nx; if (edges[ek(c, n)] && dist[n] > dist[c] + 1) { dist[n] = dist[c] + 1; q.push(n); } } }
-  L.regions.forEach((r, i) => { r.dist = dist[i]; r.tier = Math.min(3, Math.floor(dist[i] / 3)); });
+  L.regions.forEach((r, i) => { r.dist = dist[i]; r.tier = FRONTIER[r.rx] ? 3 : Math.min(3, Math.floor(dist[i] / 3)); });
   // borders
-  const borderTile = (b1, b2) => (b1 === 'mountain' || b2 === 'mountain') ? TL.ROCK : (b1 === 'lake' && b2 === 'lake') ? TL.WATER : (b1 === 'desert' && b2 === 'desert') ? TL.ROCK : TL.TREEWALL;
+  const front = (b) => b === 'snow' || b === 'ash';
+  const borderTile = (b1, b2) => (b1 === 'snow' && b2 === 'snow') ? TL.ICEWALL : (b1 === 'ash' && b2 === 'ash') ? TL.BASALT
+    : (b1 === 'snow' || b2 === 'snow') ? TL.PEAKS : (b1 === 'ash' || b2 === 'ash') ? TL.FIREPEAKS
+    : (b1 === 'mountain' || b2 === 'mountain') ? TL.ROCK : (b1 === 'lake' && b2 === 'lake') ? TL.WATER : (b1 === 'desert' && b2 === 'desert') ? TL.ROCK : TL.TREEWALL;
   for (let ry = 0; ry <= RH; ry++) for (let x = 0; x < w; x++) {
     const y = ry * RSY; const rx = Math.min(RW - 1, Math.floor(x / RSX));
     const a = ry > 0 ? R(rx, ry - 1).biome : 'mountain', b = ry < RH ? R(rx, ry).biome : 'mountain';
@@ -15311,7 +15933,7 @@ function genOverworld(W, rnd) {
     L.set(x, y, borderTile(a, b));
   }
   // the edges of the Wilds: the great wood (north), granite peaks (west), fire peaks (east), the sea (south)
-  for (let x = 0; x < w; x++) { L.set(x, 0, TL.BIGWOOD); L.set(x, h - 1, TL.OCEAN); }
+  for (let x = 0; x < w; x++) { const fb = FRONTIER[Math.min(RW - 1, Math.floor(x / RSX))]; L.set(x, 0, fb === 'snow' ? TL.PEAKS : fb === 'ash' ? TL.FIREPEAKS : TL.BIGWOOD); L.set(x, h - 1, TL.OCEAN); }
   for (let y = 1; y < h - 1; y++) { L.set(0, y, TL.PEAKS); L.set(w - 1, y, TL.FIREPEAKS); }
   // interiors
   for (const reg of L.regions) fillRegion(L, reg, rnd);
@@ -15323,14 +15945,14 @@ function genOverworld(W, rnd) {
   for (const k in edges) {
     const [a, b] = k.split(',').map(Number); const ax = a % RW, ay = Math.floor(a / RW), bx = b % RW, by = Math.floor(b / RW);
     const ra = R(ax, ay), rb = R(bx, by);
-    const floorT = (ra.biome === 'desert' || rb.biome === 'desert') ? TL.SAND : TL.PATH;
+    const floorT = (ra.biome === 'snow' || rb.biome === 'snow') ? TL.SNOW : (ra.biome === 'ash' || rb.biome === 'ash') ? TL.ASH : (ra.biome === 'desert' || rb.biome === 'desert') ? TL.SAND : TL.PATH;
     if (ay === by) { // horizontal neighbor: shared vertical wall at x = bx*RSX
       const x = bx * RSX; const wid = rnd.range(2, 3); const y0 = ay * RSY + rnd.range(2, RSY - 2 - wid);
-      for (let y = y0; y < y0 + wid; y++) { L.set(x, y, floorT); clearAround(L, x - 1, y); clearAround(L, x + 1, y); }
+      for (let y = y0; y < y0 + wid; y++) { L.set(x, y, floorT); clearAround(L, x - 1, y, baseTile(ra.biome)); clearAround(L, x + 1, y, baseTile(rb.biome)); }
       ra.doors.push([x - 1, y0 + 1]); rb.doors.push([x + 1, y0 + 1]);
     } else {
       const y = by * RSY; const wid = rnd.range(2, 4); const x0 = ax * RSX + rnd.range(2, RSX - 2 - wid);
-      for (let x = x0; x < x0 + wid; x++) { L.set(x, y, floorT); clearAround(L, x, y - 1); clearAround(L, x, y + 1); }
+      for (let x = x0; x < x0 + wid; x++) { L.set(x, y, floorT); clearAround(L, x, y - 1, baseTile(ra.biome)); clearAround(L, x, y + 1, baseTile(rb.biome)); }
       ra.doors.push([x0 + 1, y - 1]); rb.doors.push([x0 + 1, y + 1]);
     }
   }
@@ -15342,7 +15964,7 @@ function genOverworld(W, rnd) {
   const sc = sr.features[0];
   L.spawn = sc ? { x: sc.x + 0.5, y: Math.min(sr.ry * RSY + RSY - 0.6, sc.y + 3.5), a: -Math.PI / 2 } : { x: sr.rx * RSX + 8.5, y: sr.ry * RSY + 8.5, a: -Math.PI / 2 };
   // dungeon placement: sort regions by distance
-  const cand = L.regions.filter(r => r !== sr).sort((a, b) => a.dist - b.dist || rnd() - 0.5);
+  const cand = L.regions.filter(r => r !== sr && !FRONTIER[r.rx]).sort((a, b) => a.dist - b.dist || rnd() - 0.5);
   const used = new Set([sr]);
   const maxD = Math.max(...L.regions.map(r => r.dist));
   for (let d = 1; d <= 9; d++) {
@@ -15358,9 +15980,19 @@ function genOverworld(W, rnd) {
     used.add(best);
     placeGate(W, L, best, rnd, d);
   }
+  // optional dungeons: one deep in each frontier land, far from its pass; the Hearth on the edge of the great wood
+  for (const [d, biome] of [[10, 'snow'], [11, 'ash']]) {
+    if (!Content.dungeons[d]) continue; const ps = L.passes[biome];
+    const r = L.regions.filter(r => r.rx === ps.fx).sort((a, b) => Math.abs(b.ry - ps.ry) - Math.abs(a.ry - ps.ry))[0];
+    used.add(r); placeGate(W, L, r, rnd, d);
+  }
+  if (Content.dungeons[12]) {
+    const r = L.regions.filter(r => !used.has(r) && !FRONTIER[r.rx] && r.biome !== 'lake').sort((a, b) => a.ry - b.ry || Math.abs(a.rx - RW / 2) - Math.abs(b.rx - RW / 2))[0];
+    if (r) { used.add(r); placeGate(W, L, r, rnd, 12); }
+  }
   // caves: shops, gifts, hearts, secrets, dojo
   const caveKinds = CAVE_MIX;
-  const free = rnd.shuffle(L.regions.filter(r => !used.has(r) && r.biome !== 'lake'));
+  const free = rnd.shuffle(L.regions.filter(r => !used.has(r) && r.biome !== 'lake' && !FRONTIER[r.rx]));
   let fi = 0;
   for (const kind of caveKinds) {
     const r = free[fi++ % free.length];
@@ -15368,6 +16000,8 @@ function genOverworld(W, rnd) {
     const secret = SECRET_CAVES.includes(kind) ? (rnd() < 0.5 && r.biome !== 'forest' ? 'bomb' : (r.biome === 'forest' || r.biome === 'plains') ? 'bush' : 'bomb') : 'open';
     placeCave(W, L, r, rnd, kind, secret);
   }
+  // a hermit's cave just inside each pass, with advice about what lies ahead
+  for (const [biome, kind] of [['snow', 'frosthint'], ['ash', 'firehint']]) { const ps = L.passes[biome]; if (Content.caves[kind]) placeCave(W, L, R(ps.fx, ps.ry), rnd, kind, 'open'); }
   // enemies
   for (const r of L.regions) {
     if (r === sr) continue;
@@ -15377,6 +16011,11 @@ function genOverworld(W, rnd) {
   // signs near start
   L.signText = {};
   const sx = sr.rx * RSX + 5, sy = sr.ry * RSY + 7; if (!TINFO[L.get(sx, sy)].solid) { L.props[L.idx(sx, sy)] = PR.SIGN; L.signText[L.idx(sx, sy)] = 'NINE DUNGEONS. EIGHT EMBER SHARDS. ONE HOLLOW CROWN. THE NUMBERED GATES GROW DEADLIER THE FARTHER YOU ROAM.'; }
+  // signposts at the passes
+  for (const [biome, txt] of [['snow', 'RIMEFANG PASS. BEYOND LIES THE FROZEN REACH, WHERE THE MOTHER OF WYRMS SLEEPS. MIND THE ICE.'], ['ash', 'CINDER PASS. BEYOND LIES THE CINDER WASTES, WHERE THE FATHER OF WYRMS BROODS. THE GROUND ITSELF BURNS.']]) {
+    const ps = L.passes[biome]; const r = R(ps.inner, ps.ry); const d = r.doors.find(([x]) => biome === 'snow' ? x === r.rx * RSX + 1 : x === (r.rx + 1) * RSX - 1); if (!d) continue;
+    const sx = biome === 'snow' ? d[0] + 2 : d[0] - 2, sy = d[1] - 2; if (!TINFO[L.get(sx, sy)].solid && !TINFO[L.get(sx, sy)].portal) { L.props[L.idx(sx, sy)] = PR.SIGN; L.signText[L.idx(sx, sy)] = txt; }
+  }
   // ensure connectivity per region from doors
   for (const r of L.regions) connectRegion(L, r);
   // clear spawn
@@ -15409,11 +16048,12 @@ function repairReach(L) {
     }
   }
 }
-function clearAround(L, x, y) { const i = L.idx(x, y); if (x <= 0 || y <= 0 || x >= L.w - 1 || y >= L.h - 1) return; if (TINFO[L.tiles[i]].solid && !TINFO[L.tiles[i]].portal) L.tiles[i] = TL.GRASS; L.props[i] = 0; }
+function baseTile(biome) { return biome === 'desert' ? TL.SAND : biome === 'graveyard' ? TL.PATH : biome === 'snow' ? TL.SNOW : biome === 'ash' ? TL.ASH : TL.GRASS; }
+function clearAround(L, x, y, base) { const i = L.idx(x, y); if (x <= 0 || y <= 0 || x >= L.w - 1 || y >= L.h - 1) return; if (TINFO[L.tiles[i]].solid && !TINFO[L.tiles[i]].portal) L.tiles[i] = base != null ? base : TL.GRASS; L.props[i] = 0; }
 function regionInterior(r) { return { x0: r.rx * RSX + 1, y0: r.ry * RSY + 1, x1: r.rx * RSX + RSX, y1: r.ry * RSY + RSY }; }
 function fillRegion(L, r, rnd) {
   const { x0, y0, x1, y1 } = regionInterior(r);
-  const base = r.biome === 'desert' ? TL.SAND : r.biome === 'graveyard' ? TL.PATH : TL.GRASS;
+  const base = baseTile(r.biome);
   for (let y = y0; y < y1; y++) for (let x = x0; x < x1; x++) { L.set(x, y, base); if (base === TL.GRASS && rnd() < 0.05) L.set(x, y, TL.FLOWERS); }
   const put = (x, y, p) => { if (x > x0 && y > y0 && x < x1 - 1 && y < y1 - 1) L.props[L.idx(x, y)] = p; };
   const cx = (x0 + x1) >> 1, cy = (y0 + y1) >> 1;
@@ -15430,6 +16070,18 @@ function fillRegion(L, r, rnd) {
       for (let i = 0; i < 3; i++) put(rnd.range(x0, x1), rnd.range(y0, y1), PR.TREE); break;
     }
     case 'desert': for (let i = 0; i < 8; i++) put(rnd.range(x0, x1), rnd.range(y0, y1), rnd.pick([PR.CACTUS, PR.CACTUS, PR.BOULDER])); break;
+    case 'snow': { // snowfield: frozen ponds you slide across, snowy pines, drifts of rock
+      for (let k = 0; k < 2; k++) { const px0 = rnd.range(x0 + 2, x1 - 5), py0 = rnd.range(y0 + 2, y1 - 4), rw = rnd.range(2, 3), rh = rnd.range(1, 2); for (let y = py0 - rh; y <= py0 + rh; y++) for (let x = px0 - rw; x <= px0 + rw; x++) if (((x - px0) / (rw + 0.5)) ** 2 + ((y - py0) / (rh + 0.5)) ** 2 < 1) L.set(x, y, TL.ICE); }
+      for (let i = 0; i < 12; i++) { const x = rnd.range(x0, x1), y = rnd.range(y0, y1); if (L.get(x, y) !== TL.ICE) put(x, y, rnd.pick([PR.SNOWPINE, PR.SNOWPINE, PR.BOULDER])); }
+      break;
+    }
+    case 'ash': { // cinder waste: lava rivulets with stepping stones, dead trees, basalt
+      const vertical = rnd() < 0.5; const at = vertical ? rnd.range(x0 + 3, x1 - 4) : rnd.range(y0 + 3, y1 - 3);
+      if (vertical) { for (let y = y0; y < y1; y++) { const x = at + Math.round(Math.sin(y * 0.7) * 1.2); L.set(x, y, TL.LAVA); if (y % 4 === 1) L.set(x, y, TL.ASH); } }
+      else { for (let x = x0; x < x1; x++) { const y = at + Math.round(Math.sin(x * 0.6) * 1.2); L.set(x, y, TL.LAVA); if (x % 4 === 1) L.set(x, y, TL.ASH); } }
+      for (let i = 0; i < 9; i++) { const x = rnd.range(x0, x1), y = rnd.range(y0, y1); if (L.get(x, y) !== TL.LAVA) put(x, y, rnd.pick([PR.DEADTREE, PR.BOULDER, PR.BOULDER])); }
+      break;
+    }
     case 'graveyard': for (let gy = y0 + 2; gy < y1 - 1; gy += 2) for (let gx = x0 + 2; gx < x1 - 1; gx += 3) if (rnd() < 0.7) put(gx, gy, PR.GRAVE);
       put(x0 + 1, y0 + 1, PR.STATUE); put(x1 - 2, y0 + 1, PR.STATUE); break;
   }
@@ -15475,10 +16127,11 @@ function placeStructure(L, r, rnd, wallT, portalT, wide) {
   return null;
 }
 function placeGate(W, L, r, rnd, d) {
-  const p = placeStructure(L, r, rnd, d === 9 ? TL.SHARDGATE : TL.BRICK, TL.GATE, true);
+  const sealed = d === 9 ? TL.SHARDGATE : d === 12 ? TL.HEARTHGATE : null;
+  const p = placeStructure(L, r, rnd, sealed != null ? sealed : TL.BRICK, TL.GATE, true);
   if (!p) return;
   const [px, py] = p;
-  if (d === 9) L.set(px, py, TL.SHARDGATE);
+  if (sealed != null) L.set(px, py, sealed);
   // a tall tower behind the gate, in the dungeon's own colors, so you can spot it from far away
   L.towerTheme = L.towerTheme || {};
   for (let x = px - 2; x <= px + 2; x++) { L.set(x, py - 1, TL.TOWER); L.towerTheme[L.idx(x, py - 1)] = 'd' + d; }
@@ -15594,14 +16247,14 @@ function genDungeon(W, d, rnd) {
   for (const r of order) {
     const ix = r.rx * DSX, iy = r.ry * DSY;
     if (r === start) { L.set(ix + 6, iy + DSY, TL.DEXIT); continue; }
-    if (r.boss) { r.enemies = [r.boss]; if (d >= 4) r.enemies.push(rnd.pick(pool)); r.shutter = true; continue; }
+    if (r.boss) { r.enemies = def.bossParty ? def.bossParty.slice() : [r.boss]; if (d >= 4 && !def.bossParty && pool.length) r.enemies.push(rnd.pick(pool)); r.shutter = true; continue; }
     const lane = (x, y) => x === 6 || y === 4; // keep the cross through each room's doors clear
     const rc = Object.assign({}, gctx, { ix, iy, lane, set: (x, y, t) => L.set(ix + x, iy + y, typeof t === 'string' ? TL[t] : t), prop: (x, y, pr) => { L.props[L.idx(ix + x, iy + y)] = pr; } });
     let decorated = false; for (const g of gimmicks) if (g.room && g.room(L, r, rc)) decorated = true;
     if (!decorated) {
       const pat = rnd.int(7);
       const blk = (x, y, t) => { if (lane(x, y)) return; L.set(ix + x, iy + y, t || TL.BRICK); };
-      const block = (d >= 4 && rnd() < 0.25) ? TL.LAVA : TL.BRICK;
+      const block = (d >= 4 && rnd() < 0.25) ? TL.LAVA : (d === 10 ? TL.ICEWALL : TL.BRICK);
       if (pat === 1) { blk(3, 2); blk(9, 2); blk(3, 6); blk(9, 6); }
       else if (pat === 2) { for (let x = 2; x <= 10; x += 2) { blk(x, 2, block); blk(x, 6, block); } }
       else if (pat === 3) { blk(5, 3); blk(7, 3); blk(5, 5); blk(7, 5); }
@@ -15609,8 +16262,9 @@ function genDungeon(W, d, rnd) {
       else if (pat === 5) { for (let x = 3; x <= 9; x++) { blk(x, 2, block); blk(x, 6, block); } }
       else if (pat === 6) { L.props[L.idx(ix + 2, iy + 1)] = PR.STATUE; L.props[L.idx(ix + 10, iy + 1)] = PR.STATUE; }
     }
-    if (r.item) { r.enemies = []; L.props[L.idx(ix + 6, iy + 3)] = PR.PEDESTAL; const n = 1 + Math.floor(d / 3); for (let i = 0; i < n; i++) r.enemies.push(rnd.pick(pool)); continue; }
-    const n = 2 + Math.floor(d / 2) + rnd.int(3);
+    const dd = Math.min(9, d); // the optional dungeons are as crowded as level 9, not more
+    if (r.item) { r.enemies = []; L.props[L.idx(ix + 6, iy + 3)] = PR.PEDESTAL; const n = 1 + Math.floor(dd / 3); for (let i = 0; i < n; i++) r.enemies.push(rnd.pick(pool)); continue; }
+    const n = 2 + Math.floor(dd / 2) + rnd.int(3);
     if (rnd() < 0.12 && !r.key && !r.map && !r.compass) continue; // empty room
     for (let i = 0; i < n; i++) r.enemies.push(rnd.pick(pool));
     r.shutter = rnd() < 0.25 || r.key;
@@ -15634,7 +16288,7 @@ function roomBounds(L, room) {
 // Only the host runs this. Clients send their position and actions; the host sends back snapshots.
 'use strict';
 // Enemy, item, projectile and elite definitions live in src/content and are looked up through core/registry.js.
-const SAVE_VERSION = 3;
+const SAVE_VERSION = 4;
 // Bring an old save up to date. v1 -> v2: dungeons were redrawn as shapes, so dungeon tile changes, cleared rooms,
 // keys and maps from v1 no longer fit; overworld progress, items and shards are kept. Tile/prop ids are remapped by name.
 function migrateSave(s) {
@@ -15646,7 +16300,8 @@ function migrateSave(s) {
   }
   // v2 -> v3: the Wilds were redrawn (start in the middle, sea/peaks/great wood at the edges, gate towers), so overworld
   // changes and cave contents no longer line up. Dungeon progress, items and shards are kept; everyone starts at the new spawn.
-  if ((s.v || 1) < 3) {
+  // v3 -> v4: the Wilds grew two frontier columns, so the same applies again
+  if ((s.v || 1) < 4) {
     for (const lvl of Object.keys(s.mods)) if (lvl === 'ow' || (lvl[0] === 'c' && lvl !== 'c0')) delete s.mods[lvl];
     for (const t of ['cleared', 'taken']) for (const k of Object.keys(s.team[t] || {})) if (k.startsWith('ow:') || (k[0] === 'c' && !k.startsWith('c0:'))) delete s.team[t][k];
     for (const c in (s.players || {})) { const pl = s.players[c]; if (pl.lvl === 'ow' || (pl.lvl && pl.lvl[0] === 'c')) pl.respawn = true; }
@@ -15670,7 +16325,7 @@ function newPlayer(id, name, color, cls) {
 class Sim {
   constructor(world, save) {
     this.W = world; this.players = {}; this.ents = []; this.mods = {}; this.modVer = 1; this.events = [];
-    this.team = { keys: {}, maps: {}, comps: {}, shards: [], done: [], taken: {}, cleared: {}, clearedAt: {} };
+    this.team = { keys: {}, maps: {}, comps: {}, shards: [], done: [], relics: [], taken: {}, cleared: {}, clearedAt: {} };
     this.groups = {}; this.time = 0; this.levelInit = {}; this.over = 0; this.won = false; this.mode = world.mode;
     if (save) this.loadSave(save);
   }
@@ -15700,6 +16355,8 @@ class Sim {
   sfx(s, lvl, x, y) { this.ev({ t: 'sfx', s, lvl, x, y }); }
   msg(text, pid) { this.ev({ t: 'msg', text, pid }); }
   // ---- tiles ----
+  // vents (content/gimmicks/vents.js) breathe on a shared 3 second cycle: 0 cool, 1 about to blow, 2 blowing
+  ventPhase() { const t = this.time % 3; return t > 1.9 ? 2 : t > 1.4 ? 1 : 0; }
   setTile(lvl, idx, tile, prop, sealRoom) {
     const L = this.W.levels[lvl]; if (tile != null) L.tiles[idx] = tile; if (prop != null) L.props[idx] = prop;
     L.sealRoom = L.sealRoom || {}; if (sealRoom != null) L.sealRoom[idx] = sealRoom; else delete L.sealRoom[idx];
@@ -15738,7 +16395,7 @@ class Sim {
   teleport(p, lvl, x, y, a) {
     p.lvl = lvl; p.x = x; p.y = y; p.a = a; this.ev({ t: 'tp', pid: p.id, lvl, x, y, a });
     this.initLevel(lvl);
-    if (lvl[0] === 'd') { const d = +lvl.slice(1); this.ev({ t: 'title', pid: p.id, text: 'LEVEL-' + d, sub: dungeonName(d) }); }
+    if (lvl[0] === 'd') { const d = +lvl.slice(1); this.ev({ t: 'title', pid: p.id, text: d <= 9 ? 'LEVEL-' + d : dungeonName(d), sub: d <= 9 ? dungeonName(d) : (d === 12 ? 'THE LAST FLAME' : 'OPTIONAL DUNGEON') }); }
     if (lvl === 'ow') this.autosave = true;
   }
   tryEnter(p, idx) {
@@ -15746,6 +16403,12 @@ class Sim {
     if (TINFO[t].shardGate) {
       if (this.team.shards.length >= 8) { this.setTile(L.id, idx, TL.GATE); this.sfx('secret', L.id); this.msg('THE EIGHT SHARDS BLAZE... THE HOLLOW CROWN OPENS.'); }
       else this.ev({ t: 'dialog', pid: p.id, text: 'A SEALED GATE. EIGHT EMBER-SHAPED HOLLOWS LINE THE ARCH. (' + this.team.shards.length + '/8 SHARDS)' });
+      return;
+    }
+    if (TINFO[t].hearthGate) {
+      const rel = this.team.relics || []; const has = (id) => rel.includes(id);
+      if (has('fang') && has('emberheart')) { this.setTile(L.id, idx, TL.GATE); this.sfx('secret', L.id); this.msg('FROST AND FIRE MEET IN THE LOCK... THE HEARTH OPENS.'); }
+      else this.ev({ t: 'dialog', pid: p.id, text: 'A GATE OF THREE FLAMES. TWO OF THE HOLLOWS ARE EMPTY: ONE COLD AS THE FROZEN REACH, ONE HOT AS THE CINDER WASTES.' + (has('fang') ? ' (THE FROST FANG FITS.)' : '') + (has('emberheart') ? ' (THE EMBER HEART FITS.)' : '') });
       return;
     }
     const portal = L.portals[idx]; if (!portal) return;
@@ -15824,7 +16487,9 @@ class Sim {
       if (!p.alive) continue;
       const L = this.W.levels[p.lvl];
       // hazard tiles
-      const t = L.get(Math.floor(p.x), Math.floor(p.y)); if (TINFO[t].hurt && p.inv <= 0) this.hurtPlayer(p, 1, null);
+      if (p.chill > 0) p.chill -= dt;
+      const t = L.get(Math.floor(p.x), Math.floor(p.y)); const ti = TINFO[t]; const boots = !!p.items.magmaboots;
+      if (p.inv <= 0 && ((ti.hurt && !(boots && ti.lava)) || (ti.vent && this.ventPhase() === 2 && !boots))) this.hurtPlayer(p, 1, null);
       // pickups & shop
       for (const e of this.ents) {
         if (e.lvl !== p.lvl || e.dead) continue;
@@ -15864,7 +16529,7 @@ class Sim {
     const g = { key, ents: [], cleared: false, seen: this.time, room, lvl: L.id, mul: 1 }; this.groups[key] = g;
     const b = roomBounds(L, room);
     const rnd = mulberry32(hashStr(key) + Math.floor(this.time * 1000));
-    const tierMul = L.kind === 'dungeon' ? 1 + (L.dnum - 1) * 0.25 : 1 + room.tier * 0.4;
+    const tierMul = L.kind === 'dungeon' ? 1 + (Math.min(10, L.dnum) - 1) * 0.25 : 1 + room.tier * 0.4;
     for (const type of room.enemies) {
       const def = enemyDef(type); if (!def) continue;
       let x, y, tries = 0;
@@ -15874,12 +16539,12 @@ class Sim {
       } while (tries < 40 && (L.solidAt(x, y) || TINFO[L.get(Math.floor(x), Math.floor(y))].hurt || dist2(x, y, p.x, p.y) < 9));
       let hp = Math.ceil(def.hp * (def.boss ? 1 + (L.dnum || 1) * 0.35 : tierMul));
       if (def.fixedHp) hp = def.hp;
-      const e = this.spawn({ k: 'en', type, lvl: L.id, x, y, hp, maxHp: hp, f: rnd() * TAU, b, g: key, st: 0, tm: rnd() * 2, stun: 0, hurt: 0, spawnFx: 0.5, dmgMul: L.kind === 'dungeon' ? Math.ceil(L.dnum / 3) : 1 + Math.floor(room.tier / 2) });
-      if (!def.boss) { const ch = L.kind === 'dungeon' ? 0.05 + L.dnum * 0.015 : 0.06 + room.tier * 0.03; if (rnd() < ch) this.makeElite(e, rnd); }
+      const e = this.spawn({ k: 'en', type, lvl: L.id, x, y, hp, maxHp: hp, f: rnd() * TAU, b, g: key, st: 0, tm: rnd() * 2, stun: 0, hurt: 0, spawnFx: 0.5, dmgMul: L.kind === 'dungeon' ? Math.ceil(Math.min(9, L.dnum) / 3) : 1 + Math.floor(room.tier / 2) });
+      if (!def.boss) { const ch = L.kind === 'dungeon' ? 0.05 + Math.min(9, L.dnum) * 0.015 : 0.06 + room.tier * 0.03; if (rnd() < ch) this.makeElite(e, rnd); }
       g.ents.push(e);
     }
     for (const s of room.dormant || []) { // statues that wake up when a hero walks close (gimmicks/statues.js)
-      const e = this.spawn({ k: 'en', type: s.type, lvl: L.id, x: s.x, y: s.y, hp: Math.ceil(enemyDef(s.type).hp * tierMul), f: Math.PI / 2, b, g: key, st: 0, tm: 0.5, stun: 0, hurt: 0, spawnFx: 0, dmgMul: L.kind === 'dungeon' ? Math.ceil(L.dnum / 3) : 1, dormant: true });
+      const e = this.spawn({ k: 'en', type: s.type, lvl: L.id, x: s.x, y: s.y, hp: Math.ceil(enemyDef(s.type).hp * tierMul), f: Math.PI / 2, b, g: key, st: 0, tm: 0.5, stun: 0, hurt: 0, spawnFx: 0, dmgMul: L.kind === 'dungeon' ? Math.ceil(Math.min(9, L.dnum) / 3) : 1, dormant: true });
       e.maxHp = e.hp; g.ents.push(e);
     }
     if (L.kind === 'dungeon') this.roomStatics(L, room, key, false);
@@ -15898,7 +16563,7 @@ class Sim {
     if (room.key) drop('key', 0);
     if (room.map) drop('map', -1);
     if (room.compass) drop('compass', 1);
-    if (room.boss) { drop('hcont', -1.5); if (L.dnum < 9) drop('shard', 0); }
+    if (room.boss) { drop('hcont', -1.5); if (L.dnum <= 8) drop('shard', 0); const bd = (Content.dungeons[L.dnum] || {}).bossDrop; if (bd) drop(bd, 0); }
     if (room.reward) drop(room.reward, 0); // hidden room treasure
   }
   updateGroups(dt, plist) {
@@ -16086,7 +16751,7 @@ class Sim {
     // beam at full health
     if (p.hp >= p.maxHp && !this.ents.some(e => e.k === 'proj' && e.pid === p.id && Content.projectiles[e.type].beam)) {
       if (p.cls === 'monk') this.fireProj('ki', p.lvl, p.x + Math.cos(p.a) * 0.3, p.y + Math.sin(p.a) * 0.3, p.a, 'p', p.id, { dmg: swordDmg });
-      else this.fireProj('beam', p.lvl, p.x + Math.cos(p.a) * 0.3, p.y + Math.sin(p.a) * 0.3, p.a, 'p', p.id, { dmg: swordDmg });
+      else this.fireProj(p.sword >= 4 ? 'dawnbeam' : 'beam', p.lvl, p.x + Math.cos(p.a) * 0.3, p.y + Math.sin(p.a) * 0.3, p.a, 'p', p.id, { dmg: swordDmg });
       this.sfx('beam', p.lvl, p.x, p.y);
     }
   }
@@ -16115,6 +16780,7 @@ class Sim {
           // sword-class shield blocks weak front projectiles when not attacking
           const toP = Math.atan2(e.y - p.y, e.x - p.x);
           if (p.cls !== 'monk' && def.blockable && Math.abs(angDiff(p.a, toP)) < 0.7) { e.dead = true; this.sfx('clink', e.lvl); this.ev({ t: 'block', pid: p.id }); return; }
+          if (def.chill && p.inv <= 0 && !p.god) p.chill = Math.max(p.chill || 0, def.chill);
           this.hurtPlayer(p, e.dmg, e); e.dead = true; return;
         }
       }
@@ -16124,7 +16790,8 @@ class Sim {
         const r = this.enemyRadius(en) + 0.2;
         if (dist2(en.x, en.y, e.x, e.y) < r * r) {
           e.hitSet[en.id] = 1;
-          this.damageEnemy(en, e.dmg, { x: e.x - e.vx * 0.1, y: e.y - e.vy * 0.1 }, { pid: e.pid, silver: e.silver, pierceShield: def.pierceShield, ignoreIframes: def.pierce });
+          const landed = this.damageEnemy(en, e.dmg * (e.frost && enemyDef(en.type).hot ? 2 : 1), { x: e.x - e.vx * 0.1, y: e.y - e.vy * 0.1 }, { pid: e.pid, silver: e.silver, pierceShield: def.pierceShield, ignoreIframes: def.pierce });
+          if (e.frost && landed && !en.dead) { en.stun = Math.max(en.stun, enemyDef(en.type).boss ? 0.6 : 2.5); this.spawn({ k: 'fx', lvl: e.lvl, x: en.x, y: en.y, spr: 'icefx', life: 0.4, sc: 1 }); }
           if (def.fire) this.spawn({ k: 'fire', lvl: e.lvl, x: e.x, y: e.y, life: 0.8, spr: 'flame', sc: 0.8, z: -0.05, pid: e.pid });
           if (!def.pierce) { e.dead = true; return; }
         }
@@ -16211,8 +16878,8 @@ class Sim {
     const p = this.players[pid]; if (!p) return null;
     const en = []; for (const e of this.ents) if (e.lvl === p.lvl) en.push(this.entView(e));
     const pl = []; for (const o of Object.values(this.players)) pl.push([o.id, o.lvl, Math.round(o.x * 100) / 100, Math.round(o.y * 100) / 100, Math.round(o.a * 100) / 100, o.color, o.armor, o.cls, o.alive ? 1 : 0, o.atk, o.name, Math.round(o.revive / REVIVE_TIME * 100) / 100, o.hp, o.maxHp, o.reviver || 0]);
-    const me = {}; for (const k of ['lvl', 'hp', 'maxHp', 'gems', 'bombs', 'maxBombs', 'arrows', 'sword', 'armor', 'items', 'potions', 'alive', 'cls', 'sel', 'color', 'name', 'dbg', 'god']) me[k] = p[k];
-    return { t: 's', paused: !!this.paused, pausedBy: this.pausedBy, me, pl, en, team: { keys: this.team.keys, maps: this.team.maps, comps: this.team.comps, shards: this.team.shards, done: this.team.done }, mv: this.modVer, over: this.over > 0 };
+    const me = {}; for (const k of ['lvl', 'hp', 'maxHp', 'gems', 'bombs', 'maxBombs', 'arrows', 'sword', 'armor', 'items', 'potions', 'alive', 'cls', 'sel', 'color', 'name', 'dbg', 'god']) me[k] = p[k]; me.chill = p.chill > 0 ? 1 : 0;
+    return { t: 's', paused: !!this.paused, pausedBy: this.pausedBy, me, pl, en, team: { keys: this.team.keys, maps: this.team.maps, comps: this.team.comps, shards: this.team.shards, done: this.team.done, relics: this.team.relics }, vp: this.ventPhase(), mv: this.modVer, over: this.over > 0 };
   }
   // ---- save ----
   makeSave() {
@@ -16221,11 +16888,11 @@ class Sim {
     const cl = {}; for (const k in this.team.cleared) if (!k.startsWith('ow:')) cl[k] = true;
     const tileNames = []; for (const k in TL) tileNames[TL[k]] = k;
     const propNames = PROPS.slice();
-    return { v: SAVE_VERSION, tileNames, propNames, seed: this.W.seed, mode: this.W.mode, team: { keys: this.team.keys, maps: this.team.maps, comps: this.team.comps, shards: this.team.shards, done: this.team.done, taken: this.team.taken, cleared: cl }, mods: this.mods, players, time: Date.now() };
+    return { v: SAVE_VERSION, tileNames, propNames, seed: this.W.seed, mode: this.W.mode, team: { keys: this.team.keys, maps: this.team.maps, comps: this.team.comps, shards: this.team.shards, done: this.team.done, relics: this.team.relics, taken: this.team.taken, cleared: cl }, mods: this.mods, players, time: Date.now() };
   }
   loadSave(s) {
     s = migrateSave(s);
-    Object.assign(this.team, s.team); this.team.clearedAt = {}; this.mods = s.mods || {}; this.savedPlayers = s.players || {};
+    Object.assign(this.team, s.team); this.team.relics = this.team.relics || []; this.team.clearedAt = {}; this.mods = s.mods || {}; this.savedPlayers = s.players || {};
     for (const lvl in this.mods) { const L = this.W.levels[lvl]; if (!L) continue; for (const i in this.mods[lvl]) { const [t, pr] = this.mods[lvl][i]; L.tiles[i] = t; L.props[i] = pr; } }
     // never restore closed shutters
     for (const lvl in this.mods) for (const i in this.mods[lvl]) if (this.mods[lvl][i][0] === TL.SHUTTER) { this.W.levels[lvl].tiles[i] = TL.OPENDOOR; this.mods[lvl][i][0] = TL.OPENDOOR; }
@@ -16348,7 +17015,7 @@ function renderWorld(cam, L, ents, players, myId) {
       let c;
       if (floorRow) {
         const tile = (cx < 0 || cy < 0 || cx >= L.w || cy >= L.h) ? (outdoor ? (cy >= L.h ? TL.OCEAN : TL.GRASS) : TL.DFLOOR) : L.tiles[cy * L.w + cx];
-        const ti = TINFO[tile]; const oob = outdoor && cy >= L.h; let tex = oob ? TEX.ocean : (texFor(ti.floor || 'grass', L) || TEX.grass);
+        const ti = TINFO[tile]; const oob = outdoor && cy >= L.h; let tex = oob ? TEX.ocean : (texFor(ti.vent ? (R.ventPhase === 2 ? 'vent_hot' : R.ventPhase === 1 ? 'vent_warm' : ti.floor) : (ti.floor || 'grass'), L) || TEX.grass);
         let sx = fx, sy = fy; if (ti.ocean) { sx += Math.sin(fy * 1.7 + t * 2.6) * 0.18; sy += Math.sin(fx * 1.3 + t * 2.1) * 0.22; } // heaving swell
         if (Array.isArray(tex)) tex = tex[ti.ocean ? (Math.floor(t * 7 + fx * 0.3) & 3) : wf];
         const tx = ((sx - Math.floor(sx)) * TS) | 0, ty = ((sy - Math.floor(sy)) * TS) | 0; c = tex[(ty & 31) * TS + (tx & 31)];
@@ -16556,7 +17223,7 @@ function drawViewmodel(st) {
       for (let yy = 0; yy < fh2; yy++) for (let xx = 0; xx < fwid; xx++) { const ex = (xx - fwid / 2) / (fwid / 2), ey = (yy - fh2 / 2 + 0.5) / (fh2 / 2); const e = ex * ex * 0.6 + ey * ey; if (e > 1.05) continue; px(x + xx, y + yy, e > 0.7 ? (yy >= fh2 - 1 ? rgb(20, 18, 28) : skinD) : (ey < -0.2 ? skinL : skin)); }
       px(x + 1, y + (fh2 >> 1), rgb(236, 200, 180)); // fingertip
     }
-    { const y = Math.round(fcy - fh2 * 2) - 2; rect(Math.round(gx - fwid * 0.2), y, Math.round(fwid * 0.55), 3, skinD); rect(Math.round(gx - fwid * 0.2), y, Math.round(fwid * 0.55), 1, rgb(20, 18, 28)); } // thumb over the top
+    { const y = Math.round(fcy - fh2 * 2) - 3; const tx0 = Math.round(gx - fwid * 0.55), tw = Math.round(fwid * 0.95); rect(tx0 - 1, y - 1, tw + 2, 6, rgb(20, 18, 28)); rect(tx0, y, tw, 4, skin); rect(tx0, y, tw, 1, skinL); rect(tx0 + tw - 3, y + 1, 2, 2, rgb(255, 228, 220)); } // thumb over the top of the grip, nail at the tip
     // the strap loop the forearm passes through, on the left part of the shield
     { const t = 0.72; const [sx2, sy2] = bez(t); const r = rr(t); const lw = Math.max(4, Math.round(5 * sc)), lh = Math.round(r * 2 + 6);
       const lx = Math.round(sx2 - lw / 2), ly = Math.round(sy2 - lh / 2);
@@ -16565,19 +17232,43 @@ function drawViewmodel(st) {
   }
   if (me.sword > 0) {
     let ang, hx, hy;
-    if (k >= 0) { ang = lerp(-0.4, -2.6, k); hx = lerp(W * 0.78, W * 0.42, k) + bx; hy = lerp(H - 14, H - 30, Math.sin(k * Math.PI)) + by; }
-    else { ang = -1.15; hx = W * 0.76 + bx; hy = H - 12 + by; }
+    if (k >= 0) { ang = lerp(-0.4, -2.6, k); hx = lerp(W * 0.78, W * 0.42, k) + bx; hy = lerp(H - 28, H - 40, Math.sin(k * Math.PI)) + by; }
+    else { ang = -1.15; hx = W * 0.75 + bx; hy = H - 28 + by; }
     const len = 70; const tipX = hx + Math.cos(ang) * len, tipY = hy + Math.sin(ang) * len;
-    const blade = me.sword === 1 ? rgb(170, 120, 60) : me.sword === 2 ? rgb(220, 226, 240) : rgb(130, 240, 255);
-    const bladeD = me.sword === 1 ? rgb(110, 70, 30) : me.sword === 2 ? rgb(130, 136, 160) : rgb(40, 150, 200);
+    const blade = me.sword === 1 ? rgb(170, 120, 60) : me.sword === 2 ? rgb(220, 226, 240) : me.sword === 3 ? rgb(130, 240, 255) : rgb(255, 236, 150);
+    const bladeD = me.sword === 1 ? rgb(110, 70, 30) : me.sword === 2 ? rgb(130, 136, 160) : me.sword === 3 ? rgb(40, 150, 200) : rgb(230, 140, 40);
     const gx = hx + Math.cos(ang) * 14, gy = hy + Math.sin(ang) * 14;
     thickLine(gx, gy, tipX, tipY, (t) => 7 - t * 4, bladeD); thickLine(gx, gy, tipX, tipY, (t) => 4 - t * 3, blade);
     const pa = ang + Math.PI / 2; thickLine(gx + Math.cos(pa) * 10, gy + Math.sin(pa) * 10, gx - Math.cos(pa) * 10, gy - Math.sin(pa) * 10, 4, rgb(230, 190, 60));
+    if (me.sword >= 4) for (let i = 0; i < 5; i++) { const tt = Math.random(); px(lerp(gx, tipX, tt) + (Math.random() - 0.5) * 8, lerp(gy, tipY, tt) + (Math.random() - 0.5) * 8, Math.random() < 0.5 ? rgb(255, 255, 220) : rgb(255, 180, 60)); }
     if (me.sword === 3) for (let i = 0; i < 3; i++) { const tt = Math.random(); px(lerp(gx, tipX, tt) + (Math.random() - 0.5) * 6, lerp(gy, tipY, tt) + (Math.random() - 0.5) * 6, rgb(220, 255, 255)); }
     if (k >= 0 && k < 1) { for (let i = 0; i < 5; i++) { const a2 = lerp(-0.4, ang, i / 5); thickLine(hx + Math.cos(a2) * 40, hy + Math.sin(a2) * 40, hx + Math.cos(a2) * 66, hy + Math.sin(a2) * 66, 1, rgb(255, 255, 255)); } }
-    // hand + sleeve
-    rect(hx - 9, hy - 7, 18, 14, skin); frame(hx - 9, hy - 7, 18, 14, rgb(20, 18, 28));
-    drawSleeve(hx - 2, hy + 4, 24, 40);
+    // sword hand, drawn like the shield hand: the grip and pommel, then a curved forearm from the bottom-right
+    // (shadow on its far edge, cuff, bare wrist), then four fingers wrapped around the grip with the thumb over them
+    const dx = Math.cos(ang), dy = Math.sin(ang), qx = -dy, qy = dx; const OUT = rgb(20, 18, 28); const skinL = c32(hexToRgb('#f8d4b0'));
+    thickLine(hx - dx * 9, hy - dy * 9, gx, gy, 6, OUT); thickLine(hx - dx * 9, hy - dy * 9, gx, gy, 4, rgb(96, 60, 32)); // leather grip
+    disc(Math.round(hx - dx * 11), Math.round(hy - dy * 11), 4, OUT); disc(Math.round(hx - dx * 11), Math.round(hy - dy * 11), 3, rgb(230, 190, 60)); // pommel
+    const aw = 15;
+    const P0x = hx + 40, P0y = H + 14, P1x = hx + 26, P1y = hy + 22, P2x = hx + 3, P2y = hy + 6;
+    const bez = (t) => { const u = 1 - t; return [u * u * P0x + 2 * u * t * P1x + t * t * P2x, u * u * P0y + 2 * u * t * P1y + t * t * P2y]; };
+    const steps = 50, rr = (t) => (aw / 2) * (1.45 - 0.6 * t), cuffT = 0.8;
+    const brush = (t0, t1, grow, c, off, scale) => { for (let i = Math.round(t0 * steps); i <= Math.round(t1 * steps); i++) { const t = i / steps; const [bx2, by2] = bez(t); const r = (scale ? rr(t) * scale : rr(t)) + grow; disc(Math.round(bx2 + off * rr(t) * 0.6), Math.round(by2 - off * rr(t) * 0.6), Math.max(1, Math.round(r)), c); } };
+    brush(0, 1, 1.5, OUT, 0); brush(0, cuffT, 0, sleeve, 0); brush(0, cuffT, 0, sleeveD, 0.9, 0.4); if (tier >= 1) brush(0, cuffT, 0, sleeveH, -0.5, 0.22);
+    brush(cuffT - 0.04, 1, 0, skin, 0); brush(cuffT, 1, 0, skinL, -0.4, 0.4);
+    brush(cuffT - 0.06, cuffT - 0.02, 0, sleeveD, 0); // cuff
+    // fist, drawn in grip space (u along the grip toward the blade, v across it): a rounded clump with finger creases
+    // on the far side, and the thumb wrapped over the near side with its nail toward the guard
+    { const U = 6.5, V = 6.5;
+      for (let yy = -10; yy <= 10; yy++) for (let xx = -10; xx <= 10; xx++) {
+        const u = xx * dx + yy * dy, v = xx * qx + yy * qy; const e = Math.pow(Math.abs(u) / U, 3) + Math.pow(Math.abs(v) / V, 3);
+        if (e > 1) continue; let c = e > 0.62 ? OUT : (v > 2.5 ? skinD : skin);
+        if (e <= 0.62 && v > -0.5 && (Math.abs(u + 2.6) < 0.5 || Math.abs(u) < 0.5 || Math.abs(u - 2.6) < 0.5)) c = skinD; // finger creases
+        px(hx + xx, hy + yy, c);
+      }
+      const tb = [hx - dx * 5 - qx * 3.5, hy - dy * 5 - qy * 3.5], tt = [hx + dx * 4 - qx * 3.5, hy + dy * 4 - qy * 3.5];
+      thickLine(tb[0], tb[1], tt[0], tt[1], 5, OUT); thickLine(tb[0], tb[1], tt[0], tt[1], 3, skinL);
+      rect(Math.round(tt[0] - dx) - 1, Math.round(tt[1] - dy) - 1, 2, 2, rgb(255, 214, 206)); // nail
+    }
   }
   // B item flash in left hand
   if (st.useFlash > 0 && st.useSpr) blit(SPR[st.useSpr], W * 0.3, H - 50, 3);
@@ -16610,6 +17301,7 @@ function drawHUD(st) {
   if (me.potions) counter('potion', me.potions);
   // shards
   if (st.team.shards && st.team.shards.length) { for (let i = 0; i < 8; i++) { const c = i < st.team.shards.length ? rgb(255, 180, 40) : rgb(70, 50, 30); rect(W - 86 + i * 6, cy + 1, 4, 5, c); } cy += 9; }
+  if (st.team.relics && st.team.relics.length) { let rx = W - 86; for (const r of st.team.relics) { blit(SPR[itemSprite(r)], rx - 4, cy - 5, 1); rx += 14; } cy += 12; }
   // B item box
   const bx = 4, by = H - 30; rect(bx, by, 26, 26, rgb(10, 10, 20)); frame(bx, by, 26, 26, rgb(80, 140, 255));
   text('B', bx + 2, by + 2, rgb(80, 140, 255));
@@ -16619,7 +17311,7 @@ function drawHUD(st) {
   // crosshair
   px(W / 2, H / 2, rgb(255, 255, 255)); px(W / 2 - 2, H / 2, rgb(255, 255, 255)); px(W / 2 + 2, H / 2, rgb(255, 255, 255));
   // boss bar
-  if (st.bossHp >= 0) { const bw = Math.min(160, W - 80); rect(W / 2 - bw / 2 - 1, H - 14, bw + 2, 7, rgb(10, 10, 10)); rect(W / 2 - bw / 2, H - 13, bw * st.bossHp, 5, rgb(220, 40, 60)); textC('GUARDIAN', W / 2, H - 23, rgb(255, 200, 200)); }
+  if (st.bossHp >= 0) { const bw = Math.min(160, W - 80); rect(W / 2 - bw / 2 - 1, H - 14, bw + 2, 7, rgb(10, 10, 10)); rect(W / 2 - bw / 2, H - 13, bw * st.bossHp, 5, rgb(220, 40, 60)); textC(st.bossName || 'GUARDIAN', W / 2, H - 23, rgb(255, 200, 200)); }
   // teammates status (bottom-right)
   let ty = H - 10;
   for (const p of st.players) { if (p[0] === st.myId) continue; const c = c32(hexToRgb((PCOLORS.find(c => c.name === p[5]) || PCOLORS[0]).c)); const s = p[10] + ' ' + (p[8] ? Math.ceil(p[12] / 4) + '♥' : 'DOWN') + (p[1] !== me.lvl ? ' *' : ''); text(s, W - s.length * 6 - 3, ty, c); ty -= 9; }
@@ -16632,7 +17324,7 @@ function mmColor(t, pr) {
     case TL.CAVE: return rgb(0, 0, 0); case TL.GATE: case TL.SHARDGATE: return rgb(255, 80, 80); case TL.PATH: return rgb(200, 170, 110); case TL.SAND: return rgb(220, 200, 130);
     case TL.BRIDGE: return rgb(150, 100, 50); case TL.BRICK: case TL.BRICK_BOMB: return rgb(50, 56, 100); case TL.LOCKED: return rgb(230, 200, 60); case TL.SHUTTER: return rgb(180, 180, 200);
     case TL.LAVA: return rgb(240, 90, 30); case TL.STAIRS: return rgb(0, 0, 0);
-    case TL.OCEAN: return rgb(30, 64, 160); case TL.PEAKS: return rgb(150, 156, 180); case TL.FIREPEAKS: return rgb(110, 60, 60); case TL.BIGWOOD: return rgb(14, 50, 24); case TL.TOWER: return rgb(255, 80, 80);
+    case TL.OCEAN: return rgb(30, 64, 160); case TL.SNOW: return rgb(230, 238, 248); case TL.ICE: return rgb(150, 205, 235); case TL.ASH: return rgb(80, 70, 70); case TL.ICEWALL: return rgb(120, 170, 210); case TL.BASALT: return rgb(40, 34, 38); case TL.HEARTHGATE: return rgb(255, 200, 80); case TL.PEAKS: return rgb(150, 156, 180); case TL.FIREPEAKS: return rgb(110, 60, 60); case TL.BIGWOOD: return rgb(14, 50, 24); case TL.TOWER: return rgb(255, 80, 80);
     case TL.DFLOOR: case TL.OPENDOOR: return rgb(110, 116, 160); case TL.CWALL: return rgb(60, 46, 40);
     default: return rgb(80, 160, 60);
   }
@@ -16659,7 +17351,7 @@ function drawMinimap(st, x0, y0, w, h) {
       for (const oid in r.links) { const o = L.rooms[oid]; if (!o || (o.hidden && !st.seenRooms.has(L.id + ':' + oid)) || (r.hidden && !vis)) continue; if (o.rx > r.rx) rect(rx + cw - 1, ry + ch / 2 - 1, 2, 2, rgb(160, 180, 255)); if (o.ry > r.ry) rect(rx + cw / 2 - 1, ry + ch - 1, 2, 2, rgb(160, 180, 255)); }
     }
     for (const p of st.players) { if (p[1] !== L.id) continue; const c = p[0] === st.myId ? rgb(255, 255, 255) : c32(hexToRgb((PCOLORS.find(c => c.name === p[5]) || PCOLORS[0]).c)); const px0 = x0 + p[2] / DSX * cw, py0 = y0 + p[3] / DSY * ch; rect(px0 - 1, py0 - 1, 3, 3, c); }
-    text('L' + L.dnum, x0 + 1, y0 + h - 8, rgb(255, 255, 255));
+    text(L.dnum <= 9 ? 'L' + L.dnum : (Content.dungeons[L.dnum].mapLabel || 'L' + L.dnum), x0 + 1, y0 + h - 8, rgb(255, 255, 255));
     return;
   }
   // tile radar (north-up), 2px per tile. Inside a cave or shop it shows the Wilds around the way in, with you blinking there.
@@ -16686,7 +17378,7 @@ function drawBigMap(st) {
   rectA(0, 0, W, H, rgb(0, 0, 0), 0.85);
   if (L.kind === 'dungeon') {
     const cw = 30, ch = 18; const x0 = Math.round(W / 2 - DGW * cw / 2), y0 = 24;
-    textC('LEVEL-' + L.dnum + '  ' + dungeonName(L.dnum), W / 2, 8, rgb(255, 220, 120));
+    textC((L.dnum <= 9 ? 'LEVEL-' + L.dnum + '  ' : '') + dungeonName(L.dnum), W / 2, 8, rgb(255, 220, 120));
     const hasMap = st.team.maps[L.id], hasComp = st.team.comps[L.id];
     for (const id in L.rooms) {
       const r = L.rooms[id]; const vis = st.seenRooms.has(L.id + ':' + id); if (!vis && (!hasMap || r.hidden)) continue;
@@ -16704,7 +17396,7 @@ function drawBigMap(st) {
   const x0 = Math.round(W / 2 - Lo.w * sc / 2), y0 = 16;
   textC(L.kind === 'cave' ? 'THE WILDS - YOU ARE IN: ' + caveLabel(L) : 'THE WILDS', W / 2, 4, rgb(255, 220, 120));
   for (let y = 0; y < Lo.h; y++) for (let x = 0; x < Lo.w; x++) { const i = y * Lo.w + x; if (!seen[i]) continue; rect(x0 + x * sc, y0 + y * sc, sc, sc, mmColor(Lo.tiles[i], Lo.props[i])); }
-  for (let d = 1; d <= 9; d++) { const g = st.world.dungeons[d]; if (!g || !seen[g.y * Lo.w + g.x]) continue; const done = st.team.done.includes(d); text(String(d), x0 + g.x * sc - 2, y0 + g.y * sc - 8, done ? rgb(120, 255, 120) : rgb(255, 120, 80)); }
+  for (let d = 1; d <= NDUNGEONS(); d++) { const g = st.world.dungeons[d]; if (!g || !seen[g.y * Lo.w + g.x]) continue; const done = st.team.done.includes(d); const lb = d <= 9 ? String(d) : (Content.dungeons[d].mapLabel || String(d)); text(lb, x0 + g.x * sc - 2, y0 + g.y * sc - 8, done ? rgb(120, 255, 120) : d >= 10 ? rgb(170, 140, 255) : rgb(255, 120, 80)); }
   for (const p of st.players) {
     const pos = owSpot(st.world, p); if (!pos) continue; const c = p[0] === st.myId ? rgb(255, 255, 255) : c32(hexToRgb((PCOLORS.find(c => c.name === p[5]) || PCOLORS[0]).c));
     const bx = x0 + pos.x * sc, by = y0 + pos.y * sc;
@@ -16791,6 +17483,11 @@ const TRACKS = {
   // dungeons 1-4: a creeping minor walk; 5-8 (the deep ones) get their own darker theme
   dungeon: { bpm: 100, lead: 'A4 . C5 . E5 . D#5 . D5 . . . C5 . B4 . A4 . C5 . F5 . E5 . D5 . . . . . . . G#4 . B4 . D5 . C5 . B4 . A4 . G#4 . E4 . . . . . . . . . . . . . . . . .', bass: 'A2 A2 A2 A2 F2 F2 F2 F2 E2 E2 E2 E2 E2 E2 G#2 G#2', arp: 'A3 C4 E4 C4 A3 C4 E4 C4 F3 A3 C4 A3 F3 A3 C4 A3 E3 G#3 B3 G#3 E3 G#3 B3 G#3 E3 G#3 B3 G#3 E3 G#3 B3 D4', drums: 'k . . . . . h . k . . . s . . .' },
   deep: { bpm: 92, lead: 'D5 . . . F5 . E5 . C#5 . . . . . . . D5 . . . A5 . G5 . F5 . E5 . . . . . A#4 . . . D5 . C5 . A4 . . . F4 . . . G4 . . . A4 . . . C#5 . . . . . . .', bass: 'D2 D2 D2 D2 A#1 A#1 A#1 A#1 G1 G1 G1 G1 A1 A1 A1 A1', arp: 'D4 F4 A4 F4 D4 F4 A4 F4 A#3 D4 F4 D4 A#3 D4 F4 D4 G3 A#3 D4 A#3 G3 A#3 D4 A#3 A3 C#4 E4 C#4 A3 C#4 E4 G4', drums: 'k . . . h . . . k . k . s . . h' },
+  // the frontier and the optional dungeons
+  frost: { bpm: 84, lead: 'B5 . . . F#5 . . . G5 . A5 . B5 . . . D6 . . . C#6 . B5 . A5 . . . . . . . G5 . . . E5 . . . F#5 . G5 . A5 . . . B5 . . . A5 . F#5 . E5 . . . . . . .', bass: 'E2 E2 E2 E2 C2 C2 C2 C2 D2 D2 D2 D2 B1 B1 B1 B1', arp: 'E5 B5 G5 B5 E5 B5 G5 B5 C5 G5 E5 G5 C5 G5 E5 G5 D5 A5 F#5 A5 D5 A5 F#5 A5 B4 F#5 D#5 F#5 B4 F#5 D#5 F#5', drums: 'h . . . . . h . . . h . . . . .' },
+  fire: { bpm: 150, lead: 'E5 . E5 G5 . E5 D5 . E5 . . . B4 . D5 . E5 . E5 G5 . A5 G5 . E5 . D5 . B4 . . .', bass: 'E2 E2 E3 E2 G2 G2 G3 G2 A2 A2 A3 A2 B2 B2 B3 D3', drums: 'k . s k k . s . k . s k k s s s' },
+  hearth: { bpm: 108, lead: 'C5 . E5 . G5 . . . F#5 . . . A5 . G5 . E5 . . . C5 . D5 . E5 . . . . . . . A4 . C5 . E5 . . . D#5 . . . F#5 . E5 . C5 . . . A4 . B4 . C5 . . . . . . .', bass: 'C2 C2 C2 C2 D2 D2 D2 D2 A1 A1 A1 A1 B1 B1 B1 B1', arp: 'C4 E4 G4 E4 C4 E4 G4 E4 D4 F#4 A4 F#4 D4 F#4 A4 F#4 A3 C4 E4 C4 A3 C4 E4 C4 B3 D#4 F#4 D#4 B3 D#4 F#4 A4', drums: 'k . . h s . . h k . k h s . . h' },
+  dragon: { bpm: 176, lead: 'A5 A5 . A5 C6 . B5 A5 . . E5 . G5 . A5 . A5 A5 . A5 D6 C6 B5 A5 . . E5 . F5 . G#5 .', bass: 'A1 A1 A2 A1 A1 A2 A1 A2 F1 F1 F2 F1 E1 E1 E2 E1', arp: 'A4 C5 E5 A5 A4 C5 E5 A5 A4 C5 E5 A5 A4 C5 E5 A5 F4 A4 C5 F5 F4 A4 C5 F5 E4 G#4 B4 E5 E4 G#4 B4 E5', drums: 'k h s h k k s h k h s k k k s s' },
   cave: { bpm: 90, lead: 'C5 . E5 . G5 . E5 . F5 . A5 . G5 . . . E5 . G5 . C6 . B5 . A5 . G5 . . . . .', bass: 'C3 C3 F3 F3 G3 G3 C3 C3' },
   boss: { bpm: 168, lead: 'E5 E5 . E5 F5 E5 D#5 E5 . . B4 . C5 . D#5 . E5 E5 . E5 G5 F#5 F5 E5 . . B4 . A4 . B4 .', bass: 'E2 E2 E3 E2 E2 E3 E2 E3 C2 C2 C3 C2 B1 B1 B2 B1', arp: 'E4 G4 B4 E5 E4 G4 B4 E5 E4 G4 B4 E5 E4 G4 B4 E5 C4 E4 G4 C5 C4 E4 G4 C5 B3 D#4 F#4 B4 B3 D#4 F#4 B4', drums: 'k h s h k k s h k h s h k k s s' },
   final: { bpm: 126, lead: 'D5 . F5 . A5 . G#5 . A5 . . . D6 . C6 . A5 . F5 . G5 . A5 . D5 . . . . . . .', bass: 'D2 D2 D3 D2 A#1 A#1 A#2 A#1 C2 C2 C3 C2 A1 A1 A2 A1', arp: 'D4 F4 A4 D5 D4 F4 A4 D5 A#3 D4 F4 A#4 A#3 D4 F4 A#4 C4 E4 G4 C5 C4 E4 G4 C5 A3 C#4 E4 A4 A3 C#4 E4 G4', drums: 'k . s . k k s . k . s . k k s h' },
@@ -17109,12 +17806,12 @@ function fillDebugUI() {
   for (const k of ['sword', 'armor', 'hearts', 'gems', 'bombs', 'arrows', 'potions', 'shards']) $('dbg' + k[0].toUpperCase() + k.slice(1)).value = d[k];
   const box = $('dbgItems'); box.innerHTML = '';
   for (const [id, label] of debugItems()) { const l = document.createElement('label'); l.className = 'chk'; l.innerHTML = '<input type="checkbox" id="dbgI_' + id + '"' + (d.items.includes(id) ? ' checked' : '') + '> ' + label; box.appendChild(l); }
-  const st = $('dbgStart'); st.innerHTML = '<option value="ow">THE WILDS (NORMAL START)</option>' + [1, 2, 3, 4, 5, 6, 7, 8, 9].map(n => '<option value="d' + n + '">LEVEL-' + n + ' ENTRANCE</option>').join(''); st.value = d.start;
+  const st = $('dbgStart'); st.innerHTML = '<option value="ow">THE WILDS (NORMAL START)</option>' + Array.from({ length: NDUNGEONS() }, (_, i) => i + 1).map(n => '<option value="d' + n + '">' + (n <= 9 ? 'LEVEL-' + n : dungeonName(n)) + ' ENTRANCE</option>').join(''); st.value = d.start;
   $('dbgGod').checked = d.god;
 }
 function readDebugUI() {
   const n = (id, lo, hi) => clamp(parseInt($(id).value, 10) || 0, lo, hi);
-  G.profile.dbg = { on: $('dbgOn').checked, sword: n('dbgSword', 0, 3), armor: n('dbgArmor', 0, 2), hearts: n('dbgHearts', 3, 16), gems: n('dbgGems', 0, 999), bombs: n('dbgBombs', 0, 16), arrows: n('dbgArrows', 0, 30), potions: n('dbgPotions', 0, 2), shards: n('dbgShards', 0, 8), items: debugItems().map(i => i[0]).filter(id => $('dbgI_' + id) && $('dbgI_' + id).checked), start: $('dbgStart').value, god: $('dbgGod').checked };
+  G.profile.dbg = { on: $('dbgOn').checked, sword: n('dbgSword', 0, 4), armor: n('dbgArmor', 0, 2), hearts: n('dbgHearts', 3, 16), gems: n('dbgGems', 0, 999), bombs: n('dbgBombs', 0, 16), arrows: n('dbgArrows', 0, 30), potions: n('dbgPotions', 0, 2), shards: n('dbgShards', 0, 8), items: debugItems().map(i => i[0]).filter(id => $('dbgI_' + id) && $('dbgI_' + id).checked), start: $('dbgStart').value, god: $('dbgGod').checked };
   saveProfile();
 }
 // fresh=true: replace the starting loadout. Always: debug flag, god mode, start location.
@@ -17122,7 +17819,7 @@ function applyDebugLoadout(p, d, fresh) {
   const sim = G.sim; p.dbg = true; p.god = !!d.god;
   if (fresh) {
     p.sword = d.sword; p.armor = d.armor; p.maxHp = d.hearts * 4; p.hp = p.maxHp; p.gems = d.gems; p.potions = d.potions; if (d.potions) p.items.potion = true;
-    for (const id of d.items) { const it = itemDef(id); if (!it) continue; if (it.debugGrant) it.debugGrant(p); else p.items[id] = true; }
+    for (const id of d.items) { const it = itemDef(id); if (!it) continue; if (it.debugGrant) it.debugGrant(p, sim); else p.items[id] = true; }
     p.bombs = Math.min(p.maxBombs, d.bombs); if (d.bombs) p.items.bombs = true; p.arrows = d.arrows;
     if (d.sword > 0) sim.team.taken['c0:shop0'] = true;
     for (let i = 1; i <= d.shards; i++) { if (!sim.team.shards.includes(i)) sim.team.shards.push(i); if (!sim.team.done.includes(i)) sim.team.done.push(i); }
@@ -17248,18 +17945,21 @@ function updateLocal(dt, inp) {
   // movement
   const monk = me.cls === 'monk'; let spd = monk ? 4.0 : 3.6;
   if (Lc.charge > 0.3) spd *= 0.5;
+  if (me.chill) spd *= 0.55; // frozen by ice breath
   if (Lc.dashCd > 0) Lc.dashCd -= dt;
   if (inp.dash && monk && Lc.dashCd <= 0) { Lc.dashT = 0.16; Lc.dashCd = 0.7; sfx('dash'); Lc.dashDir = Math.atan2(inp.str, inp.fwd || (inp.str ? 0 : 1)); }
   let mvx = (Math.cos(Lc.a) * inp.fwd + Math.cos(Lc.a + Math.PI / 2) * inp.str) * spd, mvy = (Math.sin(Lc.a) * inp.fwd + Math.sin(Lc.a + Math.PI / 2) * inp.str) * spd;
   if (Lc.dashT > 0) { Lc.dashT -= dt; const da = Lc.a + (Lc.dashDir || 0); mvx = Math.cos(da) * 15; mvy = Math.sin(da) * 15; }
+  // ice: you keep your momentum and steer slowly, so it's easy to slide into whatever is at the edge
+  { const ti0 = TINFO[L.get(Math.floor(Lc.x), Math.floor(Lc.y))]; if (ti0.slippery && Lc.dashT <= 0) { const k = Math.min(1, dt * 1.3); Lc.svx = lerp(Lc.svx || 0, mvx * 1.15, k); Lc.svy = lerp(Lc.svy || 0, mvy * 1.15, k); mvx = Lc.svx; mvy = Lc.svy; } else { Lc.svx = mvx; Lc.svy = mvy; } }
   mvx += Lc.kx; mvy += Lc.ky; Lc.kx *= Math.pow(0.0005, dt); Lc.ky *= Math.pow(0.0005, dt); if (Math.abs(Lc.kx) < 0.1) Lc.kx = 0; if (Math.abs(Lc.ky) < 0.1) Lc.ky = 0;
   const moving = Math.abs(inp.fwd) + Math.abs(inp.str) > 0.1; if (moving) Lc.bob += dt * spd * 2.6;
   Lc.moveK = lerp(Lc.moveK || 0, moving ? 1 : 0, Math.min(1, dt * 8)); if (Lc.blockT > 0) Lc.blockT -= dt;
   const raft = !!me.items.raft; const rad = 0.22; const sop = { raft, mx: Lc.x, my: Lc.y };
   const solid = (x, y) => { for (const [ox, oy] of [[-rad, -rad], [rad, -rad], [-rad, rad], [rad, rad]]) if (L.solidAt(x + ox, y + oy, sop)) return true; return false; };
   const nx = Lc.x + mvx * dt, ny = Lc.y + mvy * dt; let blockedX = false, blockedY = false;
-  if (!solid(nx, Lc.y)) Lc.x = nx; else blockedX = true;
-  if (!solid(Lc.x, ny)) Lc.y = ny; else blockedY = true;
+  if (!solid(nx, Lc.y)) Lc.x = nx; else { blockedX = true; Lc.svx = 0; }
+  if (!solid(Lc.x, ny)) Lc.y = ny; else { blockedY = true; Lc.svy = 0; }
   // the southern sea is too rough to sail
   if ((blockedX || blockedY) && moving && L.kind === 'ow' && R.time - (Lc.seaMsgAt || -99) > 6) { const ax = Math.floor(Lc.x + Math.cos(Lc.a) * 0.7), ay = Math.floor(Lc.y + Math.sin(Lc.a) * 0.7); if (TINFO[L.get(ax, ay)].ocean) { Lc.seaMsgAt = R.time; pushMsg(raft ? 'THE SEA IS FAR TOO ROUGH FOR A RAFT.' : 'ROUGH WATER. NOTHING COULD SAIL THIS.', 3); } }
   // bump interactions
@@ -17323,8 +18023,9 @@ function updateLocal(dt, inp) {
   // low hp beep
   if (me.hp <= 4 && me.hp > 0) { Lc.lowT -= dt; if (Lc.lowT <= 0) { Lc.lowT = 0.5; sfx('lowhp'); } }
   // music
-  let track = L.kind === 'ow' ? 'ow' : L.kind === 'cave' ? 'cave' : (L.dnum >= 5 && L.dnum <= 8 ? 'deep' : 'dungeon');
-  if (L.kind === 'dungeon') { const r = dungeonRoomAt(L, Lc.x, Lc.y); if (r && r.boss && snap.en.some(e => e[8] >= 0)) track = L.dnum === 9 ? 'final' : 'boss'; }
+  let track = L.kind === 'ow' ? 'ow' : L.kind === 'cave' ? 'cave' : L.dnum === 10 ? 'frost' : L.dnum === 11 ? 'fire' : L.dnum === 12 ? 'hearth' : (L.dnum >= 5 && L.dnum <= 8 ? 'deep' : 'dungeon');
+  if (L.kind === 'ow') { const rg = owRegionAt(L, Lc.x, Lc.y); if (rg.biome === 'snow') track = 'frost'; else if (rg.biome === 'ash') track = 'fire'; }
+  if (L.kind === 'dungeon') { const r = dungeonRoomAt(L, Lc.x, Lc.y); if (r && r.boss && snap.en.some(e => e[8] >= 0)) track = L.dnum === 9 ? 'final' : L.dnum >= 10 ? 'dragon' : 'boss'; }
   musicPlay(track);
 }
 function markSeen(L, x, y) {
@@ -17399,14 +18100,16 @@ function draw(dt) {
   const down = me && !me.alive;
   const shake = Lc.shake > 0 ? (Math.random() - 0.5) * 6 * Lc.shake : 0;
   const cam = { x: Lc.x, y: Lc.y, a: Lc.a + shake * 0.01, pitch: Lc.pitch + shake * 4, eye: down ? 0.12 : 0.5 + Math.sin(Lc.bob * 2) * 0.012 };
+  R.ventPhase = snap ? snap.vp || 0 : 0;
   renderWorld(cam, L, ents, snap ? snap.pl : [], G.myId);
   // pow words
   for (const p of Lc.pow) { const sc = projectPt(cam, p.x, p.y); if (sc) { const c = p.big ? rgb(255, 230, 60) : rgb(255, 255, 255); text(p.word, sc.x - p.word.length * 3, sc.y - 30 - p.t * 30, Math.floor(p.t * 20) & 1 ? c : rgb(255, 80, 40)); } }
   const bossE = ents.find(e => e[8] >= 0);
-  const st = { me, bob: Lc.bob, moveK: Lc.moveK || 0, blockT: Lc.blockT || 0, swing: Lc.swing, punch: Lc.punch, charge: Lc.charge, useFlash: Lc.useFlash, useSpr: Lc.useSpr, level: L, cam, players: snap ? snap.pl : [], myId: G.myId, team: snap ? snap.team : { keys: {}, maps: {}, comps: {}, shards: [], done: [] }, seen: G.seen[L.id] || new Uint8Array(L.w * L.h), seenOW: G.seen.ow || new Uint8Array(1), seenRooms: G.seenRooms, selItem: Lc.sel, pitch: Lc.pitch, lvlKind: L.kind, bossHp: bossE ? bossE[8] : -1, world: G.world };
+  const st = { me, bob: Lc.bob, moveK: Lc.moveK || 0, blockT: Lc.blockT || 0, swing: Lc.swing, punch: Lc.punch, charge: Lc.charge, useFlash: Lc.useFlash, useSpr: Lc.useSpr, level: L, cam, players: snap ? snap.pl : [], myId: G.myId, team: snap ? snap.team : { keys: {}, maps: {}, comps: {}, shards: [], done: [] }, seen: G.seen[L.id] || new Uint8Array(L.w * L.h), seenOW: G.seen.ow || new Uint8Array(1), seenRooms: G.seenRooms, selItem: Lc.sel, pitch: Lc.pitch, lvlKind: L.kind, bossHp: bossE ? bossE[8] : -1, bossName: bossE && enemyDef(bossE[1]) ? enemyDef(bossE[1]).title : null, world: G.world };
   if (me && !down) drawViewmodel(st);
   if (me && me.cls === 'monk' && me.armor > 0 && !down) { const ac = me.armor === 2 ? rgb(255, 248, 200) : rgb(100, 190, 255); for (let i = 0; i < 18; i++) { const side = Math.random() < 0.5; const x = side ? (Math.random() < 0.5 ? Math.random() * 10 : R.W - Math.random() * 10) : Math.random() * R.W; const y = side ? Math.random() * R.H : R.H - Math.random() * 8; px(x, y, ac); } }
   if (Lc.dashT > 0) rectA(0, 0, R.W, R.H, rgb(200, 240, 255), 0.15);
+  if (me && me.chill && !down) { rectA(0, 0, R.W, R.H, rgb(150, 210, 255), 0.14); for (let i = 0; i < 40; i++) { const e = Math.random() < 0.5; px(e ? (Math.random() < 0.5 ? Math.random() * 14 : R.W - Math.random() * 14) : Math.random() * R.W, e ? Math.random() * R.H : (Math.random() < 0.5 ? Math.random() * 10 : R.H - Math.random() * 10), rgb(235, 250, 255)); } }
   if (down) { rectA(0, 0, R.W, R.H, rgb(40, 40, 60), 0.5); const multi = snap.pl.length > 1; textC(multi ? 'YOU ARE DOWN!' : 'YOU HAVE FALLEN...', R.W / 2, R.H / 2 - 20, rgb(255, 80, 80)); textC(multi ? 'A TEAMMATE CAN HOLD F NEXT TO YOU TO HELP YOU UP' : 'RISING AGAIN...', R.W / 2, R.H / 2 - 8, rgb(230, 230, 230)); const myP = snap.pl.find(p => p[0] === G.myId); if (myP && myP[11] > 0) { rect(R.W / 2 - 40, R.H / 2 + 6, 80, 5, rgb(30, 30, 30)); rect(R.W / 2 - 40, R.H / 2 + 6, 80 * clamp(myP[11], 0, 1), 5, rgb(80, 255, 120)); } }
   drawHUD(st);
   if (Lc.prompt && !Lc.reviveTarget && !Lc.dialog && me && me.alive && G.state === 'play') { const label = Lc.prompt.label; const y = R.H / 2 + 22; const w = label.length * 6 + 12; rectA(R.W / 2 - w / 2, y - 4, w, 15, rgb(0, 0, 0), 0.6); frame(R.W / 2 - w / 2, y - 4, w, 15, rgb(255, 220, 120)); textC(label, R.W / 2, y, rgb(255, 230, 150)); }
@@ -17451,7 +18154,7 @@ function updatePauseInfo() {
   const n = G.snap ? G.snap.pl.length : 1; const me = G.snap && G.snap.me;
   const dOn = !!(G.snap && G.snap.me && G.snap.me.dbg); $('pDebug').style.display = dOn ? '' : 'none';
   const dev = isDevName(G.snap && G.snap.me ? G.snap.me.name : G.profile.name); $('pDbgToggle').style.display = dev ? '' : 'none'; $('pDbgToggle').textContent = 'DEBUG: ' + (dOn ? 'ON' : 'OFF');
-  if (dOn && !$('pWarps').childElementCount) { const mk = (label, to) => { const b = document.createElement('button'); b.textContent = label; b.onclick = () => { sendAction({ t: 'warp', to }); resume(); }; $('pWarps').appendChild(b); }; mk('WILDS', 'ow'); for (let d = 1; d <= 9; d++) mk('L' + d, 'd' + d); }
+  if (dOn && !$('pWarps').childElementCount) { const mk = (label, to) => { const b = document.createElement('button'); b.textContent = label; b.onclick = () => { sendAction({ t: 'warp', to }); resume(); }; $('pWarps').appendChild(b); }; mk('WILDS', 'ow'); for (let d = 1; d <= NDUNGEONS(); d++) if (G.world && G.world.levels['d' + d]) mk(d <= 9 ? 'L' + d : (Content.dungeons[d].mapLabel || 'L' + d), 'd' + d); }
   const kinds = NET.role === 'host' ? Object.values(NET.conns).map(c => c.kind).filter(Boolean) : NET.kind ? [NET.kind] : [];
   $('pInfo').title = kinds.length ? 'Connection: ' + kinds.join(', ') : '';
   $('pInfo').textContent = (NET.role === 'host' ? 'HOSTING' : NET.role === 'client' ? 'CONNECTED' : 'SOLO') + ' - ' + n + ' PLAYER' + (n > 1 ? 'S' : '') + (me ? ' - ' + (me.cls === 'monk' ? 'MARTIAL ARTIST' : 'SWORD') : '') + (kinds.length ? ' - ' + [...new Set(kinds)].join('/') : '');

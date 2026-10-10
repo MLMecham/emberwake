@@ -52,10 +52,10 @@ function solveDungeon(D) {
 }
 for (let s = 1; s <= SEEDS; s++) {
   const seed = s === 1 ? 7319 : s * 7919; const W = genWorld(seed, 'rogue'); const L = W.levels.ow;
-  for (let d = 1; d <= 9; d++) { const D = W.levels['d' + d]; __ok(solveDungeon(D), 'seed ' + seed + ': dungeon ' + d + ' has unreachable rooms'); __ok(!!W.dungeons[d], 'seed ' + seed + ': dungeon ' + d + ' gate missing'); }
+  for (let d = 1; d <= NDUNGEONS(); d++) { const D = W.levels['d' + d]; __ok(solveDungeon(D), 'seed ' + seed + ': dungeon ' + d + ' has unreachable rooms'); __ok(!!W.dungeons[d], 'seed ' + seed + ': dungeon ' + d + ' gate missing'); }
   const seen = new Uint8Array(L.w * L.h); const q = [[Math.floor(L.spawn.x), Math.floor(L.spawn.y)]]; seen[q[0][1] * L.w + q[0][0]] = 1;
   while (q.length) { const [x, y] = q.pop(); for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { const nx = x + dx, ny = y + dy, i = ny * L.w + nx; if (seen[i] || L.solidAt(nx + 0.5, ny + 0.5)) continue; seen[i] = 1; q.push([nx, ny]); } }
-  for (let d = 1; d <= 9; d++) { const g = W.dungeons[d]; if (g) __ok(!!seen[(g.y + 1) * L.w + g.x], 'seed ' + seed + ': gate ' + d + ' unreachable'); }
+  for (let d = 1; d <= NDUNGEONS(); d++) { const g = W.dungeons[d]; if (g) __ok(!!seen[(g.y + 1) * L.w + g.x], 'seed ' + seed + ': gate ' + d + ' unreachable'); }
   for (const r of L.regions) for (const f of r.features) if (f.type === 'cave' && f.secret !== 'bush') __ok(!!seen[(f.y + 1) * L.w + f.x], 'seed ' + seed + ': cave "' + f.kind + '" unreachable');
 }
 
@@ -107,7 +107,7 @@ for (const id in Content.items) attempt('giving "' + id + '"', () => {
 // drop tables only produce real items
 for (const t in Content.drops) for (let i = 0; i < 200; i++) { const sim = freshSim(); const it = rollDrop(t, sim); if (it) __ok(!!Content.items[it], 'drop table "' + t + '" rolled unknown item ' + it); }
 // tour every dungeon: visit each room, stand on every gimmick tile, attack and burn everything nearby
-for (let d = 1; d <= 9; d++) attempt('dungeon ' + d + ' tour', () => {
+for (let d = 1; d <= NDUNGEONS(); d++) attempt('dungeon ' + d + ' tour', () => {
   const sim = freshSim(); const a = sim.players.p1, b = sim.players.p2; const D = sim.W.levels['d' + d];
   a.items.candle = true; a.items.rod = true;
   for (const pl of [a, b]) sim.teleport(pl, D.id, D.spawn.x, D.spawn.y, -Math.PI / 2);
@@ -127,7 +127,7 @@ for (let d = 1; d <= 9; d++) attempt('dungeon ' + d + ' tour', () => {
   __ok(D.rooms[D.bossRoom] && Object.values(D.rooms).some(r => r.hidden) === (D.rooms && Object.values(D.rooms).some(r => r.hidden)), 'dungeon ' + d);
 });
 // every dungeon has the right number of hidden rooms, and they're reachable through their secret wall
-for (let d = 1; d <= 9; d++) { const W = genWorld(7319, 'adv'); const D = W.levels['d' + d]; const want = (Content.dungeons[d].shape.join('').match(/H/g) || []).length; const hid = Object.values(D.rooms).filter(r => r.hidden); __ok(hid.length === want, 'dungeon ' + d + ' should have ' + want + ' hidden rooms, has ' + hid.length); for (const r of hid) __ok(Object.keys(r.links).length > 0, 'dungeon ' + d + ' hidden room is not connected'); }
+for (let d = 1; d <= NDUNGEONS(); d++) { const W = genWorld(7319, 'adv'); const D = W.levels['d' + d]; const want = (Content.dungeons[d].shape.join('').match(/H/g) || []).length; const hid = Object.values(D.rooms).filter(r => r.hidden); __ok(hid.length === want, 'dungeon ' + d + ' should have ' + want + ' hidden rooms, has ' + hid.length); for (const r of hid) __ok(Object.keys(r.links).length > 0, 'dungeon ' + d + ' hidden room is not connected'); }
 // old (version 1) saves still load
 attempt('old save migration', () => { const W = genWorld(7319, 'adv'); const sim = new Sim(W, { v: 1, seed: 7319, mode: 'adv', team: { keys: { d1: 2 }, maps: {}, comps: {}, shards: [1, 2], done: [1, 2], taken: { 'd1:3:key': true, 'c0:shop0': true }, cleared: { 'd1:3': true } }, mods: { d1: { 100: [11, 0] }, ow: { 500: [6, 0] } }, players: {} }); __ok(sim.team.shards.length === 2 && !sim.team.keys.d1 && sim.team.taken['c0:shop0'] && !sim.mods.d1, 'v1 save not migrated correctly'); });
 // co-op scaling: health follows the headcount in the room (1x, 1.5x, 2x, 2.5x), keeping damage already dealt
@@ -142,6 +142,46 @@ attempt('party scaling', () => {
   for (let n = 2; n <= 4; n++) { ps[n - 1].x = cx; ps[n - 1].y = cy; sim.tick(1 / 60); __ok(Math.abs(e.maxHp - base * want[n - 1]) < 1e-6, 'party of ' + n + ': enemy max health should be ' + want[n - 1] + 'x, got ' + (e.maxHp / base).toFixed(2) + 'x'); }
   e.hp = e.maxHp / 2; ps[3].x = D.spawn.x; ps[3].y = D.spawn.y; sim.tick(1 / 60);
   __ok(Math.abs(e.hp / e.maxHp - 0.5) < 1e-6 && Math.abs(e.maxHp - base * 2) < 1e-6, 'when someone leaves, enemies keep the same share of health');
+});
+// the dragons: each optional boss room spawns its heads with a body and necks, fights, and when every head falls the
+// neck parts vanish and the room leaves its treasure (relic / Dawnblade)
+for (const d of [10, 11, 12]) attempt('dragon fight ' + d, () => {
+  const sim = freshSim(); const D = sim.W.levels['d' + d]; const a = sim.players.p1, b = sim.players.p2; const boss = D.rooms[D.bossRoom];
+  for (const pl of [a, b]) { sim.teleport(pl, D.id, boss.rx * DSX + 6.5, boss.ry * DSY + 6.2, -Math.PI / 2); }
+  let attacked = false; for (let t = 0; t < 600; t++) { sim.tick(1 / 60); if (sim.ents.some(e => (e.k === 'proj' && e.lvl === D.id && e.owner === 'e') || (e.k === 'en' && (e.mode === 'bite' || e.mode === 'breath')))) attacked = true; }
+  const heads = sim.ents.filter(e => e.k === 'en' && e.lvl === D.id && enemyDef(e.type).boss && !e.dead);
+  const parts = sim.ents.filter(e => e.k === 'neck' && e.lvl === D.id);
+  __ok(heads.length === (d === 12 ? 3 : 1), 'dungeon ' + d + ' should have ' + (d === 12 ? 3 : 1) + ' dragon heads, has ' + heads.length);
+  __ok(parts.filter(n => n.role === 'body').length === 1 && parts.filter(n => n.role === 'seg').length === heads.length * 7, 'dungeon ' + d + ' dragon parts wrong: ' + parts.length);
+  __ok(heads.every(h => dist2(h.x, h.y, h.base.x, h.base.y) <= 5.2 * 5.2), 'dungeon ' + d + ' head strayed past its neck');
+  __ok(attacked, 'dungeon ' + d + ' dragon never attacked');
+  for (const h of heads) { h.hurt = 0; sim.damageEnemy(h, 9999, a, { pid: 'p1', ignoreIframes: true, pierceShield: true, silver: true }); }
+  for (const e of sim.ents) if (e.k === 'en' && e.lvl === D.id && !e.dead) sim.damageEnemy(e, 9999, a, { pid: 'p1', ignoreIframes: true, pierceShield: true, silver: true });
+  run(sim, 1.5);
+  __ok(!sim.ents.some(e => e.k === 'neck' && e.lvl === D.id), 'dungeon ' + d + ' dragon parts left behind');
+  const want = Content.dungeons[d].bossDrop; __ok(sim.ents.some(e => e.k === 'pick' && e.item === want), 'dungeon ' + d + ' boss should leave ' + want);
+  const pk = sim.ents.find(e => e.k === 'pick' && e.item === want); a.x = pk.x; a.y = pk.y; run(sim, 0.3);
+  if (d === 12) __ok(a.sword === 4 && b.sword === 4, 'the Dawnblade should go to everyone'); else __ok(sim.team.relics.includes(want), want + ' should be a team relic');
+});
+// the frontier: both lands exist past one pass each, the hermits and the optional gates are reachable, the Hearth opens
+attempt('frontier', () => {
+  const W = genWorld(7319, 'adv'); const L = W.levels.ow;
+  __ok(L.regions.filter(r => r.biome === 'snow').length === RH && L.regions.filter(r => r.biome === 'ash').length === RH, 'frontier columns should be snow and ash');
+  for (const d of [10, 11, 12]) __ok(!!W.dungeons[d], 'gate ' + d + ' missing');
+  __ok(L.tiles[L.idx(W.dungeons[12].x, W.dungeons[12].y)] === TL.HEARTHGATE, 'the Hearth gate should start sealed');
+  const sim = new Sim(W, null); const p = sim.addPlayer('p1', 'A', 'GREEN', 'sword'); const g = W.dungeons[12]; p.x = g.x + 0.5; p.y = g.y + 1.5;
+  sim.tryEnter(p, L.idx(g.x, g.y)); __ok(L.tiles[L.idx(g.x, g.y)] === TL.HEARTHGATE, 'the Hearth opened without its keys');
+  sim.team.relics.push('fang', 'emberheart'); sim.tryEnter(p, L.idx(g.x, g.y)); __ok(L.tiles[L.idx(g.x, g.y)] === TL.GATE, 'the Hearth did not open with both keys');
+  __ok(Object.values(W.levels).some(l => l.caveKind === 'frosthint') && Object.values(W.levels).some(l => l.caveKind === 'firehint'), 'hermit caves missing');
+});
+// hazards: vents blow on the shared rhythm, magma boots protect, ice breath chills
+attempt('vents and chill', () => {
+  const sim = freshSim(); const p = sim.players.p1; p.god = false; const D = sim.W.levels.d11; sim.teleport(p, 'd11', D.spawn.x, D.spawn.y, 0);
+  let vent = -1; for (let i = 0; i < D.tiles.length; i++) if (TINFO[D.tiles[i]].vent) { vent = i; break; }
+  __ok(vent >= 0, 'Cinder Caldera has no vents');
+  p.x = vent % D.w + 0.5; p.y = Math.floor(vent / D.w) + 0.5; const hp0 = p.hp; sim.time = 2.5; sim.tick(1 / 60); __ok(p.hp < hp0, 'a blowing vent should hurt');
+  p.inv = 0; p.hp = p.maxHp; p.items.magmaboots = true; sim.time = 2.5; sim.tick(1 / 60); __ok(p.hp === p.maxHp, 'magma boots should protect from vents');
+  p.inv = 0; sim.fireProj('icebreath', p.lvl, p.x - 0.3, p.y, 0, 'e', null, { dmg: 1 }); run(sim, 0.2); __ok(sim.snapshotFor('p1').me.chill === 1, 'ice breath should chill');
 });
 // a full minute of play in a dungeon with everything going on
 attempt('dungeon minute', () => {

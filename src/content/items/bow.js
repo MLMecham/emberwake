@@ -10,9 +10,9 @@ defineItem({
     const monk = p.cls === 'monk';
     if (sim.ents.filter(e => e.k === 'proj' && e.pid === p.id && (e.type === 'arrow' || e.type === 'dart')).length >= (monk ? 3 : 1)) return;
     p.arrows--;
-    const silver = !!p.items.silver; const dmg = silver ? 4 : 2;
-    if (monk) for (const s of [-0.12, 0, 0.12]) sim.fireProj('dart', p.lvl, p.x, p.y, p.a + s, 'p', p.id, { dmg: dmg - 1, silver, life: 1.5 });
-    else sim.fireProj('arrow', p.lvl, p.x, p.y, p.a, 'p', p.id, { dmg, silver });
+    const silver = !!p.items.silver; const dmg = silver ? 4 : 2; const frost = !!p.items.frostarrows; // frost arrows (Rimefang Hollow) freeze
+    if (monk) for (const s of [-0.12, 0, 0.12]) sim.fireProj('dart', p.lvl, p.x, p.y, p.a + s, 'p', p.id, Object.assign({ dmg: dmg - 1, silver, life: 1.5, frost }, frost ? { spr: 'icebolt' } : {}));
+    else sim.fireProj('arrow', p.lvl, p.x, p.y, p.a, 'p', p.id, Object.assign({ dmg, silver, frost }, frost ? { spr: 'arrow_ice' } : {}));
     sim.sfx('arrow', p.lvl);
   },
 });

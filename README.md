@@ -22,6 +22,9 @@ Co-op connects computers straight to each other. Some home routers, school or wo
 
 The pause menu shows `DIRECT` or `RELAY` for each connection. That key can only fetch relay credentials, so it's fine to have it in a public repo.
 
+## Beyond the main quest
+Two mountain passes lead out of the Wilds. West is the **Frozen Reach**: slippery ice, frost imps and snow wolves, and **Rimefang Hollow**, home of the long-necked **Frost Matriarch** (treasure: Frost Arrows, which freeze what they hit). East is the **Cinder Wastes**: lava, vents that blow on a rhythm, and the **Cinder Caldera** with the **Fire Patriarch** (treasure: Magma Boots). Each dragon leaves a relic, the Frost Fang and the Ember Heart. With both, the sealed gate on the edge of the great wood opens to **the Hearth**, where the three-headed **Hearthwyrm** guards the **Dawnblade**.
+
 ## Controls
 WASD move · mouse look (click to lock, or hold a button and drag) · click/Space attack · right-click/E item · Q/R/wheel switch item · hold F next to a fallen friend to help them up · M map · Esc menu. Gamepads work too.
 

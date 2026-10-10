@@ -113,7 +113,7 @@ function renderWorld(cam, L, ents, players, myId) {
       let c;
       if (floorRow) {
         const tile = (cx < 0 || cy < 0 || cx >= L.w || cy >= L.h) ? (outdoor ? (cy >= L.h ? TL.OCEAN : TL.GRASS) : TL.DFLOOR) : L.tiles[cy * L.w + cx];
-        const ti = TINFO[tile]; const oob = outdoor && cy >= L.h; let tex = oob ? TEX.ocean : (texFor(ti.floor || 'grass', L) || TEX.grass);
+        const ti = TINFO[tile]; const oob = outdoor && cy >= L.h; let tex = oob ? TEX.ocean : (texFor(ti.vent ? (R.ventPhase === 2 ? 'vent_hot' : R.ventPhase === 1 ? 'vent_warm' : ti.floor) : (ti.floor || 'grass'), L) || TEX.grass);
         let sx = fx, sy = fy; if (ti.ocean) { sx += Math.sin(fy * 1.7 + t * 2.6) * 0.18; sy += Math.sin(fx * 1.3 + t * 2.1) * 0.22; } // heaving swell
         if (Array.isArray(tex)) tex = tex[ti.ocean ? (Math.floor(t * 7 + fx * 0.3) & 3) : wf];
         const tx = ((sx - Math.floor(sx)) * TS) | 0, ty = ((sy - Math.floor(sy)) * TS) | 0; c = tex[(ty & 31) * TS + (tx & 31)];
@@ -321,7 +321,7 @@ function drawViewmodel(st) {
       for (let yy = 0; yy < fh2; yy++) for (let xx = 0; xx < fwid; xx++) { const ex = (xx - fwid / 2) / (fwid / 2), ey = (yy - fh2 / 2 + 0.5) / (fh2 / 2); const e = ex * ex * 0.6 + ey * ey; if (e > 1.05) continue; px(x + xx, y + yy, e > 0.7 ? (yy >= fh2 - 1 ? rgb(20, 18, 28) : skinD) : (ey < -0.2 ? skinL : skin)); }
       px(x + 1, y + (fh2 >> 1), rgb(236, 200, 180)); // fingertip
     }
-    { const y = Math.round(fcy - fh2 * 2) - 2; rect(Math.round(gx - fwid * 0.2), y, Math.round(fwid * 0.55), 3, skinD); rect(Math.round(gx - fwid * 0.2), y, Math.round(fwid * 0.55), 1, rgb(20, 18, 28)); } // thumb over the top
+    { const y = Math.round(fcy - fh2 * 2) - 3; const tx0 = Math.round(gx - fwid * 0.55), tw = Math.round(fwid * 0.95); rect(tx0 - 1, y - 1, tw + 2, 6, rgb(20, 18, 28)); rect(tx0, y, tw, 4, skin); rect(tx0, y, tw, 1, skinL); rect(tx0 + tw - 3, y + 1, 2, 2, rgb(255, 228, 220)); } // thumb over the top of the grip, nail at the tip
     // the strap loop the forearm passes through, on the left part of the shield
     { const t = 0.72; const [sx2, sy2] = bez(t); const r = rr(t); const lw = Math.max(4, Math.round(5 * sc)), lh = Math.round(r * 2 + 6);
       const lx = Math.round(sx2 - lw / 2), ly = Math.round(sy2 - lh / 2);
@@ -330,19 +330,43 @@ function drawViewmodel(st) {
   }
   if (me.sword > 0) {
     let ang, hx, hy;
-    if (k >= 0) { ang = lerp(-0.4, -2.6, k); hx = lerp(W * 0.78, W * 0.42, k) + bx; hy = lerp(H - 14, H - 30, Math.sin(k * Math.PI)) + by; }
-    else { ang = -1.15; hx = W * 0.76 + bx; hy = H - 12 + by; }
+    if (k >= 0) { ang = lerp(-0.4, -2.6, k); hx = lerp(W * 0.78, W * 0.42, k) + bx; hy = lerp(H - 28, H - 40, Math.sin(k * Math.PI)) + by; }
+    else { ang = -1.15; hx = W * 0.75 + bx; hy = H - 28 + by; }
     const len = 70; const tipX = hx + Math.cos(ang) * len, tipY = hy + Math.sin(ang) * len;
-    const blade = me.sword === 1 ? rgb(170, 120, 60) : me.sword === 2 ? rgb(220, 226, 240) : rgb(130, 240, 255);
-    const bladeD = me.sword === 1 ? rgb(110, 70, 30) : me.sword === 2 ? rgb(130, 136, 160) : rgb(40, 150, 200);
+    const blade = me.sword === 1 ? rgb(170, 120, 60) : me.sword === 2 ? rgb(220, 226, 240) : me.sword === 3 ? rgb(130, 240, 255) : rgb(255, 236, 150);
+    const bladeD = me.sword === 1 ? rgb(110, 70, 30) : me.sword === 2 ? rgb(130, 136, 160) : me.sword === 3 ? rgb(40, 150, 200) : rgb(230, 140, 40);
     const gx = hx + Math.cos(ang) * 14, gy = hy + Math.sin(ang) * 14;
     thickLine(gx, gy, tipX, tipY, (t) => 7 - t * 4, bladeD); thickLine(gx, gy, tipX, tipY, (t) => 4 - t * 3, blade);
     const pa = ang + Math.PI / 2; thickLine(gx + Math.cos(pa) * 10, gy + Math.sin(pa) * 10, gx - Math.cos(pa) * 10, gy - Math.sin(pa) * 10, 4, rgb(230, 190, 60));
+    if (me.sword >= 4) for (let i = 0; i < 5; i++) { const tt = Math.random(); px(lerp(gx, tipX, tt) + (Math.random() - 0.5) * 8, lerp(gy, tipY, tt) + (Math.random() - 0.5) * 8, Math.random() < 0.5 ? rgb(255, 255, 220) : rgb(255, 180, 60)); }
     if (me.sword === 3) for (let i = 0; i < 3; i++) { const tt = Math.random(); px(lerp(gx, tipX, tt) + (Math.random() - 0.5) * 6, lerp(gy, tipY, tt) + (Math.random() - 0.5) * 6, rgb(220, 255, 255)); }
     if (k >= 0 && k < 1) { for (let i = 0; i < 5; i++) { const a2 = lerp(-0.4, ang, i / 5); thickLine(hx + Math.cos(a2) * 40, hy + Math.sin(a2) * 40, hx + Math.cos(a2) * 66, hy + Math.sin(a2) * 66, 1, rgb(255, 255, 255)); } }
-    // hand + sleeve
-    rect(hx - 9, hy - 7, 18, 14, skin); frame(hx - 9, hy - 7, 18, 14, rgb(20, 18, 28));
-    drawSleeve(hx - 2, hy + 4, 24, 40);
+    // sword hand, drawn like the shield hand: the grip and pommel, then a curved forearm from the bottom-right
+    // (shadow on its far edge, cuff, bare wrist), then four fingers wrapped around the grip with the thumb over them
+    const dx = Math.cos(ang), dy = Math.sin(ang), qx = -dy, qy = dx; const OUT = rgb(20, 18, 28); const skinL = c32(hexToRgb('#f8d4b0'));
+    thickLine(hx - dx * 9, hy - dy * 9, gx, gy, 6, OUT); thickLine(hx - dx * 9, hy - dy * 9, gx, gy, 4, rgb(96, 60, 32)); // leather grip
+    disc(Math.round(hx - dx * 11), Math.round(hy - dy * 11), 4, OUT); disc(Math.round(hx - dx * 11), Math.round(hy - dy * 11), 3, rgb(230, 190, 60)); // pommel
+    const aw = 15;
+    const P0x = hx + 40, P0y = H + 14, P1x = hx + 26, P1y = hy + 22, P2x = hx + 3, P2y = hy + 6;
+    const bez = (t) => { const u = 1 - t; return [u * u * P0x + 2 * u * t * P1x + t * t * P2x, u * u * P0y + 2 * u * t * P1y + t * t * P2y]; };
+    const steps = 50, rr = (t) => (aw / 2) * (1.45 - 0.6 * t), cuffT = 0.8;
+    const brush = (t0, t1, grow, c, off, scale) => { for (let i = Math.round(t0 * steps); i <= Math.round(t1 * steps); i++) { const t = i / steps; const [bx2, by2] = bez(t); const r = (scale ? rr(t) * scale : rr(t)) + grow; disc(Math.round(bx2 + off * rr(t) * 0.6), Math.round(by2 - off * rr(t) * 0.6), Math.max(1, Math.round(r)), c); } };
+    brush(0, 1, 1.5, OUT, 0); brush(0, cuffT, 0, sleeve, 0); brush(0, cuffT, 0, sleeveD, 0.9, 0.4); if (tier >= 1) brush(0, cuffT, 0, sleeveH, -0.5, 0.22);
+    brush(cuffT - 0.04, 1, 0, skin, 0); brush(cuffT, 1, 0, skinL, -0.4, 0.4);
+    brush(cuffT - 0.06, cuffT - 0.02, 0, sleeveD, 0); // cuff
+    // fist, drawn in grip space (u along the grip toward the blade, v across it): a rounded clump with finger creases
+    // on the far side, and the thumb wrapped over the near side with its nail toward the guard
+    { const U = 6.5, V = 6.5;
+      for (let yy = -10; yy <= 10; yy++) for (let xx = -10; xx <= 10; xx++) {
+        const u = xx * dx + yy * dy, v = xx * qx + yy * qy; const e = Math.pow(Math.abs(u) / U, 3) + Math.pow(Math.abs(v) / V, 3);
+        if (e > 1) continue; let c = e > 0.62 ? OUT : (v > 2.5 ? skinD : skin);
+        if (e <= 0.62 && v > -0.5 && (Math.abs(u + 2.6) < 0.5 || Math.abs(u) < 0.5 || Math.abs(u - 2.6) < 0.5)) c = skinD; // finger creases
+        px(hx + xx, hy + yy, c);
+      }
+      const tb = [hx - dx * 5 - qx * 3.5, hy - dy * 5 - qy * 3.5], tt = [hx + dx * 4 - qx * 3.5, hy + dy * 4 - qy * 3.5];
+      thickLine(tb[0], tb[1], tt[0], tt[1], 5, OUT); thickLine(tb[0], tb[1], tt[0], tt[1], 3, skinL);
+      rect(Math.round(tt[0] - dx) - 1, Math.round(tt[1] - dy) - 1, 2, 2, rgb(255, 214, 206)); // nail
+    }
   }
   // B item flash in left hand
   if (st.useFlash > 0 && st.useSpr) blit(SPR[st.useSpr], W * 0.3, H - 50, 3);
@@ -375,6 +399,7 @@ function drawHUD(st) {
   if (me.potions) counter('potion', me.potions);
   // shards
   if (st.team.shards && st.team.shards.length) { for (let i = 0; i < 8; i++) { const c = i < st.team.shards.length ? rgb(255, 180, 40) : rgb(70, 50, 30); rect(W - 86 + i * 6, cy + 1, 4, 5, c); } cy += 9; }
+  if (st.team.relics && st.team.relics.length) { let rx = W - 86; for (const r of st.team.relics) { blit(SPR[itemSprite(r)], rx - 4, cy - 5, 1); rx += 14; } cy += 12; }
   // B item box
   const bx = 4, by = H - 30; rect(bx, by, 26, 26, rgb(10, 10, 20)); frame(bx, by, 26, 26, rgb(80, 140, 255));
   text('B', bx + 2, by + 2, rgb(80, 140, 255));
@@ -384,7 +409,7 @@ function drawHUD(st) {
   // crosshair
   px(W / 2, H / 2, rgb(255, 255, 255)); px(W / 2 - 2, H / 2, rgb(255, 255, 255)); px(W / 2 + 2, H / 2, rgb(255, 255, 255));
   // boss bar
-  if (st.bossHp >= 0) { const bw = Math.min(160, W - 80); rect(W / 2 - bw / 2 - 1, H - 14, bw + 2, 7, rgb(10, 10, 10)); rect(W / 2 - bw / 2, H - 13, bw * st.bossHp, 5, rgb(220, 40, 60)); textC('GUARDIAN', W / 2, H - 23, rgb(255, 200, 200)); }
+  if (st.bossHp >= 0) { const bw = Math.min(160, W - 80); rect(W / 2 - bw / 2 - 1, H - 14, bw + 2, 7, rgb(10, 10, 10)); rect(W / 2 - bw / 2, H - 13, bw * st.bossHp, 5, rgb(220, 40, 60)); textC(st.bossName || 'GUARDIAN', W / 2, H - 23, rgb(255, 200, 200)); }
   // teammates status (bottom-right)
   let ty = H - 10;
   for (const p of st.players) { if (p[0] === st.myId) continue; const c = c32(hexToRgb((PCOLORS.find(c => c.name === p[5]) || PCOLORS[0]).c)); const s = p[10] + ' ' + (p[8] ? Math.ceil(p[12] / 4) + '♥' : 'DOWN') + (p[1] !== me.lvl ? ' *' : ''); text(s, W - s.length * 6 - 3, ty, c); ty -= 9; }
@@ -397,7 +422,7 @@ function mmColor(t, pr) {
     case TL.CAVE: return rgb(0, 0, 0); case TL.GATE: case TL.SHARDGATE: return rgb(255, 80, 80); case TL.PATH: return rgb(200, 170, 110); case TL.SAND: return rgb(220, 200, 130);
     case TL.BRIDGE: return rgb(150, 100, 50); case TL.BRICK: case TL.BRICK_BOMB: return rgb(50, 56, 100); case TL.LOCKED: return rgb(230, 200, 60); case TL.SHUTTER: return rgb(180, 180, 200);
     case TL.LAVA: return rgb(240, 90, 30); case TL.STAIRS: return rgb(0, 0, 0);
-    case TL.OCEAN: return rgb(30, 64, 160); case TL.PEAKS: return rgb(150, 156, 180); case TL.FIREPEAKS: return rgb(110, 60, 60); case TL.BIGWOOD: return rgb(14, 50, 24); case TL.TOWER: return rgb(255, 80, 80);
+    case TL.OCEAN: return rgb(30, 64, 160); case TL.SNOW: return rgb(230, 238, 248); case TL.ICE: return rgb(150, 205, 235); case TL.ASH: return rgb(80, 70, 70); case TL.ICEWALL: return rgb(120, 170, 210); case TL.BASALT: return rgb(40, 34, 38); case TL.HEARTHGATE: return rgb(255, 200, 80); case TL.PEAKS: return rgb(150, 156, 180); case TL.FIREPEAKS: return rgb(110, 60, 60); case TL.BIGWOOD: return rgb(14, 50, 24); case TL.TOWER: return rgb(255, 80, 80);
     case TL.DFLOOR: case TL.OPENDOOR: return rgb(110, 116, 160); case TL.CWALL: return rgb(60, 46, 40);
     default: return rgb(80, 160, 60);
   }
@@ -424,7 +449,7 @@ function drawMinimap(st, x0, y0, w, h) {
       for (const oid in r.links) { const o = L.rooms[oid]; if (!o || (o.hidden && !st.seenRooms.has(L.id + ':' + oid)) || (r.hidden && !vis)) continue; if (o.rx > r.rx) rect(rx + cw - 1, ry + ch / 2 - 1, 2, 2, rgb(160, 180, 255)); if (o.ry > r.ry) rect(rx + cw / 2 - 1, ry + ch - 1, 2, 2, rgb(160, 180, 255)); }
     }
     for (const p of st.players) { if (p[1] !== L.id) continue; const c = p[0] === st.myId ? rgb(255, 255, 255) : c32(hexToRgb((PCOLORS.find(c => c.name === p[5]) || PCOLORS[0]).c)); const px0 = x0 + p[2] / DSX * cw, py0 = y0 + p[3] / DSY * ch; rect(px0 - 1, py0 - 1, 3, 3, c); }
-    text('L' + L.dnum, x0 + 1, y0 + h - 8, rgb(255, 255, 255));
+    text(L.dnum <= 9 ? 'L' + L.dnum : (Content.dungeons[L.dnum].mapLabel || 'L' + L.dnum), x0 + 1, y0 + h - 8, rgb(255, 255, 255));
     return;
   }
   // tile radar (north-up), 2px per tile. Inside a cave or shop it shows the Wilds around the way in, with you blinking there.
@@ -451,7 +476,7 @@ function drawBigMap(st) {
   rectA(0, 0, W, H, rgb(0, 0, 0), 0.85);
   if (L.kind === 'dungeon') {
     const cw = 30, ch = 18; const x0 = Math.round(W / 2 - DGW * cw / 2), y0 = 24;
-    textC('LEVEL-' + L.dnum + '  ' + dungeonName(L.dnum), W / 2, 8, rgb(255, 220, 120));
+    textC((L.dnum <= 9 ? 'LEVEL-' + L.dnum + '  ' : '') + dungeonName(L.dnum), W / 2, 8, rgb(255, 220, 120));
     const hasMap = st.team.maps[L.id], hasComp = st.team.comps[L.id];
     for (const id in L.rooms) {
       const r = L.rooms[id]; const vis = st.seenRooms.has(L.id + ':' + id); if (!vis && (!hasMap || r.hidden)) continue;
@@ -469,7 +494,7 @@ function drawBigMap(st) {
   const x0 = Math.round(W / 2 - Lo.w * sc / 2), y0 = 16;
   textC(L.kind === 'cave' ? 'THE WILDS - YOU ARE IN: ' + caveLabel(L) : 'THE WILDS', W / 2, 4, rgb(255, 220, 120));
   for (let y = 0; y < Lo.h; y++) for (let x = 0; x < Lo.w; x++) { const i = y * Lo.w + x; if (!seen[i]) continue; rect(x0 + x * sc, y0 + y * sc, sc, sc, mmColor(Lo.tiles[i], Lo.props[i])); }
-  for (let d = 1; d <= 9; d++) { const g = st.world.dungeons[d]; if (!g || !seen[g.y * Lo.w + g.x]) continue; const done = st.team.done.includes(d); text(String(d), x0 + g.x * sc - 2, y0 + g.y * sc - 8, done ? rgb(120, 255, 120) : rgb(255, 120, 80)); }
+  for (let d = 1; d <= NDUNGEONS(); d++) { const g = st.world.dungeons[d]; if (!g || !seen[g.y * Lo.w + g.x]) continue; const done = st.team.done.includes(d); const lb = d <= 9 ? String(d) : (Content.dungeons[d].mapLabel || String(d)); text(lb, x0 + g.x * sc - 2, y0 + g.y * sc - 8, done ? rgb(120, 255, 120) : d >= 10 ? rgb(170, 140, 255) : rgb(255, 120, 80)); }
   for (const p of st.players) {
     const pos = owSpot(st.world, p); if (!pos) continue; const c = p[0] === st.myId ? rgb(255, 255, 255) : c32(hexToRgb((PCOLORS.find(c => c.name === p[5]) || PCOLORS[0]).c));
     const bx = x0 + pos.x * sc, by = y0 + pos.y * sc;

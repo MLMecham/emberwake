@@ -4,6 +4,8 @@
 // Hidden rooms sit behind a secret wall (secret: tile name) and hold a heart piece (or gems) plus a lore tablet.
 // theme: wall / mortar / hi (brick), floor / edge / fhi (floor tiles), trim (door frames) as [r, g, b].
 // gimmicks: ids from content/gimmicks/. Enemies and bosses come from each enemy's spawns / bossOf.
+// Optional dungeons (10+) can also set: mapLabel (letter on the maps), bossDrop (item the boss leaves),
+// bossParty (several bosses at once, instead of the single bossOf one).
 'use strict';
 defineDungeon(1, {
   name: 'THE MOSSY HOLLOW', item: 'boomerang', gimmicks: ['brambles'], secret: 'BRAMBLE',
@@ -17,7 +19,7 @@ defineDungeon(1, {
     '...#....',
     '...S....',
   ],
-  lore: ['THE WYRMLING OF THIS HOLLOW HATCHED FROM A FROST-BLUE EGG. ITS MOTHER SLEEPS FAR TO THE NORTH, BEYOND THE PASS.'],
+  lore: ['THE WYRMLING OF THIS HOLLOW HATCHED FROM A FROST-BLUE EGG. ITS MOTHER SLEEPS FAR TO THE WEST, BEYOND THE PASS.'],
 });
 defineDungeon(2, {
   name: 'BRAMBLE KEEP', item: 'bombbag', gimmicks: ['cracked'], loops: 0.4, bombLoops: 1,
@@ -134,4 +136,50 @@ defineDungeon(9, {
     '...S....',
   ],
   lore: ['HERE THE KING WEARS WHAT HE STOLE.', 'EVEN A HOLLOW CROWN CASTS A SHADOW.'],
+});
+
+// ---- the optional dungeons: beyond the passes, and the Hearth they unlock ----
+defineDungeon(10, {
+  name: 'RIMEFANG HOLLOW', mapLabel: 'R', item: 'frostarrows', bossDrop: 'fang', gimmicks: ['ice'],
+  theme: { wall: [150, 190, 220], mortar: [70, 100, 140], hi: [220, 240, 255], floor: [170, 200, 225], edge: [100, 130, 170], fhi: [230, 245, 255], trim: [90, 160, 220] },
+  shape: [ // a fang
+    '.######.',
+    '..####..',
+    '..##H#..',
+    '...##...',
+    '...##...',
+    '...#....',
+    '...S....',
+  ],
+  lore: ['THE MATRIARCH LAID THREE EGGS. ONE HATCHED IN THE MOSSY HOLLOW. ONE WAS NEVER FOUND. ONE IS STILL WARM.'],
+});
+defineDungeon(11, {
+  name: 'CINDER CALDERA', mapLabel: 'C', item: 'magmaboots', bossDrop: 'emberheart', gimmicks: ['vents'],
+  theme: { wall: [70, 46, 40], mortar: [24, 12, 10], hi: [120, 70, 50], floor: [60, 44, 40], edge: [30, 18, 16], fhi: [140, 70, 30], trim: [255, 120, 40] },
+  shape: [ // a volcano
+    '...#....',
+    '..###...',
+    '..#H#...',
+    '.#####..',
+    '.#####..',
+    '##.#.##.',
+    '...S....',
+  ],
+  lore: ['THE PATRIARCH FORGED THE EMBER SHARDS IN HIS OWN BELLY, AND THE HOLLOW KING STOLE EVERY ONE.'],
+});
+defineDungeon(12, {
+  name: 'THE HEARTH', mapLabel: 'H', item: null, bossDrop: 'dawnblade', gimmicks: ['ice', 'vents'],
+  bossParty: ['hearth_frost', 'hearth_fire', 'hearth_hollow'],
+  theme: { wall: [96, 70, 60], mortar: [30, 20, 18], hi: [200, 150, 90], floor: [110, 90, 80], edge: [50, 38, 34], fhi: [240, 200, 120], trim: [255, 220, 140] },
+  shape: [ // a flame
+    '...##...',
+    '..####..',
+    '.##..##.',
+    '.#H..##.',
+    '.######.',
+    '..####..',
+    '...##...',
+    '...S....',
+  ],
+  lore: ['FROST, FIRE AND THE LIGHT THAT WAS STOLEN. WHEN ALL THREE BURN AS ONE, A BLADE OF DAWN IS FORGED.'],
 });

@@ -92,6 +92,11 @@ function initTextures() {
   // the southern sea: dark, choppy, whitecaps everywhere; 'surf' is the breaking foam right off the beach
   TEX.ocean = []; for (let f = 0; f < 4; f++) TEX.ocean.push(makeTex((x, y) => { const ph = f * Math.PI / 2; const w = Math.sin(x * 0.45 + ph + Math.sin(y * 0.35 + ph) * 2.2) + Math.sin(y * 0.6 - ph * 1.5 + x * 0.2) * 0.7; let c = [22, 52, 120]; if (w > 1.35) c = [236, 244, 255]; else if (w > 1.0) c = [130, 170, 220]; else if (w > 0.4) c = [34, 76, 160]; else if (w < -0.9) c = [14, 34, 86]; return vary(c, x, y, 0.1); }));
   TEX.surf = []; for (let f = 0; f < 4; f++) TEX.surf.push(makeTex((x, y) => { const ph = f * Math.PI / 2; const w = Math.sin(x * 0.5 + ph + Math.sin(y * 0.5) * 1.5) + Math.sin(y * 0.9 + ph * 2) * 0.8; let c = [40, 92, 180]; if (w > 0.6) c = [240, 248, 255]; else if (w > 0.1) c = [170, 205, 240]; return vary(c, x, y, 0.1); }));
+  TEX.snow = makeTex((x, y) => { let c = [236, 242, 250]; if (n8(x, y) > 0.88) c = [206, 218, 236]; if (n4(x * 2, y * 3) > 0.95) c = [255, 255, 255]; return vary(c, x, y, 0.06); });
+  TEX.ice = makeTex((x, y) => { const streak = Math.abs(((x + y * 0.6) % 14) - 7) < 0.7; let c = streak ? [235, 250, 255] : [150, 205, 235]; if (n8(x >> 1, y >> 1) > 0.85) c = [120, 180, 220]; return vary(c, x, y, 0.06); });
+  TEX.ash = makeTex((x, y) => { let c = [74, 66, 66]; if (n8(x, y) > 0.86) c = [104, 92, 90]; if (n4(x * 3, y * 2) > 0.96) c = [255, 120, 40]; return vary(c, x, y, 0.15); });
+  TEX.icewall = makeTex((x, y) => { const by = y >> 3, off = by % 2 ? 7 : 0; const edge = (y & 7) === 0 || ((x + off) % 14) === 0; let c = edge ? [120, 170, 210] : [190, 225, 245]; if (!edge && ((x + y) % 9) === 0) c = [245, 252, 255]; if (y < 4) c = [250, 252, 255]; return vary(c, x, y, 0.08); }, 19);
+  TEX.basalt = makeTex((x, y) => { const col = Math.floor(x / 6); const edge = (x % 6) === 0 || ((y + col * 5) % 13) === 0; let c = edge ? [26, 22, 26] : (col % 2 ? [58, 50, 54] : [70, 60, 62]); if (edge && n8(x, y) > 0.8) c = [230, 90, 30]; return vary(c, x, y, 0.15); }, 23);
   TEX.cwall = makeTex((x, y) => vary(n8(x >> 2, y >> 2) > 0.5 ? [60, 46, 40] : [80, 62, 52], x, y, 0.3), 9);
   TEX.cwall_bomb = makeTex((x, y) => { let c = n8(x >> 2, y >> 2) > 0.5 ? [60, 46, 40] : [80, 62, 52]; if (Math.abs((x - 16) - Math.sin(y * 0.6) * 3) < 0.8 && y > 6 && y < 28) c = [30, 22, 18]; return vary(c, x, y, 0.3); }, 9);
   TEX.shop = makeTex((x, y) => { let c = [120, 80, 44]; if ((y & 7) === 0) c = [70, 44, 24]; if (y < 4) c = [200, 60, 40]; return vary(c, x, y, 0.1); });
@@ -103,6 +108,9 @@ function initTextures() {
     else TEX[name] = makeTex((x, y, r) => t.fn(x, y, r, ctx), t.seed);
   }
   TEX.cexit = makeTex((x, y) => { const dx = (x - 15.5) / 10, dy = (y - 31) / 26; const d = dx * dx + dy * dy; if (d < 1) return d > 0.8 ? [120, 96, 70] : shade([250, 240, 200], 0.85 + 0.15 * (y / 31)); return ctx.texPx('cwall', x, y); });
+  TEX.hearthgate = makeTex((x, y) => { const dx = x - 15.5, dy = y - 15; const r = Math.sqrt(dx * dx + dy * dy); const ang = Math.atan2(dy, dx);
+    if (r < 11) { if (r < 4) return [255, 240, 200]; const third = Math.floor(((ang + Math.PI) / (Math.PI * 2)) * 3) % 3; return third === 0 ? [120, 200, 255] : third === 1 ? [255, 120, 40] : [160, 80, 230]; }
+    if (r < 13) return [40, 30, 30]; const v = TEX.brick[y * TS + x]; return shade([v & 255, (v >> 8) & 255, (v >> 16) & 255], 0.6); });
   TEX.shardwall = makeTex((x, y) => { const d = Math.abs(x - 16) + Math.abs(y - 16); if (d < 9) return d < 5 ? [255, 230, 120] : [240, 140, 40]; const i = y * TS + x; const v = TEX.brick[i]; return shade([v & 255, (v >> 8) & 255, (v >> 16) & 255], 0.7); });
 }
 
@@ -125,7 +133,7 @@ defTile(TL.PATH, { floor: 'path' });
 defTile(TL.SAND, { floor: 'sand' });
 defTile(TL.BRIDGE, { floor: 'bridge' });
 defTile(TL.WATER, { solid: true, floor: 'water', water: true, low: true });
-defTile(TL.LAVA, { floor: 'lava', hurt: 1 });
+defTile(TL.LAVA, { floor: 'lava', hurt: 1, lava: true });
 defTile(TL.TREEWALL, { solid: true, wall: 'treewall' });
 defTile(TL.ROCK, { solid: true, wall: 'rock' });
 defTile(TL.ROCK_BOMB, { solid: true, wall: 'rock_bomb', bomb: true });
@@ -154,6 +162,13 @@ defTile(TL.PEAKS = 29, { solid: true, wall: 'mountain', tall: 3.4, jag: 'peak', 
 defTile(TL.FIREPEAKS = 30, { solid: true, wall: 'volcrock', tall: 2.8, jag: 'peak' });
 defTile(TL.BIGWOOD = 31, { solid: true, wall: 'treewall', tall: 2.6, jag: 'trees' });
 defTile(TL.TOWER = 32, { solid: true, wall: 'brick', tall: 2.3, jag: 'battlement' });
+// the frontier lands beyond the passes: the Frozen Reach (west) and the Cinder Wastes (east)
+defTile(TL.SNOW = 33, { floor: 'snow' });
+defTile(TL.ICE = 34, { floor: 'ice', slippery: true }); // you slide on it
+defTile(TL.ASH = 35, { floor: 'ash' });
+defTile(TL.ICEWALL = 36, { solid: true, wall: 'icewall' });
+defTile(TL.BASALT = 37, { solid: true, wall: 'basalt' });
+defTile(TL.HEARTHGATE = 38, { solid: true, wall: 'hearthgate', hearthGate: true }); // opens for the Frost Fang + Ember Heart
 
 // props drawn as sprites on tiles
 const PROPS = [null, 'tree', 'pine', 'boulder', 'bush', 'cactus', 'grave', 'statue', 'sign', 'flame', 'pedestal'];

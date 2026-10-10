@@ -1,6 +1,8 @@
 // ===== game/world.js : level generation (overworld, caves, dungeons) =====
 'use strict';
-const RW = 8, RH = 6, RSX = 16, RSY = 11; // overworld region grid & stride
+const RW = 10, RH = 6, RSX = 16, RSY = 11; // overworld region grid & stride. Column 0 is the Frozen Reach, column RW-1 the Cinder Wastes.
+const FRONTIER = { 0: 'snow', [RW - 1]: 'ash' }; // the lands beyond the passes, by column
+const NDUNGEONS = () => Math.max(9, Content.dungeons.length - 1); // 1-9 main, 10+ optional
 const DGW = 8, DGH = 8, DSX = 12, DSY = 8;  // dungeon room grid (8x8 rooms, drawn as shapes in content/dungeons.js) & room size
 
 class Level {
@@ -29,7 +31,7 @@ class Level {
   }
 }
 
-const BIOMES = ['plains', 'forest', 'mountain', 'lake', 'desert', 'graveyard'];
+const BIOMES = ['plains', 'forest', 'mountain', 'lake', 'desert', 'graveyard', 'snow', 'ash'];
 // Which enemies appear where comes from each enemy's `spawns` (content/enemies). Dungeon names and
 // treasures come from content/dungeons.js. These helpers keep the old shapes for the generator.
 const dungeonName = (d) => (Content.dungeons[d] || {}).name || ('LEVEL ' + d);
@@ -42,7 +44,7 @@ function genWorld(seed, mode) {
   const W = { seed, mode, levels: {}, caveCount: 0, dungeons: [] };
   const rnd = mulberry32(seed);
   genOverworld(W, rnd);
-  for (let d = 1; d <= 9; d++) genDungeon(W, d, mulberry32(seed * 31 + d * 977));
+  for (let d = 1; d <= NDUNGEONS(); d++) genDungeon(W, d, mulberry32(seed * 31 + d * 977));
   return W;
 }
 
@@ -57,10 +59,11 @@ function genOverworld(W, rnd) {
   for (let ry = 0; ry < RH; ry++) for (let rx = 0; rx < RW; rx++) {
     let b;
     const v = Math.sin(rx * 0.9 + bn[0] * 6) + Math.cos(ry * 1.1 + bn[1] * 6) + (rnd() - 0.5) * 0.9;
-    if ((rx === 0 || rx === RW - 1) && rnd() < 0.45) b = 'mountain'; // foothills of the edge ranges
+    if (FRONTIER[rx]) b = FRONTIER[rx];
+    else if ((rx === 1 || rx === RW - 2) && rnd() < 0.45) b = 'mountain'; // foothills of the edge ranges
     else if (ry === 0 && rnd() < 0.5) b = 'forest'; // the edge of the great wood
-    else if (v > 1.0) b = 'forest'; else if (v < -1.1) b = 'lake'; else if (rx >= RW - 2 && ry >= 3 && rnd() < 0.6) b = 'desert';
-    else if (rx <= 1 && ry >= 2 && ry <= 4 && rnd() < 0.5) b = 'graveyard'; else b = rnd() < 0.55 ? 'plains' : rnd() < 0.5 ? 'forest' : 'desert';
+    else if (v > 1.0) b = 'forest'; else if (v < -1.1) b = 'lake'; else if (rx >= RW - 3 && ry >= 3 && rnd() < 0.6) b = 'desert';
+    else if (rx <= 2 && ry >= 2 && ry <= 4 && rnd() < 0.5) b = 'graveyard'; else b = rnd() < 0.55 ? 'plains' : rnd() < 0.5 ? 'forest' : 'desert';
     if (rx === startR.x && ry === startR.y) b = 'plains';
     L.regions.push({ rx, ry, biome: b, enemies: [], tier: 0, features: [] });
   }
@@ -72,22 +75,29 @@ function genOverworld(W, rnd) {
   const seen = new Set(); const stack = [startR.y * RW + startR.x]; seen.add(stack[0]);
   while (stack.length) {
     const cur = stack[stack.length - 1]; const cx = cur % RW, cy = Math.floor(cur / RW);
-    const nb = [[1, 0], [-1, 0], [0, 1], [0, -1]].map(([dx, dy]) => [cx + dx, cy + dy]).filter(([x, y]) => x >= 0 && y >= 0 && x < RW && y < RH && !seen.has(y * RW + x));
+    const nb = [[1, 0], [-1, 0], [0, 1], [0, -1]].map(([dx, dy]) => [cx + dx, cy + dy]).filter(([x, y]) => x >= 0 && y >= 0 && x < RW && y < RH && !FRONTIER[x] && !seen.has(y * RW + x));
     if (!nb.length) { stack.pop(); continue; }
     const [nx, ny] = rnd.pick(nb); const ni = ny * RW + nx; seen.add(ni); edges[ek(cur, ni)] = 1; stack.push(ni);
   }
   for (let ry = 0; ry < RH; ry++) for (let rx = 0; rx < RW; rx++) {
     const i = ry * RW + rx;
-    if (rx < RW - 1 && rnd() < 0.35) edges[ek(i, i + 1)] = 1;
+    if (FRONTIER[rx]) { if (ry < RH - 1) edges[ek(i, i + RW)] = 1; continue; } // the frontier lands are open north-south
+    if (rx < RW - 1 && !FRONTIER[rx + 1] && rnd() < 0.35) edges[ek(i, i + 1)] = 1;
     if (ry < RH - 1 && rnd() < 0.35) edges[ek(i, i + RW)] = 1;
   }
+  // one mountain pass into each frontier land
+  L.passes = {};
+  for (const fx of [0, RW - 1]) { const ry = rnd.range(1, RH - 2); const inner = fx === 0 ? 1 : RW - 2; edges[ek(ry * RW + fx, ry * RW + inner)] = 1; L.passes[FRONTIER[fx]] = { ry, fx, inner }; }
   L.edges = edges;
   // region distances from start (for difficulty)
   const dist = new Array(RW * RH).fill(99); dist[startR.y * RW + startR.x] = 0; const q = [startR.y * RW + startR.x];
   while (q.length) { const c = q.shift(); const cx = c % RW, cy = Math.floor(c / RW); for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { const nx = cx + dx, ny = cy + dy; if (nx < 0 || ny < 0 || nx >= RW || ny >= RH) continue; const n = ny * RW + nx; if (edges[ek(c, n)] && dist[n] > dist[c] + 1) { dist[n] = dist[c] + 1; q.push(n); } } }
-  L.regions.forEach((r, i) => { r.dist = dist[i]; r.tier = Math.min(3, Math.floor(dist[i] / 3)); });
+  L.regions.forEach((r, i) => { r.dist = dist[i]; r.tier = FRONTIER[r.rx] ? 3 : Math.min(3, Math.floor(dist[i] / 3)); });
   // borders
-  const borderTile = (b1, b2) => (b1 === 'mountain' || b2 === 'mountain') ? TL.ROCK : (b1 === 'lake' && b2 === 'lake') ? TL.WATER : (b1 === 'desert' && b2 === 'desert') ? TL.ROCK : TL.TREEWALL;
+  const front = (b) => b === 'snow' || b === 'ash';
+  const borderTile = (b1, b2) => (b1 === 'snow' && b2 === 'snow') ? TL.ICEWALL : (b1 === 'ash' && b2 === 'ash') ? TL.BASALT
+    : (b1 === 'snow' || b2 === 'snow') ? TL.PEAKS : (b1 === 'ash' || b2 === 'ash') ? TL.FIREPEAKS
+    : (b1 === 'mountain' || b2 === 'mountain') ? TL.ROCK : (b1 === 'lake' && b2 === 'lake') ? TL.WATER : (b1 === 'desert' && b2 === 'desert') ? TL.ROCK : TL.TREEWALL;
   for (let ry = 0; ry <= RH; ry++) for (let x = 0; x < w; x++) {
     const y = ry * RSY; const rx = Math.min(RW - 1, Math.floor(x / RSX));
     const a = ry > 0 ? R(rx, ry - 1).biome : 'mountain', b = ry < RH ? R(rx, ry).biome : 'mountain';
@@ -100,7 +110,7 @@ function genOverworld(W, rnd) {
     L.set(x, y, borderTile(a, b));
   }
   // the edges of the Wilds: the great wood (north), granite peaks (west), fire peaks (east), the sea (south)
-  for (let x = 0; x < w; x++) { L.set(x, 0, TL.BIGWOOD); L.set(x, h - 1, TL.OCEAN); }
+  for (let x = 0; x < w; x++) { const fb = FRONTIER[Math.min(RW - 1, Math.floor(x / RSX))]; L.set(x, 0, fb === 'snow' ? TL.PEAKS : fb === 'ash' ? TL.FIREPEAKS : TL.BIGWOOD); L.set(x, h - 1, TL.OCEAN); }
   for (let y = 1; y < h - 1; y++) { L.set(0, y, TL.PEAKS); L.set(w - 1, y, TL.FIREPEAKS); }
   // interiors
   for (const reg of L.regions) fillRegion(L, reg, rnd);
@@ -112,14 +122,14 @@ function genOverworld(W, rnd) {
   for (const k in edges) {
     const [a, b] = k.split(',').map(Number); const ax = a % RW, ay = Math.floor(a / RW), bx = b % RW, by = Math.floor(b / RW);
     const ra = R(ax, ay), rb = R(bx, by);
-    const floorT = (ra.biome === 'desert' || rb.biome === 'desert') ? TL.SAND : TL.PATH;
+    const floorT = (ra.biome === 'snow' || rb.biome === 'snow') ? TL.SNOW : (ra.biome === 'ash' || rb.biome === 'ash') ? TL.ASH : (ra.biome === 'desert' || rb.biome === 'desert') ? TL.SAND : TL.PATH;
     if (ay === by) { // horizontal neighbor: shared vertical wall at x = bx*RSX
       const x = bx * RSX; const wid = rnd.range(2, 3); const y0 = ay * RSY + rnd.range(2, RSY - 2 - wid);
-      for (let y = y0; y < y0 + wid; y++) { L.set(x, y, floorT); clearAround(L, x - 1, y); clearAround(L, x + 1, y); }
+      for (let y = y0; y < y0 + wid; y++) { L.set(x, y, floorT); clearAround(L, x - 1, y, baseTile(ra.biome)); clearAround(L, x + 1, y, baseTile(rb.biome)); }
       ra.doors.push([x - 1, y0 + 1]); rb.doors.push([x + 1, y0 + 1]);
     } else {
       const y = by * RSY; const wid = rnd.range(2, 4); const x0 = ax * RSX + rnd.range(2, RSX - 2 - wid);
-      for (let x = x0; x < x0 + wid; x++) { L.set(x, y, floorT); clearAround(L, x, y - 1); clearAround(L, x, y + 1); }
+      for (let x = x0; x < x0 + wid; x++) { L.set(x, y, floorT); clearAround(L, x, y - 1, baseTile(ra.biome)); clearAround(L, x, y + 1, baseTile(rb.biome)); }
       ra.doors.push([x0 + 1, y - 1]); rb.doors.push([x0 + 1, y + 1]);
     }
   }
@@ -131,7 +141,7 @@ function genOverworld(W, rnd) {
   const sc = sr.features[0];
   L.spawn = sc ? { x: sc.x + 0.5, y: Math.min(sr.ry * RSY + RSY - 0.6, sc.y + 3.5), a: -Math.PI / 2 } : { x: sr.rx * RSX + 8.5, y: sr.ry * RSY + 8.5, a: -Math.PI / 2 };
   // dungeon placement: sort regions by distance
-  const cand = L.regions.filter(r => r !== sr).sort((a, b) => a.dist - b.dist || rnd() - 0.5);
+  const cand = L.regions.filter(r => r !== sr && !FRONTIER[r.rx]).sort((a, b) => a.dist - b.dist || rnd() - 0.5);
   const used = new Set([sr]);
   const maxD = Math.max(...L.regions.map(r => r.dist));
   for (let d = 1; d <= 9; d++) {
@@ -147,9 +157,19 @@ function genOverworld(W, rnd) {
     used.add(best);
     placeGate(W, L, best, rnd, d);
   }
+  // optional dungeons: one deep in each frontier land, far from its pass; the Hearth on the edge of the great wood
+  for (const [d, biome] of [[10, 'snow'], [11, 'ash']]) {
+    if (!Content.dungeons[d]) continue; const ps = L.passes[biome];
+    const r = L.regions.filter(r => r.rx === ps.fx).sort((a, b) => Math.abs(b.ry - ps.ry) - Math.abs(a.ry - ps.ry))[0];
+    used.add(r); placeGate(W, L, r, rnd, d);
+  }
+  if (Content.dungeons[12]) {
+    const r = L.regions.filter(r => !used.has(r) && !FRONTIER[r.rx] && r.biome !== 'lake').sort((a, b) => a.ry - b.ry || Math.abs(a.rx - RW / 2) - Math.abs(b.rx - RW / 2))[0];
+    if (r) { used.add(r); placeGate(W, L, r, rnd, 12); }
+  }
   // caves: shops, gifts, hearts, secrets, dojo
   const caveKinds = CAVE_MIX;
-  const free = rnd.shuffle(L.regions.filter(r => !used.has(r) && r.biome !== 'lake'));
+  const free = rnd.shuffle(L.regions.filter(r => !used.has(r) && r.biome !== 'lake' && !FRONTIER[r.rx]));
   let fi = 0;
   for (const kind of caveKinds) {
     const r = free[fi++ % free.length];
@@ -157,6 +177,8 @@ function genOverworld(W, rnd) {
     const secret = SECRET_CAVES.includes(kind) ? (rnd() < 0.5 && r.biome !== 'forest' ? 'bomb' : (r.biome === 'forest' || r.biome === 'plains') ? 'bush' : 'bomb') : 'open';
     placeCave(W, L, r, rnd, kind, secret);
   }
+  // a hermit's cave just inside each pass, with advice about what lies ahead
+  for (const [biome, kind] of [['snow', 'frosthint'], ['ash', 'firehint']]) { const ps = L.passes[biome]; if (Content.caves[kind]) placeCave(W, L, R(ps.fx, ps.ry), rnd, kind, 'open'); }
   // enemies
   for (const r of L.regions) {
     if (r === sr) continue;
@@ -166,6 +188,11 @@ function genOverworld(W, rnd) {
   // signs near start
   L.signText = {};
   const sx = sr.rx * RSX + 5, sy = sr.ry * RSY + 7; if (!TINFO[L.get(sx, sy)].solid) { L.props[L.idx(sx, sy)] = PR.SIGN; L.signText[L.idx(sx, sy)] = 'NINE DUNGEONS. EIGHT EMBER SHARDS. ONE HOLLOW CROWN. THE NUMBERED GATES GROW DEADLIER THE FARTHER YOU ROAM.'; }
+  // signposts at the passes
+  for (const [biome, txt] of [['snow', 'RIMEFANG PASS. BEYOND LIES THE FROZEN REACH, WHERE THE MOTHER OF WYRMS SLEEPS. MIND THE ICE.'], ['ash', 'CINDER PASS. BEYOND LIES THE CINDER WASTES, WHERE THE FATHER OF WYRMS BROODS. THE GROUND ITSELF BURNS.']]) {
+    const ps = L.passes[biome]; const r = R(ps.inner, ps.ry); const d = r.doors.find(([x]) => biome === 'snow' ? x === r.rx * RSX + 1 : x === (r.rx + 1) * RSX - 1); if (!d) continue;
+    const sx = biome === 'snow' ? d[0] + 2 : d[0] - 2, sy = d[1] - 2; if (!TINFO[L.get(sx, sy)].solid && !TINFO[L.get(sx, sy)].portal) { L.props[L.idx(sx, sy)] = PR.SIGN; L.signText[L.idx(sx, sy)] = txt; }
+  }
   // ensure connectivity per region from doors
   for (const r of L.regions) connectRegion(L, r);
   // clear spawn
@@ -198,11 +225,12 @@ function repairReach(L) {
     }
   }
 }
-function clearAround(L, x, y) { const i = L.idx(x, y); if (x <= 0 || y <= 0 || x >= L.w - 1 || y >= L.h - 1) return; if (TINFO[L.tiles[i]].solid && !TINFO[L.tiles[i]].portal) L.tiles[i] = TL.GRASS; L.props[i] = 0; }
+function baseTile(biome) { return biome === 'desert' ? TL.SAND : biome === 'graveyard' ? TL.PATH : biome === 'snow' ? TL.SNOW : biome === 'ash' ? TL.ASH : TL.GRASS; }
+function clearAround(L, x, y, base) { const i = L.idx(x, y); if (x <= 0 || y <= 0 || x >= L.w - 1 || y >= L.h - 1) return; if (TINFO[L.tiles[i]].solid && !TINFO[L.tiles[i]].portal) L.tiles[i] = base != null ? base : TL.GRASS; L.props[i] = 0; }
 function regionInterior(r) { return { x0: r.rx * RSX + 1, y0: r.ry * RSY + 1, x1: r.rx * RSX + RSX, y1: r.ry * RSY + RSY }; }
 function fillRegion(L, r, rnd) {
   const { x0, y0, x1, y1 } = regionInterior(r);
-  const base = r.biome === 'desert' ? TL.SAND : r.biome === 'graveyard' ? TL.PATH : TL.GRASS;
+  const base = baseTile(r.biome);
   for (let y = y0; y < y1; y++) for (let x = x0; x < x1; x++) { L.set(x, y, base); if (base === TL.GRASS && rnd() < 0.05) L.set(x, y, TL.FLOWERS); }
   const put = (x, y, p) => { if (x > x0 && y > y0 && x < x1 - 1 && y < y1 - 1) L.props[L.idx(x, y)] = p; };
   const cx = (x0 + x1) >> 1, cy = (y0 + y1) >> 1;
@@ -219,6 +247,18 @@ function fillRegion(L, r, rnd) {
       for (let i = 0; i < 3; i++) put(rnd.range(x0, x1), rnd.range(y0, y1), PR.TREE); break;
     }
     case 'desert': for (let i = 0; i < 8; i++) put(rnd.range(x0, x1), rnd.range(y0, y1), rnd.pick([PR.CACTUS, PR.CACTUS, PR.BOULDER])); break;
+    case 'snow': { // snowfield: frozen ponds you slide across, snowy pines, drifts of rock
+      for (let k = 0; k < 2; k++) { const px0 = rnd.range(x0 + 2, x1 - 5), py0 = rnd.range(y0 + 2, y1 - 4), rw = rnd.range(2, 3), rh = rnd.range(1, 2); for (let y = py0 - rh; y <= py0 + rh; y++) for (let x = px0 - rw; x <= px0 + rw; x++) if (((x - px0) / (rw + 0.5)) ** 2 + ((y - py0) / (rh + 0.5)) ** 2 < 1) L.set(x, y, TL.ICE); }
+      for (let i = 0; i < 12; i++) { const x = rnd.range(x0, x1), y = rnd.range(y0, y1); if (L.get(x, y) !== TL.ICE) put(x, y, rnd.pick([PR.SNOWPINE, PR.SNOWPINE, PR.BOULDER])); }
+      break;
+    }
+    case 'ash': { // cinder waste: lava rivulets with stepping stones, dead trees, basalt
+      const vertical = rnd() < 0.5; const at = vertical ? rnd.range(x0 + 3, x1 - 4) : rnd.range(y0 + 3, y1 - 3);
+      if (vertical) { for (let y = y0; y < y1; y++) { const x = at + Math.round(Math.sin(y * 0.7) * 1.2); L.set(x, y, TL.LAVA); if (y % 4 === 1) L.set(x, y, TL.ASH); } }
+      else { for (let x = x0; x < x1; x++) { const y = at + Math.round(Math.sin(x * 0.6) * 1.2); L.set(x, y, TL.LAVA); if (x % 4 === 1) L.set(x, y, TL.ASH); } }
+      for (let i = 0; i < 9; i++) { const x = rnd.range(x0, x1), y = rnd.range(y0, y1); if (L.get(x, y) !== TL.LAVA) put(x, y, rnd.pick([PR.DEADTREE, PR.BOULDER, PR.BOULDER])); }
+      break;
+    }
     case 'graveyard': for (let gy = y0 + 2; gy < y1 - 1; gy += 2) for (let gx = x0 + 2; gx < x1 - 1; gx += 3) if (rnd() < 0.7) put(gx, gy, PR.GRAVE);
       put(x0 + 1, y0 + 1, PR.STATUE); put(x1 - 2, y0 + 1, PR.STATUE); break;
   }
@@ -264,10 +304,11 @@ function placeStructure(L, r, rnd, wallT, portalT, wide) {
   return null;
 }
 function placeGate(W, L, r, rnd, d) {
-  const p = placeStructure(L, r, rnd, d === 9 ? TL.SHARDGATE : TL.BRICK, TL.GATE, true);
+  const sealed = d === 9 ? TL.SHARDGATE : d === 12 ? TL.HEARTHGATE : null;
+  const p = placeStructure(L, r, rnd, sealed != null ? sealed : TL.BRICK, TL.GATE, true);
   if (!p) return;
   const [px, py] = p;
-  if (d === 9) L.set(px, py, TL.SHARDGATE);
+  if (sealed != null) L.set(px, py, sealed);
   // a tall tower behind the gate, in the dungeon's own colors, so you can spot it from far away
   L.towerTheme = L.towerTheme || {};
   for (let x = px - 2; x <= px + 2; x++) { L.set(x, py - 1, TL.TOWER); L.towerTheme[L.idx(x, py - 1)] = 'd' + d; }
@@ -383,14 +424,14 @@ function genDungeon(W, d, rnd) {
   for (const r of order) {
     const ix = r.rx * DSX, iy = r.ry * DSY;
     if (r === start) { L.set(ix + 6, iy + DSY, TL.DEXIT); continue; }
-    if (r.boss) { r.enemies = [r.boss]; if (d >= 4) r.enemies.push(rnd.pick(pool)); r.shutter = true; continue; }
+    if (r.boss) { r.enemies = def.bossParty ? def.bossParty.slice() : [r.boss]; if (d >= 4 && !def.bossParty && pool.length) r.enemies.push(rnd.pick(pool)); r.shutter = true; continue; }
     const lane = (x, y) => x === 6 || y === 4; // keep the cross through each room's doors clear
     const rc = Object.assign({}, gctx, { ix, iy, lane, set: (x, y, t) => L.set(ix + x, iy + y, typeof t === 'string' ? TL[t] : t), prop: (x, y, pr) => { L.props[L.idx(ix + x, iy + y)] = pr; } });
     let decorated = false; for (const g of gimmicks) if (g.room && g.room(L, r, rc)) decorated = true;
     if (!decorated) {
       const pat = rnd.int(7);
       const blk = (x, y, t) => { if (lane(x, y)) return; L.set(ix + x, iy + y, t || TL.BRICK); };
-      const block = (d >= 4 && rnd() < 0.25) ? TL.LAVA : TL.BRICK;
+      const block = (d >= 4 && rnd() < 0.25) ? TL.LAVA : (d === 10 ? TL.ICEWALL : TL.BRICK);
       if (pat === 1) { blk(3, 2); blk(9, 2); blk(3, 6); blk(9, 6); }
       else if (pat === 2) { for (let x = 2; x <= 10; x += 2) { blk(x, 2, block); blk(x, 6, block); } }
       else if (pat === 3) { blk(5, 3); blk(7, 3); blk(5, 5); blk(7, 5); }
@@ -398,8 +439,9 @@ function genDungeon(W, d, rnd) {
       else if (pat === 5) { for (let x = 3; x <= 9; x++) { blk(x, 2, block); blk(x, 6, block); } }
       else if (pat === 6) { L.props[L.idx(ix + 2, iy + 1)] = PR.STATUE; L.props[L.idx(ix + 10, iy + 1)] = PR.STATUE; }
     }
-    if (r.item) { r.enemies = []; L.props[L.idx(ix + 6, iy + 3)] = PR.PEDESTAL; const n = 1 + Math.floor(d / 3); for (let i = 0; i < n; i++) r.enemies.push(rnd.pick(pool)); continue; }
-    const n = 2 + Math.floor(d / 2) + rnd.int(3);
+    const dd = Math.min(9, d); // the optional dungeons are as crowded as level 9, not more
+    if (r.item) { r.enemies = []; L.props[L.idx(ix + 6, iy + 3)] = PR.PEDESTAL; const n = 1 + Math.floor(dd / 3); for (let i = 0; i < n; i++) r.enemies.push(rnd.pick(pool)); continue; }
+    const n = 2 + Math.floor(dd / 2) + rnd.int(3);
     if (rnd() < 0.12 && !r.key && !r.map && !r.compass) continue; // empty room
     for (let i = 0; i < n; i++) r.enemies.push(rnd.pick(pool));
     r.shutter = rnd() < 0.25 || r.key;

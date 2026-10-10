@@ -147,6 +147,10 @@ Then add its id to a dungeon's `gimmicks` list. Statues work by giving rooms `r.
   | `cuttable` / `burnable` + `opensTo: 'TILE'` | A sword or fire turns it into the `opensTo` tile |
   | `bomb` + `opensTo` | A bomb turns it into the `opensTo` tile |
   | `fake` | Looks solid, you can walk through it, and it whispers |
+  | `slippery` | Ice: you keep sliding (client movement) |
+  | `vent` | Blows on the shared rhythm (`sim.ventPhase()`) and hurts while blowing |
+  | `lava` | Lava; the Magma Boots make it (and vents) harmless |
+  | `tall`, `jag`, `snow` | Outdoor walls taller than one tile, cut into peaks / treetops / battlements, with snowcaps |
   | `glass`, `pressure` | Read by gimmick code |
 
 - **`defineTexture('name', fn, opts)`:** `fn(x, y, rnd, ctx)` returns `[r, g, b]` for each pixel of a 32×32 texture. With `{ themed: true }`, fn also receives the dungeon's theme colors, and you get one copy per dungeon. With `{ frames: 4 }` it's animated.
@@ -166,5 +170,12 @@ Debug mode is only available to heroes named in `DEV_NAMES` (`src/core/util.js`;
 
 - **`content/projectiles.js`:** `defineProjectile({ id, spr, spd, dmg, ... })`. Options include `player`, `range`, `pierce`, `fire`, `blockable`, `pierceShield` and `endFx`.
 - **`content/drops.js`:** `defineDropTable(id, weightOfNothing, [{ item, w, when? }])`. Point an enemy at a table with `drops: 'id'`.
-- **`content/dungeons.js`:** each dungeon's name, pedestal treasure, shape, colors, gimmicks and lore (see above).
+- **`content/dungeons.js`:** each dungeon's name, pedestal treasure, shape, colors, gimmicks and lore (see above). Dungeons 10 and up are optional and can also set `mapLabel` (the letter on the maps), `bossDrop` (what the boss leaves) and `bossParty` (several bosses at once).
 - **`content/caves.js`:** what each cave kind says and sells. Which caves appear on the map is `CAVE_MIX` in `game/world.js`.
+
+## The frontier and the dragons
+
+- **The Frozen Reach and the Cinder Wastes** are the outer columns of the Wilds (`FRONTIER` in `game/world.js`). Each is walled off by mountains with a single pass, has a hermit's cave (`frosthint` / `firehint` in `content/frontier.js`) and holds one optional dungeon (10 and 11). Their enemies come from `spawns: { biomes: ['snow'] }` / `['ash']`.
+- **The Hearth** (dungeon 12) sits behind a `HEARTHGATE` that opens once the team holds both relics: the Frost Fang and the Ember Heart (`content/items/frontier.js`).
+- **Dragons** (`content/enemies/dragons.js`) are built from parts. The head is the enemy; `dragonAi({ tint, home, reach, breath, special, ... })` spawns a body and a chain of `neck` entities and moves them every tick, so the neck sways, reaches toward a hero, rears up to breathe and snaps forward to bite. Give several heads the same room (`bossParty`) and they share one body; that's the Hearthwyrm.
+- **Wyrmlings** (`enemies/wyrm.js`), the bosses of levels 1, 4 and 7, are the dragons' children: same body, their parent's colors and breath.
