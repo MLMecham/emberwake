@@ -189,6 +189,26 @@ attempt('vents and chill', () => {
   p.inv = 0; p.hp = p.maxHp; p.items.magmaboots = true; sim.time = 2.5; sim.tick(1 / 60); __ok(p.hp === p.maxHp, 'magma boots should protect from vents');
   p.inv = 0; sim.fireProj('icebreath', p.lvl, p.x - 0.3, p.y, 0, 'e', null, { dmg: 1 }); run(sim, 0.2); __ok(sim.snapshotFor('p1').me.chill === 1, 'ice breath should chill');
 });
+// sword beams fired through a doorway at an angle glance off the frame instead of breaking
+attempt('beams through doorways', () => {
+  const W = genWorld(7319, 'adv'); const sim = new Sim(W, null); const p = sim.addPlayer('p1', 'A', 'GREEN', 'sword'); p.sword = 2; p.god = true;
+  const D = W.levels.d1; const r = D.startRoom; sim.teleport(p, 'd1', D.spawn.x, D.spawn.y, -Math.PI / 2); const ix = r.rx * DSX, iy = r.ry * DSY;
+  let broke = 0;
+  for (const off of [-0.3, 0, 0.3]) for (const ang of [-0.35, -0.15, 0.15, 0.35]) for (const dy of [0.3, 0.8, 1.4]) {
+    sim.ents = sim.ents.filter(e => e.k !== 'proj'); p.x = ix + 6.5 + off; p.y = iy + dy; p.a = -Math.PI / 2 + ang; p.hp = p.maxHp;
+    sim.playerAttack(p, { kind: 'sword' }); const b = sim.ents.find(e => e.k === 'proj' && e.type === 'beam'); if (!b) { broke++; continue; }
+    for (let t = 0; t < 12; t++) sim.updateProj(b, 1 / 60); if (b.dead && b.y > iy - 1.5) broke++;
+  }
+  __ok(broke === 0, broke + ' sword beams broke on a door frame');
+});
+// debug: switching it on mid-game hands over the loadout (relics, Dawnblade, new items); god mode switches on its own
+attempt('debug loadout mid-game', () => {
+  const W = genWorld(7319, 'adv'); const sim = new Sim(W, null); const p = sim.addPlayer('p1', 'MITCH', 'GREEN', 'sword');
+  sim.onAction('p1', { t: 'debug', on: true, god: false, loadout: { sword: 4, armor: 2, hearts: 16, gems: 999, bombs: 16, arrows: 30, potions: 2, shards: 8, items: Object.values(Content.items).filter(d => d.debug).map(d => d.id) } });
+  __ok(p.dbg && !p.god && p.sword === 4 && p.armor === 2 && p.items.frostarrows && p.items.magmaboots && sim.team.relics.includes('fang') && sim.team.relics.includes('emberheart') && sim.team.shards.length === 8, 'debug loadout incomplete');
+  sim.onAction('p1', { t: 'god', on: true }); __ok(p.god, 'god toggle failed');
+  const q = sim.addPlayer('p2', 'BOB', 'RED', 'sword'); sim.onAction('p2', { t: 'debug', on: true, loadout: { sword: 4 } }); __ok(!q.dbg && !q.god, 'debug must stay dev-only');
+});
 // a full minute of play in a dungeon with everything going on
 attempt('dungeon minute', () => {
   const sim = freshSim(); for (const pid of ['p1', 'p2']) { const p = sim.players[pid]; const D = sim.W.levels.d5; sim.teleport(p, 'd5', D.spawn.x, D.spawn.y, -Math.PI / 2); }

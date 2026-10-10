@@ -332,7 +332,7 @@ function resume() { G.state = 'play'; showScreen(null); try { const r = $('game'
 function updatePauseInfo() {
   const n = G.snap ? G.snap.pl.length : 1; const me = G.snap && G.snap.me;
   const dOn = !!(G.snap && G.snap.me && G.snap.me.dbg); $('pDebug').style.display = dOn ? '' : 'none';
-  const dev = isDevName(G.snap && G.snap.me ? G.snap.me.name : G.profile.name); $('pDbgToggle').style.display = dev ? '' : 'none'; $('pDbgToggle').textContent = 'DEBUG: ' + (dOn ? 'ON' : 'OFF');
+  const dev = isDevName(G.snap && G.snap.me ? G.snap.me.name : G.profile.name); $('pDbgToggle').style.display = dev ? '' : 'none'; $('pDbgToggle').textContent = 'DEBUG: ' + (dOn ? 'ON' : 'OFF'); $('pGodToggle').textContent = 'GOD MODE: ' + (G.snap && G.snap.me && G.snap.me.god ? 'ON' : 'OFF');
   if (dOn && !$('pWarps').childElementCount) { const mk = (label, to) => { const b = document.createElement('button'); b.textContent = label; b.onclick = () => { sendAction({ t: 'warp', to }); resume(); }; $('pWarps').appendChild(b); }; mk('WILDS', 'ow'); for (let d = 1; d <= NDUNGEONS(); d++) if (G.world && G.world.levels['d' + d]) mk(d <= 9 ? 'L' + d : (Content.dungeons[d].mapLabel || 'L' + d), 'd' + d); }
   const kinds = NET.role === 'host' ? Object.values(NET.conns).map(c => c.kind).filter(Boolean) : NET.kind ? [NET.kind] : [];
   $('pInfo').title = kinds.length ? 'Connection: ' + kinds.join(', ') : '';
@@ -456,11 +456,13 @@ function bindUI() {
   on('pDbgToggle', () => {
     const now = !(G.snap && G.snap.me && G.snap.me.dbg);
     G.profile.dbg = Object.assign(defaultDebug(), G.profile.dbg || {}, { on: now }); saveProfile();
-    sendAction({ t: 'debug', on: now, god: !!G.profile.dbg.god });
+    sendAction({ t: 'debug', on: now, god: !!G.profile.dbg.god, loadout: now ? G.profile.dbg : null });
     setTimeout(updatePauseInfo, 150); showToast(now ? 'DEBUG ON' : 'DEBUG OFF');
   });
   on('dbgBack', () => { readDebugUI(); showScreen('titleScreen'); refreshTitle(); });
-  on('dbgAll', () => { G.profile.dbg = Object.assign(defaultDebug(), { on: true, sword: 3, armor: 2, hearts: 16, gems: 999, bombs: 16, arrows: 30, potions: 2, shards: 8, items: debugItems().map(i => i[0]) }); fillDebugUI(); });
+  on('pGodToggle', () => { const now = !(G.snap && G.snap.me && G.snap.me.god); G.profile.dbg = Object.assign(defaultDebug(), G.profile.dbg || {}, { god: now }); saveProfile(); sendAction({ t: 'god', on: now }); setTimeout(updatePauseInfo, 150); showToast(now ? 'GOD MODE ON' : 'GOD MODE OFF'); });
+  // EVERYTHING: best sword (the Dawnblade), plate, 16 hearts, every item and relic, all shards, god mode
+  on('dbgAll', () => { G.profile.dbg = Object.assign(defaultDebug(), { on: true, sword: 4, armor: 2, hearts: 16, gems: 999, bombs: 16, arrows: 30, potions: 2, shards: 8, items: debugItems().map(i => i[0]), god: true }); fillDebugUI(); });
   on('dbgNone', () => { G.profile.dbg = Object.assign(defaultDebug(), { on: true }); fillDebugUI(); });
   on('dbgMonk', () => { unlockMonk(); buildClassPicker(); showToast('SECRET CLASS UNLOCKED'); });
   $('dbgOn').onchange = () => { $('dbgBody').classList.toggle('off', !$('dbgOn').checked); };

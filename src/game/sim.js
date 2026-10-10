@@ -101,9 +101,22 @@ class Sim {
         p.inv = 0; this.hurtPlayer(p, 2, null); this.teleport(p, p.lvl, x, y, p.a); this.sfx('hurt', p.lvl); break;
       }
       case 'debug': // dev names only; turning it off also drops god mode (and with it the Warp Stone)
-        if (!isDevName(p.name)) break; p.dbg = !!a.on; p.god = !!(a.on && a.god); if (!p.dbg && p.sel === 'devwarp') p.sel = null; this.hint(p, 'DEBUG ' + (p.dbg ? 'ON' : 'OFF')); break;
+        if (!isDevName(p.name)) break; p.dbg = !!a.on; p.god = !!(a.on && a.god); if (!p.dbg && p.sel === 'devwarp') p.sel = null;
+        if (p.dbg && a.loadout) this.grantLoadout(p, a.loadout); // switching debug on mid-game hands over the debug loadout
+        this.hint(p, 'DEBUG ' + (p.dbg ? 'ON' : 'OFF') + (p.god ? ' + GOD MODE' : '')); break;
+      case 'god': if (p.dbg) { p.god = !!a.on; p.hp = p.maxHp; p.chill = 0; this.hint(p, 'GOD MODE ' + (p.god ? 'ON' : 'OFF')); } break;
       case 'warp': if (p.dbg) { const T = this.W.levels[a.to]; if (T) this.teleport(p, T.id, T.spawn.x, T.spawn.y, T.spawn.a); } break;
     }
+  }
+  // debug loadout added on top of what the hero already has (never takes anything away). Dev names only (see 'debug').
+  grantLoadout(p, d) {
+    const n = (v, hi) => clamp(v | 0, 0, hi);
+    p.sword = Math.max(p.sword, n(d.sword, 4)); p.armor = Math.max(p.armor, n(d.armor, 2));
+    const mh = clamp(d.hearts | 0, 3, 16) * 4; if (mh > p.maxHp) p.maxHp = mh; p.hp = p.maxHp;
+    p.gems = Math.max(p.gems, n(d.gems, 999)); p.arrows = Math.max(p.arrows, n(d.arrows, 30)); p.potions = Math.max(p.potions, n(d.potions, 2)); if (p.potions) p.items.potion = true;
+    for (const id of d.items || []) { const it = itemDef(id); if (!it || !it.debug) continue; if (it.debugGrant) it.debugGrant(p, this); else p.items[id] = true; }
+    if (d.bombs) { p.items.bombs = true; p.bombs = Math.max(p.bombs, Math.min(p.maxBombs, n(d.bombs, 16))); }
+    for (let i = 1; i <= n(d.shards, 8); i++) { if (!this.team.shards.includes(i)) this.team.shards.push(i); if (!this.team.done.includes(i)) this.team.done.push(i); }
   }
   // ---- teleport ----
   teleport(p, lvl, x, y, a) {
@@ -474,10 +487,20 @@ class Sim {
     d.use(this, p);
   }
   updateProj(e, dt) {
-    const L = this.W.levels[e.lvl];
-    const nx = e.x + e.vx * dt, ny = e.y + e.vy * dt; e.life -= dt;
+    const L = this.W.levels[e.lvl]; const def = Content.projectiles[e.type];
+    let nx = e.x + e.vx * dt, ny = e.y + e.vy * dt; e.life -= dt;
+    // sword beams and arrows glance off a door frame instead of breaking on it: if only one axis is blocked and the
+    // shot is mostly travelling along the other, it straightens out and carries on through the doorway
+    if (def.player && !def.fire) {
+      const blocked = (x, y) => { const tt = TINFO[L.get(Math.floor(x), Math.floor(y))]; return tt.solid && !tt.low; };
+      if (blocked(nx, ny)) {
+        const sp = Math.hypot(e.vx, e.vy) || 1;
+        if (!blocked(nx, e.y) && Math.abs(e.vx) > sp * 0.7) { e.vx = Math.sign(e.vx) * sp; e.vy = 0; }
+        else if (!blocked(e.x, ny) && Math.abs(e.vy) > sp * 0.7) { e.vy = Math.sign(e.vy) * sp; e.vx = 0; }
+        nx = e.x + e.vx * dt; ny = e.y + e.vy * dt;
+      }
+    }
     const t = L.get(Math.floor(nx), Math.floor(ny)); const ti = TINFO[t]; const pr = L.props[L.idx(Math.floor(nx), Math.floor(ny))];
-    const def = Content.projectiles[e.type];
     if (def.fire) { // candle flame: burn bushes
       this.burnAt(L, nx, ny);
     }

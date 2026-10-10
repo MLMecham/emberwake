@@ -151,7 +151,7 @@ summary:hover { color:var(--gold); }
     <div class="status" id="pInfo"></div>
     <button id="pResume" class="primary">RESUME</button>
     <button id="pDbgToggle" style="display:none">DEBUG: OFF</button>
-    <div id="pDebug" style="display:none"><label>DEBUG WARP</label><div class="warps" id="pWarps"></div></div>
+    <div id="pDebug" style="display:none"><button id="pGodToggle">GOD MODE: OFF</button><label>DEBUG WARP</label><div class="warps" id="pWarps"></div></div>
     <button id="pInvite">INVITE PLAYERS (CO-OP)</button>
     <button id="pSave">SAVE</button>
     <label>LOOK SENSITIVITY</label><input id="sens" type="range" min="0.3" max="2.5" step="0.1" value="1">
@@ -16405,9 +16405,22 @@ class Sim {
         p.inv = 0; this.hurtPlayer(p, 2, null); this.teleport(p, p.lvl, x, y, p.a); this.sfx('hurt', p.lvl); break;
       }
       case 'debug': // dev names only; turning it off also drops god mode (and with it the Warp Stone)
-        if (!isDevName(p.name)) break; p.dbg = !!a.on; p.god = !!(a.on && a.god); if (!p.dbg && p.sel === 'devwarp') p.sel = null; this.hint(p, 'DEBUG ' + (p.dbg ? 'ON' : 'OFF')); break;
+        if (!isDevName(p.name)) break; p.dbg = !!a.on; p.god = !!(a.on && a.god); if (!p.dbg && p.sel === 'devwarp') p.sel = null;
+        if (p.dbg && a.loadout) this.grantLoadout(p, a.loadout); // switching debug on mid-game hands over the debug loadout
+        this.hint(p, 'DEBUG ' + (p.dbg ? 'ON' : 'OFF') + (p.god ? ' + GOD MODE' : '')); break;
+      case 'god': if (p.dbg) { p.god = !!a.on; p.hp = p.maxHp; p.chill = 0; this.hint(p, 'GOD MODE ' + (p.god ? 'ON' : 'OFF')); } break;
       case 'warp': if (p.dbg) { const T = this.W.levels[a.to]; if (T) this.teleport(p, T.id, T.spawn.x, T.spawn.y, T.spawn.a); } break;
     }
+  }
+  // debug loadout added on top of what the hero already has (never takes anything away). Dev names only (see 'debug').
+  grantLoadout(p, d) {
+    const n = (v, hi) => clamp(v | 0, 0, hi);
+    p.sword = Math.max(p.sword, n(d.sword, 4)); p.armor = Math.max(p.armor, n(d.armor, 2));
+    const mh = clamp(d.hearts | 0, 3, 16) * 4; if (mh > p.maxHp) p.maxHp = mh; p.hp = p.maxHp;
+    p.gems = Math.max(p.gems, n(d.gems, 999)); p.arrows = Math.max(p.arrows, n(d.arrows, 30)); p.potions = Math.max(p.potions, n(d.potions, 2)); if (p.potions) p.items.potion = true;
+    for (const id of d.items || []) { const it = itemDef(id); if (!it || !it.debug) continue; if (it.debugGrant) it.debugGrant(p, this); else p.items[id] = true; }
+    if (d.bombs) { p.items.bombs = true; p.bombs = Math.max(p.bombs, Math.min(p.maxBombs, n(d.bombs, 16))); }
+    for (let i = 1; i <= n(d.shards, 8); i++) { if (!this.team.shards.includes(i)) this.team.shards.push(i); if (!this.team.done.includes(i)) this.team.done.push(i); }
   }
   // ---- teleport ----
   teleport(p, lvl, x, y, a) {
@@ -16778,10 +16791,20 @@ class Sim {
     d.use(this, p);
   }
   updateProj(e, dt) {
-    const L = this.W.levels[e.lvl];
-    const nx = e.x + e.vx * dt, ny = e.y + e.vy * dt; e.life -= dt;
+    const L = this.W.levels[e.lvl]; const def = Content.projectiles[e.type];
+    let nx = e.x + e.vx * dt, ny = e.y + e.vy * dt; e.life -= dt;
+    // sword beams and arrows glance off a door frame instead of breaking on it: if only one axis is blocked and the
+    // shot is mostly travelling along the other, it straightens out and carries on through the doorway
+    if (def.player && !def.fire) {
+      const blocked = (x, y) => { const tt = TINFO[L.get(Math.floor(x), Math.floor(y))]; return tt.solid && !tt.low; };
+      if (blocked(nx, ny)) {
+        const sp = Math.hypot(e.vx, e.vy) || 1;
+        if (!blocked(nx, e.y) && Math.abs(e.vx) > sp * 0.7) { e.vx = Math.sign(e.vx) * sp; e.vy = 0; }
+        else if (!blocked(e.x, ny) && Math.abs(e.vy) > sp * 0.7) { e.vy = Math.sign(e.vy) * sp; e.vx = 0; }
+        nx = e.x + e.vx * dt; ny = e.y + e.vy * dt;
+      }
+    }
     const t = L.get(Math.floor(nx), Math.floor(ny)); const ti = TINFO[t]; const pr = L.props[L.idx(Math.floor(nx), Math.floor(ny))];
-    const def = Content.projectiles[e.type];
     if (def.fire) { // candle flame: burn bushes
       this.burnAt(L, nx, ny);
     }
@@ -18193,7 +18216,7 @@ function resume() { G.state = 'play'; showScreen(null); try { const r = $('game'
 function updatePauseInfo() {
   const n = G.snap ? G.snap.pl.length : 1; const me = G.snap && G.snap.me;
   const dOn = !!(G.snap && G.snap.me && G.snap.me.dbg); $('pDebug').style.display = dOn ? '' : 'none';
-  const dev = isDevName(G.snap && G.snap.me ? G.snap.me.name : G.profile.name); $('pDbgToggle').style.display = dev ? '' : 'none'; $('pDbgToggle').textContent = 'DEBUG: ' + (dOn ? 'ON' : 'OFF');
+  const dev = isDevName(G.snap && G.snap.me ? G.snap.me.name : G.profile.name); $('pDbgToggle').style.display = dev ? '' : 'none'; $('pDbgToggle').textContent = 'DEBUG: ' + (dOn ? 'ON' : 'OFF'); $('pGodToggle').textContent = 'GOD MODE: ' + (G.snap && G.snap.me && G.snap.me.god ? 'ON' : 'OFF');
   if (dOn && !$('pWarps').childElementCount) { const mk = (label, to) => { const b = document.createElement('button'); b.textContent = label; b.onclick = () => { sendAction({ t: 'warp', to }); resume(); }; $('pWarps').appendChild(b); }; mk('WILDS', 'ow'); for (let d = 1; d <= NDUNGEONS(); d++) if (G.world && G.world.levels['d' + d]) mk(d <= 9 ? 'L' + d : (Content.dungeons[d].mapLabel || 'L' + d), 'd' + d); }
   const kinds = NET.role === 'host' ? Object.values(NET.conns).map(c => c.kind).filter(Boolean) : NET.kind ? [NET.kind] : [];
   $('pInfo').title = kinds.length ? 'Connection: ' + kinds.join(', ') : '';
@@ -18317,11 +18340,13 @@ function bindUI() {
   on('pDbgToggle', () => {
     const now = !(G.snap && G.snap.me && G.snap.me.dbg);
     G.profile.dbg = Object.assign(defaultDebug(), G.profile.dbg || {}, { on: now }); saveProfile();
-    sendAction({ t: 'debug', on: now, god: !!G.profile.dbg.god });
+    sendAction({ t: 'debug', on: now, god: !!G.profile.dbg.god, loadout: now ? G.profile.dbg : null });
     setTimeout(updatePauseInfo, 150); showToast(now ? 'DEBUG ON' : 'DEBUG OFF');
   });
   on('dbgBack', () => { readDebugUI(); showScreen('titleScreen'); refreshTitle(); });
-  on('dbgAll', () => { G.profile.dbg = Object.assign(defaultDebug(), { on: true, sword: 3, armor: 2, hearts: 16, gems: 999, bombs: 16, arrows: 30, potions: 2, shards: 8, items: debugItems().map(i => i[0]) }); fillDebugUI(); });
+  on('pGodToggle', () => { const now = !(G.snap && G.snap.me && G.snap.me.god); G.profile.dbg = Object.assign(defaultDebug(), G.profile.dbg || {}, { god: now }); saveProfile(); sendAction({ t: 'god', on: now }); setTimeout(updatePauseInfo, 150); showToast(now ? 'GOD MODE ON' : 'GOD MODE OFF'); });
+  // EVERYTHING: best sword (the Dawnblade), plate, 16 hearts, every item and relic, all shards, god mode
+  on('dbgAll', () => { G.profile.dbg = Object.assign(defaultDebug(), { on: true, sword: 4, armor: 2, hearts: 16, gems: 999, bombs: 16, arrows: 30, potions: 2, shards: 8, items: debugItems().map(i => i[0]), god: true }); fillDebugUI(); });
   on('dbgNone', () => { G.profile.dbg = Object.assign(defaultDebug(), { on: true }); fillDebugUI(); });
   on('dbgMonk', () => { unlockMonk(); buildClassPicker(); showToast('SECRET CLASS UNLOCKED'); });
   $('dbgOn').onchange = () => { $('dbgBody').classList.toggle('off', !$('dbgOn').checked); };
