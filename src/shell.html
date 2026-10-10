@@ -1,0 +1,182 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#0b0a12">
+<title>Emberwake</title>
+<style>
+:root { --bg:#0b0a12; --ink:#f4ecd8; --gold:#ffcf5a; --ember:#ff7a2a; --dim:#8a8296; --panel:rgba(14,12,24,.94); --line:#ffcf5a; }
+* { box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+html,body { margin:0; height:100%; background:var(--bg); color:var(--ink); overflow:hidden; font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; text-transform:uppercase; letter-spacing:.06em; user-select:none; -webkit-user-select:none; touch-action:none; }
+#game { position:fixed; inset:0; width:100vw; height:100vh; image-rendering:pixelated; image-rendering:crisp-edges; display:block; }
+.screen { position:fixed; inset:0; display:none; align-items:center; justify-content:center; padding:16px; z-index:10; overflow:auto; }
+.screen.on { display:flex; }
+.panel { background:var(--panel); border:3px solid var(--line); box-shadow:0 0 0 3px #000, 0 0 0 6px #7a4a10, 0 12px 40px rgba(0,0,0,.6); padding:18px; max-width:560px; width:100%; max-height:calc(100vh - 32px); overflow:auto; }
+#titleScreen { background:linear-gradient(180deg, rgba(11,10,18,.25), rgba(11,10,18,.75)); }
+#logo { width:min(92%,520px); image-rendering:pixelated; display:block; margin:0 auto 4px; filter:drop-shadow(0 4px 0 #2a0c00); }
+.tag { text-align:center; color:var(--gold); font-size:12px; margin:0 0 14px; opacity:.85; }
+h2 { color:var(--gold); font-size:15px; margin:0 0 12px; text-align:center; }
+p, li { font-size:12px; line-height:1.6; color:var(--ink); }
+.dim { color:var(--dim); }
+button, .btn { font:inherit; text-transform:uppercase; letter-spacing:.06em; background:#241c34; color:var(--ink); border:2px solid #57486e; padding:10px 12px; font-size:13px; cursor:pointer; width:100%; margin:4px 0; box-shadow:0 3px 0 #000; }
+button:hover { border-color:var(--gold); color:var(--gold); }
+button:active { transform:translateY(2px); box-shadow:0 1px 0 #000; }
+button.primary { background:#7a2c0c; border-color:var(--ember); }
+.row { display:flex; gap:8px; } .row > * { flex:1; }
+label { font-size:11px; color:var(--dim); display:block; margin:10px 0 4px; }
+input[type=text], textarea { font:inherit; width:100%; background:#000; color:var(--gold); border:2px solid #57486e; padding:8px; font-size:13px; text-transform:uppercase; }
+textarea { font-size:10px; height:52px; text-transform:none; word-break:break-all; }
+#colors { display:flex; gap:6px; flex-wrap:wrap; }
+.sw { width:32px; height:32px; padding:0; margin:0; border:3px solid #000; box-shadow:0 0 0 2px #57486e; }
+.sw.sel { box-shadow:0 0 0 3px var(--gold); }
+#classes { display:flex; gap:6px; } .cls { margin:0; font-size:11px; } .cls.sel { border-color:var(--gold); color:var(--gold); } .cls.locked { color:#555; border-style:dashed; }
+#preview { width:128px; height:64px; image-rendering:pixelated; display:block; margin:6px auto 0; }
+.qrbox { text-align:center; margin:8px 0; } .qrbox canvas { max-width:220px; image-rendering:pixelated; border:4px solid #fff; }
+.status { color:var(--gold); font-size:12px; min-height:18px; margin:8px 0; text-align:center; }
+video { width:100%; max-height:40vh; background:#000; border:2px solid #57486e; }
+.sep { border-top:2px dashed #3a2f4e; margin:14px 0; }
+#toast { position:fixed; left:50%; top:12px; transform:translateX(-50%); background:#000c; border:2px solid var(--gold); padding:8px 14px; font-size:12px; z-index:50; opacity:0; transition:opacity .3s; pointer-events:none; color:var(--gold); }
+#toast.on { opacity:1; }
+input[type=range] { width:100%; }
+details { margin-top:14px; border:2px dashed #3a2f4e; padding:8px 10px; }
+summary { cursor:pointer; font-size:12px; color:var(--dim); }
+summary:hover { color:var(--gold); }
+.roomcode { font-size:28px; color:var(--gold); text-align:center; margin:12px 0 4px; letter-spacing:.12em; }
+.keys { display:grid; grid-template-columns:auto 1fr; gap:4px 12px; font-size:11px; } .keys b { color:var(--gold); font-weight:normal; }
+/* touch controls */
+#touch { position:fixed; inset:0; z-index:5; display:none; pointer-events:none; }
+#touch.on { display:block; } #touch.hidden { display:none; }
+#tzL, #tzR { position:absolute; top:0; bottom:0; pointer-events:auto; } #tzL { left:0; width:42%; } #tzR { right:0; width:58%; }
+#tbase { position:absolute; width:100px; height:100px; border-radius:50%; border:3px solid #fff5; display:none; pointer-events:none; }
+#tknob { position:absolute; width:40px; height:40px; border-radius:50%; background:#fff6; }
+.tb { position:absolute; pointer-events:auto; width:62px; height:62px; border-radius:50%; border:3px solid #fff8; background:#0006; color:#fff; font-size:16px; display:flex; align-items:center; justify-content:center; margin:0; padding:0; box-shadow:none; }
+.tb.down { background:#fff4; }
+.tb.sm { width:46px; height:46px; font-size:11px; }
+#hudbtns { position:fixed; top:6px; left:50%; transform:translateX(-50%); z-index:6; display:none; }
+#hudbtns.on { display:block; }
+#hudbtns button { width:auto; padding:4px 10px; font-size:11px; opacity:.6; margin:0; }
+</style>
+</head>
+<body>
+<canvas id="game"></canvas>
+
+<div id="hudbtns"><button id="hudPause">MENU (ESC)</button></div>
+
+<div id="titleScreen" class="screen on">
+  <div class="panel">
+    <canvas id="logo"></canvas>
+    <div class="tag">A FIRST-PERSON QUEST FOR THE EMBER SHARDS</div>
+    <div class="row">
+      <div>
+        <label>NAME</label><input id="pname" type="text" maxlength="8">
+        <label>TUNIC COLOR</label><div id="colors"></div>
+      </div>
+      <div><canvas id="preview"></canvas><div class="dim" style="font-size:10px;text-align:center">CLOTH - CHAIN - PLATE</div></div>
+    </div>
+    <label>CLASS</label><div id="classes"></div>
+    <div class="sep"></div>
+    <button id="btnContinue" class="primary">CONTINUE ADVENTURE</button>
+    <button id="btnNew">NEW ADVENTURE</button>
+    <div class="row"><button id="btnRogue">ROGUELIKE RUN</button><button id="btnRogueCont">CONTINUE RUN</button></div>
+    <button id="btnJoin">JOIN A FRIEND'S GAME</button>
+    <button id="btnHelp">HOW TO PLAY</button>
+  </div>
+</div>
+
+<div id="joinScreen" class="screen">
+  <div class="panel">
+    <h2>JOIN A FRIEND</h2>
+    <label for="joinWord">ROOM CODE OR INVITE LINK</label>
+    <div class="row"><input id="joinWord" type="text" placeholder="GLD-EMBERFOX"><button id="joinOnlineBtn" class="primary" style="flex:0 0 120px">JOIN</button></div>
+    <div class="status" id="joinStatus"></div>
+    <details id="joinOffline">
+      <summary>NO INTERNET? JOIN WITH A WEBCAM</summary>
+      <p class="dim">GET ON THE SAME HOTSPOT OR WI-FI AS THE HOST. THEY OPEN INVITE &gt; NO INTERNET.</p>
+      <button id="joinScanBtn">SCAN HOST'S QR WITH WEBCAM</button>
+      <div id="joinScanWrap" style="display:none"><video id="joinVideo" muted playsinline></video></div>
+      <label for="joinPaste">OR PASTE THE HOST'S INVITE CODE</label>
+      <textarea id="joinPaste"></textarea><button id="joinPasteBtn">USE CODE</button>
+      <div id="joinReply" style="display:none">
+        <div class="sep"></div>
+        <h2>SHOW THIS TO THE HOST'S WEBCAM</h2>
+        <div class="qrbox"><canvas id="joinQR"></canvas></div>
+        <textarea id="joinReplyCode" readonly></textarea><button id="joinCopy">COPY REPLY CODE</button>
+      </div>
+    </details>
+    <div class="sep"></div>
+    <button id="joinBack">BACK</button>
+  </div>
+</div>
+
+<div id="pauseScreen" class="screen">
+  <div class="panel">
+    <h2>PAUSED</h2>
+    <div class="status" id="pInfo"></div>
+    <button id="pResume" class="primary">RESUME</button>
+    <button id="pInvite">INVITE PLAYERS (CO-OP)</button>
+    <button id="pSave">SAVE</button>
+    <label>LOOK SENSITIVITY</label><input id="sens" type="range" min="0.3" max="2.5" step="0.1" value="1">
+    <label>VOLUME</label><input id="vol" type="range" min="0" max="1" step="0.05" value="0.5">
+    <label><input id="invy" type="checkbox"> INVERT LOOK Y</label>
+    <button id="pHelp">HOW TO PLAY</button>
+    <button id="pQuit">SAVE &amp; QUIT TO TITLE</button>
+  </div>
+</div>
+
+<div id="inviteScreen" class="screen">
+  <div class="panel">
+    <h2>INVITE FRIENDS</h2>
+    <label for="onlineWord">ROOM NAME</label>
+    <div class="row"><input id="onlineWord" type="text" maxlength="16"><button id="invOnlineBtn" class="primary" style="flex:0 0 150px">OPEN ROOM</button></div>
+    <div id="roomBox" style="display:none">
+      <div class="roomcode" id="roomCode"></div>
+      <div id="roomLinkRow">
+        <label for="roomLink">INVITE LINK - SEND IT, THEY CLICK IT</label>
+        <div class="row"><input id="roomLink" type="text" readonly><button id="roomCopy" style="flex:0 0 120px">COPY LINK</button></div>
+      </div>
+      <p class="dim" id="roomNote"></p>
+    </div>
+    <div class="status" id="invStatus"></div>
+    <details id="invOffline">
+      <summary>NO INTERNET? INVITE WITH A WEBCAM</summary>
+      <p class="dim">EVERYONE JOINS THE SAME HOTSPOT OR WI-FI (NO INTERNET NEEDED). ONE INVITE PER FRIEND.</p>
+      <button id="invNew">MAKE INVITE QR</button>
+      <div class="status dim" id="invStep"></div>
+      <div class="qrbox"><canvas id="invQR" width="1" height="1"></canvas></div>
+      <textarea id="invCode" readonly></textarea><button id="invCopy">COPY INVITE CODE</button>
+      <button id="invScan">SCAN THEIR REPLY WITH WEBCAM</button>
+      <div id="invScanWrap" style="display:none"><video id="invVideo" muted playsinline></video></div>
+      <label for="invPaste">OR PASTE THEIR REPLY CODE</label>
+      <textarea id="invPaste"></textarea><button id="invPasteBtn">USE REPLY</button>
+    </details>
+    <div class="sep"></div>
+    <button id="invBack">BACK</button>
+  </div>
+</div>
+
+<div id="helpScreen" class="screen">
+  <div class="panel">
+    <h2>HOW TO PLAY</h2>
+    <div class="keys">
+      <b>WASD</b><span>MOVE / STRAFE</span><b>MOUSE / ARROWS</b><span>LOOK (CLICK TO LOCK MOUSE)</span>
+      <b>CLICK / SPACE</b><span>ATTACK (A)</span><b>RIGHT-CLICK / E</b><span>USE ITEM (B)</span>
+      <b>Q / R / WHEEL / 1-7</b><span>SWITCH ITEM</span><b>F (HOLD)</b><span>READ SIGNS / REVIVE A FALLEN FRIEND</span>
+      <b>M / TAB</b><span>MAP</span><b>SHIFT</b><span>DASH (SOME HEROES...)</span><b>ESC</b><span>MENU</span>
+      <b>GAMEPAD</b><span>STICKS MOVE/LOOK, A/RT ATTACK, X/LT ITEM, Y/RB SWITCH, B USE, START MENU, SELECT MAP</span>
+    </div>
+    <p>FIND THE OLD MAN'S CAVE FOR A SWORD. NINE GATES HIDE NINE DUNGEONS - EIGHT HOLD EMBER SHARDS, THE NINTH HOLDS THE HOLLOW KING. AT FULL HEALTH YOUR SWORD FIRES A BEAM. YOUR SHIELD BLOCKS ROCKS AND SPEARS FROM THE FRONT. BOMB CRACKED WALLS. BURN SUSPICIOUS BUSHES. BUY A CHAIN TUNIC AND WATCH IT TURN TO STEEL.</p>
+    <p class="dim">CO-OP: DUNGEON ITEMS, SWORDS AND HEART CONTAINERS ARE SHARED BY THE WHOLE PARTY. GEMS ARE YOURS.</p>
+    <button id="helpBack">BACK</button>
+  </div>
+</div>
+
+<div id="winScreen" class="screen"><div class="panel" style="text-align:center"><h2>THE EMBERS RETURN</h2><p>THE HOLLOW KING IS UNMADE. THE WILDS BREATHE AGAIN.</p><p id="winStats" class="dim"></p><button id="winBack" class="primary">TITLE</button></div></div>
+<div id="overScreen" class="screen"><div class="panel" style="text-align:center"><h2>RUN OVER</h2><p>THE LAND SHIFTS. A NEW ONE WAITS.</p><button id="overBack" class="primary">TITLE</button></div></div>
+<div id="toast"></div>
+
+<script>/*LIBS*/</script>
+<script>/*GAME*/</script>
+</body>
+</html>
