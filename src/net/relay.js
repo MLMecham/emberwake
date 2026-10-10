@@ -10,10 +10,13 @@ const RELAY = {
   meteredApp: '',   // e.g. 'emberwake'  (from https://emberwake.metered.live)
   meteredKey: '',   // your TURN credentials API key
 };
-// Always on: two public address-discovery (STUN) servers. They're enough when at least one side's network allows
-// direct connections. (PeerJS's free public relay used to be listed here too, but it's broken: browsers reported
-// "ICE failed, your TURN server appears to be broken". Without your own relay, blocked networks can't connect.)
-const STUN_ICE = [{ urls: ['stun:stun.l.google.com:19302', 'stun:stun.cloudflare.com:3478'] }];
+// Always on: one public address-discovery (STUN) server, plus Metered's old public "Open Relay" with its shared login
+// (the same one Dot Slayer uses). It may or may not still work; if it's down it's harmless and direct connections still do.
+// (PeerJS's free relay used to be here too, but browsers reported it broken, so it's gone.)
+const STUN_ICE = [
+  { urls: 'stun:stun.l.google.com:19302' },
+  { urls: ['turn:openrelay.metered.ca:80', 'turn:openrelay.metered.ca:443', 'turn:openrelay.metered.ca:443?transport=tcp'], username: 'openrelayproject', credential: 'openrelayproject' },
+];
 // Browsers slow down (and Firefox warns) with five or more server addresses, so we keep at most four:
 // one STUN plus the three most useful relay routes (UDP, TCP on 443, and TLS on 443, which gets through strict firewalls).
 function pickRelayRoutes(servers) {
