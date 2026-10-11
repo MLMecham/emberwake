@@ -51,9 +51,12 @@ function clientOnMsg(m) {
   if (m.t === 's') {
     if (!G.world) return;
     if (m.mods) applyMods(m.mods);
+    if (m.me) syncRigs(G.world.levels[m.me.lvl], m.rg || {});
     G.snap = m; if (m.ev) for (const e of m.ev) handleEvent(e);
   }
 }
+// tide rooms: the host sends each room's water code, and we swap the tiles ourselves (game/world.js applyRig)
+function syncRigs(L, rg) { if (!L || !L.rigs) return; for (const rid in L.rigs) { const want = rg[rid] || 0; if (((L.rigCode && L.rigCode[rid]) || 0) !== want) applyRig(L, rid, want); } }
 function applyMods(mods) {
   for (const lvl in mods) { const L = G.world.levels[lvl]; if (!L) continue; L.sealRoom = {}; for (const i in mods[lvl]) { const [t, pr, seal] = mods[lvl][i]; L.tiles[i] = t; L.props[i] = pr; if (seal != null) L.sealRoom[i] = seal; } }
 }
@@ -115,6 +118,7 @@ function updateLocal(dt, inp) {
   const monk = me.cls === 'monk'; let spd = monk ? 4.0 : 3.6;
   if (Lc.charge > 0.3) spd *= 0.5;
   if (me.chill) spd *= 0.55; // frozen by ice breath
+  if (TINFO[L.get(Math.floor(Lc.x), Math.floor(Lc.y))].shallow) spd *= 0.75; // wading
   if (Lc.dashCd > 0) Lc.dashCd -= dt;
   if (inp.dash && monk && Lc.dashCd <= 0) { Lc.dashT = 0.16; Lc.dashCd = 0.7; sfx('dash'); Lc.dashDir = Math.atan2(inp.str, inp.fwd || (inp.str ? 0 : 1)); }
   let mvx = (Math.cos(Lc.a) * inp.fwd + Math.cos(Lc.a + Math.PI / 2) * inp.str) * spd, mvy = (Math.sin(Lc.a) * inp.fwd + Math.sin(Lc.a + Math.PI / 2) * inp.str) * spd;
@@ -130,7 +134,9 @@ function updateLocal(dt, inp) {
   Lc.moveK = lerp(Lc.moveK || 0, moving ? 1 : 0, Math.min(1, dt * 8)); if (Lc.blockT > 0) Lc.blockT -= dt;
   Lc.stillT = moving || Lc.swing != null ? 0 : (Lc.stillT || 0) + dt; Lc.readyK = lerp(Lc.readyK || 0, Lc.stillT > 0.3 ? 1 : 0, Math.min(1, dt * (Lc.stillT > 0.3 ? 5 : 10))); // shield comes up after standing still
   const raft = !!me.items.raft; const rad = 0.22; const sop = { raft, mx: Lc.x, my: Lc.y };
-  const solid = (x, y) => { for (const [ox, oy] of [[-rad, -rad], [rad, -rad], [-rad, rad], [rad, rad]]) if (L.solidAt(x + ox, y + oy, sop)) return true; return false; };
+  // tide water that rose under the edge of you doesn't pin you in place: you can step off it (into it, you sink)
+  const wetEdge = new Set(); for (const [ox, oy] of [[-rad, -rad], [rad, -rad], [-rad, rad], [rad, rad]]) { const tx = Math.floor(Lc.x + ox), ty = Math.floor(Lc.y + oy); if (TINFO[L.get(tx, ty)].water && L.solidAt(tx, ty, sop)) wetEdge.add(ty * L.w + tx); }
+  const solid = (x, y) => { for (const [ox, oy] of [[-rad, -rad], [rad, -rad], [-rad, rad], [rad, rad]]) { const tx = Math.floor(x + ox), ty = Math.floor(y + oy); if (wetEdge.has(ty * L.w + tx)) continue; if (L.solidAt(x + ox, y + oy, sop)) return true; } return false; };
   const nx = Lc.x + mvx * dt, ny = Lc.y + mvy * dt; let blockedX = false, blockedY = false;
   if (!solid(nx, Lc.y)) Lc.x = nx; else { blockedX = true; Lc.svx = 0; }
   if (!solid(Lc.x, ny)) Lc.y = ny; else { blockedY = true; Lc.svy = 0; }
@@ -155,7 +161,8 @@ function updateLocal(dt, inp) {
   if (cti.conveyor) { const cx = Lc.x + cti.conveyor[0] * dt, cy = Lc.y + cti.conveyor[1] * dt; if (!solid(cx, Lc.y)) Lc.x = cx; if (!solid(Lc.x, cy)) Lc.y = cy; }
   // pits: fall in once your center is over one, and come back where you last stood safely
   if (cti.pit) { const fx = Lc.x - Math.floor(Lc.x), fy = Lc.y - Math.floor(Lc.y); if (fx > 0.25 && fx < 0.75 && fy > 0.25 && fy < 0.75 && performance.now() - (Lc.fellAt || 0) > 900) { Lc.fellAt = performance.now(); sendAction({ t: 'fall', x: Lc.safeX, y: Lc.safeY }); Lc.flash = 0.4; Lc.flashC = rgb(0, 0, 0); } }
-  else if (!cti.hurt && !cti.glass && !cti.conveyor) { Lc.safeX = Lc.x; Lc.safeY = Lc.y; }
+  else if (cti.water && !cti.ocean && !raft && performance.now() - (Lc.fellAt || 0) > 900) { Lc.fellAt = performance.now(); sendAction({ t: 'fall', x: Lc.safeX, y: Lc.safeY }); Lc.flash = 0.4; Lc.flashC = rgb(40, 90, 200); sfx('splash'); } // the tide came back over you
+  else if (!cti.hurt && !cti.glass && !cti.conveyor && !cti.water && !cti.wet && !cti.shallow) { Lc.safeX = Lc.x; Lc.safeY = Lc.y; }
   // walls you can walk through whisper when you're close
   if (L.kind === 'dungeon' && R.time - (Lc.whisperAt || 0) > 2.5) {
     let near = false; for (let dy = -2; dy <= 2 && !near; dy++) for (let dx = -2; dx <= 2; dx++) if (TINFO[L.get(Math.floor(Lc.x) + dx, Math.floor(Lc.y) + dy)].fake) { near = true; break; }

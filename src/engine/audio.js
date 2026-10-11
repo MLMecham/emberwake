@@ -77,6 +77,12 @@ function sfx(name, vol) {
     case 'hearthgate': seq([262, 330, 392, 523, 659, 784, 1047], 0.12, 'triangle', 0.16 * v); tone(65, 1.6, 'sawtooth', 0.14 * v, 130); break;
     case 'pitfall': tone(900, 0.7, 'sine', 0.13 * v, 70); noise(0.15, 0.1 * v, 500, AU.ctx.currentTime + 0.65); break; // an enemy drops into a pit
     case 'sizzle': noise(0.25, 0.14 * v, 7000); tone(1100, 0.12, 'sawtooth', 0.03 * v, 600); break; // an enemy burning on lava or a vent
+    case 'eyeshut': tone(320, 0.12, 'square', 0.14 * v, 140); noise(0.1, 0.12 * v, 900); break; // an arrow shuts an eye
+    case 'eyecreak': tone(140, 0.7, 'sawtooth', 0.08 * v, 260); noise(0.6, 0.05 * v, 400); break; // the eye is opening again
+    case 'drain': noise(1.2, 0.2 * v, 700); seq([523, 440, 349, 262], 0.12, 'triangle', 0.1 * v); break; // the water runs away
+    case 'tidewarn': seq([330, 0, 330, 0, 330], 0.12, 'square', 0.07 * v); noise(0.8, 0.08 * v, 1200); break; // shallow water about to go deep
+    case 'flood': noise(1.0, 0.24 * v, 1500); tone(110, 0.8, 'sine', 0.12 * v, 70); break; // water rising
+    case 'splash': noise(0.35, 0.25 * v, 2600); tone(500, 0.2, 'sine', 0.08 * v, 150); break;
     case 'whisper': noise(0.9, 0.06 * v, 900); tone(220, 0.8, 'sine', 0.03 * v, 180); tone(330, 0.7, 'sine', 0.02 * v, 300); break;
   }
 }

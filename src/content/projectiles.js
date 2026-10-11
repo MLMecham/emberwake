@@ -16,9 +16,9 @@ defineProjectile({ id: 'firebreath', spr: 'fireball', spd: 6.5, dmg: 2, sc: 0.85
 defineProjectile({ id: 'beam', spr: 'beam', spd: 9, dmg: 1, sc: 0.8, player: true, range: 7, beam: true });
 defineProjectile({ id: 'ki', spr: 'ki', spd: 10, dmg: 1, sc: 0.6, player: true, range: 7, beam: true });
 defineProjectile({ id: 'wave', spr: 'ki', spd: 9, dmg: 4, sc: 1.4, z: 0.1, player: true, pierce: true, pierceShield: true, endFx: 'boom' });
-defineProjectile({ id: 'arrow', spr: 'arrow', spd: 11, dmg: 2, z: 0.1, player: true });
+defineProjectile({ id: 'arrow', spr: 'arrow', spd: 11, dmg: 2, z: 0.1, player: true, eyeHit: true }); // eyeHit: shuts eye targets (gimmicks/eyes.js)
 defineProjectile({ id: 'dawnbeam', spr: 'beam_dawn', spd: 11, dmg: 1, sc: 1.0, player: true, range: 9, beam: true, pierce: true, pierceShield: true });
-defineProjectile({ id: 'dart', spr: 'beam', spd: 12, dmg: 2, sc: 0.5, player: true });
+defineProjectile({ id: 'dart', spr: 'beam', spd: 12, dmg: 2, sc: 0.5, player: true, eyeHit: true });
 defineProjectile({ id: 'candle', spr: 'flame', spd: 4, dmg: 1, sc: 0.8, z: -0.05, player: true, range: 2.2, fire: true });
 defineProjectile({ id: 'palm', spr: 'flame', spd: 6, dmg: 2, sc: 1.1, z: -0.05, player: true, range: 3.5, fire: true, pierce: true });
 defineProjectile({ id: 'rodbolt', spr: 'magic', spd: 8, dmg: 3, player: true });

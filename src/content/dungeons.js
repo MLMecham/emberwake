@@ -38,16 +38,15 @@ defineDungeon(2, {
   lore: ['THE KEEP WAS BUILT TO GUARD AN EMBER SHARD. ITS BUILDERS CRACKED EVERY WALL THEY COULD NOT AFFORD TO FINISH.'],
 });
 defineDungeon(3, {
-  name: 'THE SUNKEN STAIR', item: 'bow', gimmicks: ['drain'],
+  name: 'THE SUNKEN STAIR', item: 'bow', gimmicks: ['drain'], secret: 'EYE', loops: 0.35, bombLoops: 0.3,
   theme: { wall: [44, 104, 110], mortar: [18, 46, 52], hi: [70, 140, 146], floor: [56, 96, 92], edge: [26, 54, 52], fhi: [80, 124, 118], trim: [40, 80, 90] },
-  shape: [ // a spiral
-    '#####...',
-    '#...#...',
-    '#.#.#...',
-    '#.#H#...',
-    '#.###...',
-    '#.......',
-    'S.......',
+  shape: [ // a trident: three prongs off a long hall, and a loop of rooms at the foot
+    '#..#..#.',
+    '#..#..#.',
+    '#######.',
+    '.#.#....',
+    '.####H..',
+    '...S....',
   ],
   lore: ['WATER REMEMBERS. THE STAIR SANK THE NIGHT THE HOLLOW KING FIRST WOKE.'],
 });

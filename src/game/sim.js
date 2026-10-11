@@ -2,7 +2,7 @@
 // Only the host runs this. Clients send their position and actions; the host sends back snapshots.
 'use strict';
 // Enemy, item, projectile and elite definitions live in src/content and are looked up through core/registry.js.
-const SAVE_VERSION = 5;
+const SAVE_VERSION = 6;
 // Bring an old save up to date. v1 -> v2: dungeons were redrawn as shapes, so dungeon tile changes, cleared rooms,
 // keys and maps from v1 no longer fit; overworld progress, items and shards are kept. Tile/prop ids are remapped by name.
 function migrateSave(s) {
@@ -20,13 +20,17 @@ function migrateSave(s) {
     for (const t of ['cleared', 'taken']) for (const k of Object.keys(s.team[t] || {})) if (k.startsWith('ow:') || (k[0] === 'c' && !k.startsWith('c0:'))) delete s.team[t][k];
     for (const c in (s.players || {})) { const pl = s.players[c]; if (pl.lvl === 'ow' || (pl.lvl && pl.lvl[0] === 'c')) pl.respawn = true; }
   }
+  if ((s.v || 1) < 6) { // v6: Tideglass Halls got its glass opening and the Sunken Stair was redrawn, so their progress starts over
+    for (const d of ['d3', 'd6']) { delete s.mods[d]; for (const t of ['cleared', 'taken']) for (const k of Object.keys(s.team[t] || {})) if (k.startsWith(d + ':')) delete s.team[t][k]; for (const t of ['keys', 'maps', 'comps']) if (s.team[t]) delete s.team[t][d]; }
+    for (const c in (s.players || {})) { const pl = s.players[c]; if (pl.lvl === 'd3' || pl.lvl === 'd6') pl.respawn = true; }
+  }
   if (s.tileNames) for (const lvl in s.mods) for (const i in s.mods[lvl]) { const m = s.mods[lvl][i]; const tn = s.tileNames[m[0]]; if (tn && TL[tn] != null) m[0] = TL[tn]; const pn = s.propNames && s.propNames[m[1]]; if (pn) { const pi = PROPS.indexOf(pn); if (pi >= 0) m[1] = pi; } }
   return s;
 }
 const REVIVE_TIME = 1.5, REVIVE_R2 = 2.6 * 2.6; // seconds to help a teammate up, and how close you must stand
 const RESPAWN_WAIT = 30; // seconds a downed hero waits before they may give up and respawn at the start on their own
 const BUY_COOLDOWN = 0.8; // seconds between shop purchases for one player
-const HAZARD_TICK = 0.5, ICE_KB = 1.5; // how often lava/spikes/vents burn a grounded enemy; how much harder hits shove enemies standing on ice
+const HAZARD_TICK = 0.5, ICE_KB = 1.5, SHALLOW_SLOW = 0.75; // how often lava/spikes/vents burn a grounded enemy; how much harder hits shove enemies standing on ice
 const SWORD_DMG = [1, 1, 2, 3, 4];             // damage per sword level (0 = no sword, punches still do 1)
 // Enemy health multiplier by how many heroes are in the room (1, 2, 3, 4+). Adjusts live as people come and go.
 const PARTY_HP = [1, 1, 1.5, 2, 2.5];
@@ -41,7 +45,7 @@ function newPlayer(id, name, color, cls) {
 
 class Sim {
   constructor(world, save) {
-    this.W = world; this.players = {}; this.ents = []; this.mods = {}; this.modVer = 1; this.events = [];
+    this.W = world; this.players = {}; this.ents = []; this.mods = {}; this.modVer = 1; this.events = []; this.rigShots = {}; // rigShots: 'lvl:room' -> when its timed eye was last shot
     this.team = { keys: {}, maps: {}, comps: {}, shards: [], done: [], relics: [], taken: {}, cleared: {}, clearedAt: {} };
     this.groups = {}; this.time = 0; this.levelInit = {}; this.over = 0; this.won = false; this.mode = world.mode;
     if (save) this.loadSave(save);
@@ -78,6 +82,27 @@ class Sim {
     const L = this.W.levels[lvl]; if (tile != null) L.tiles[idx] = tile; if (prop != null) L.props[idx] = prop;
     L.sealRoom = L.sealRoom || {}; if (sealRoom != null) L.sealRoom[idx] = sealRoom; else delete L.sealRoom[idx];
     (this.mods[lvl] = this.mods[lvl] || {})[idx] = sealRoom != null ? [L.tiles[idx], L.props[idx], sealRoom] : [L.tiles[idx], L.props[idx]]; this.modVer++;
+  }
+  // ---- eye targets and tide water (content/gimmicks/eyes.js, game/world.js) ----
+  updateRigs(L) {
+    if (!L.rigs) return;
+    for (const rid in L.rigs) {
+      const k = L.id + ':' + rid; const shot = this.rigShots[k];
+      const code = tideCode(shot != null ? this.time - shot : null); const prev = (L.rigCode && L.rigCode[rid]) || 0;
+      if (code === prev) continue;
+      applyRig(L, rid, code); if (code === 0) delete this.rigShots[k];
+      const r = L.rooms[rid]; this.sfx(['flood', 'drain', 'eyecreak', 'flood', 'tidewarn'][code], L.id, r.rx * DSX + 6.5, r.ry * DSY + 4.5);
+    }
+  }
+  rigCodes(lvl) { const L = this.W.levels[lvl]; if (!L || !L.rigCode) return undefined; const o = {}; let any = false; for (const rid in L.rigCode) if (L.rigCode[rid]) { o[rid] = L.rigCode[rid]; any = true; } return any ? o : undefined; } // for snapshots
+  hitEye(L, idx) {
+    const link = L.eyeLinks && L.eyeLinks[idx]; if (!link) return; const t = L.tiles[idx]; const x = idx % L.w + 0.5, y = Math.floor(idx / L.w) + 0.5;
+    if (link.kind === 'timed') { this.rigShots[L.id + ':' + link.rid] = this.time; this.sfx('eyeshut', L.id, x, y); return; } // shooting it again keeps it shut longer
+    if (link.kind === 'seal' && !TINFO[t].shut) {
+      this.setTile(L.id, idx, TINFO[t].small ? TL.EYE_SMALL_SHUT : TL.EYE_SHUT); this.sfx('eyeshut', L.id, x, y);
+      for (const o of link.opens || []) this.setTile(L.id, o, TL.OPENDOOR);
+      this.sfx('secret', L.id); if (link.text) this.msg(link.text);
+    }
   }
   // ---- input from clients ----
   onPlayerState(id, s) {
@@ -204,6 +229,7 @@ class Sim {
     for (const lvl of active) {
       this.initLevel(lvl);
       const L = this.W.levels[lvl]; for (const g of L.gimmicks || []) { const gm = Content.gimmicks[g]; if (gm && gm.update) gm.update(this, L, dt); }
+      this.updateRigs(L);
     }
     // groups activation
     for (const p of plist) if (p.alive) this.activateGroupFor(p);
@@ -307,7 +333,7 @@ class Sim {
     if (cleared) this.roomRewards(L, room, key);
   }
   roomRewards(L, room, key) {
-    const cx = room.rx * DSX + 6.5, cy = room.ry * DSY + 4.5;
+    const cx = room.rx * DSX + (room.rewardAt ? room.rewardAt[0] : 6.5), cy = room.ry * DSY + (room.rewardAt ? room.rewardAt[1] : 4.5); // rewardAt: hand-built rooms whose middle isn't floor
     const drop = (item, dx) => { const tk = key + ':' + item; if (this.team.taken[tk] || this.ents.find(e => e.tk === tk)) return; this.spawn({ k: 'pick', lvl: L.id, x: cx + (dx || 0), y: cy, item, tk, perm: true, spr: itemSprite(item), sc: 0.55, z: 0.1, team: true }); };
     if (room.key) drop('key', 0);
     if (room.map) drop('map', -1);
@@ -381,6 +407,7 @@ class Sim {
       }
       return false;
     };
+    if (!push && !(def && def.fly) && TINFO[L.get(Math.floor(e.x), Math.floor(e.y))].shallow) { dx *= SHALLOW_SLOW; dy *= SHALLOW_SLOW; } // wading
     let hit = false;
     if (!blocked(e.x + dx, e.y)) e.x += dx; else hit = true;
     if (!blocked(e.x, e.y + dy)) e.y += dy; else hit = true;
@@ -427,15 +454,16 @@ class Sim {
     if (def.fly || def.phase || def.boss || e.dormant) return;
     const L = this.W.levels[e.lvl]; const ti = TINFO[L.get(Math.floor(e.x), Math.floor(e.y))];
     if (ti.pit) { this.enemyFalls(e); return; }
+    if (ti.water && !ti.ocean) { this.enemyFalls(e, true); return; } // tide water came back over it
     const burn = (ti.hurt && !(def.hot && ti.lava)) || (ti.vent && this.ventPhase() === 2 && !def.hot);
     if (!burn) { e.hazT = 0; return; }
     e.hazT = (e.hazT || 0) - dt; if (e.hazT > 0) return; e.hazT = HAZARD_TICK;
     if (ti.lava || ti.vent) this.sfx('sizzle', e.lvl, e.x, e.y);
     this.damageEnemy(e, 1, null, { ignoreIframes: true, pid: e.lastPid });
   }
-  enemyFalls(e) { // gone, with no loot (it fell with it)
+  enemyFalls(e, water) { // gone, with no loot (it fell or sank with it)
     e.dead = true; const p = e.lastPid && this.players[e.lastPid]; if (p) p.kills++;
-    this.spawn({ k: 'fx', lvl: e.lvl, x: e.x, y: e.y, spr: 'puff', life: 0.35, sc: 0.6, z: -0.3 }); this.sfx('pitfall', e.lvl, e.x, e.y);
+    this.spawn({ k: 'fx', lvl: e.lvl, x: e.x, y: e.y, spr: 'puff', life: 0.35, sc: 0.6, z: -0.3 }); this.sfx(water ? 'splash' : 'pitfall', e.lvl, e.x, e.y);
   }
   // Knockback speed for a hit. Grounded enemies on ice slide much further.
   knockFor(e, def, speed) { const L = this.W.levels[e.lvl]; return !def.fly && TINFO[L.get(Math.floor(e.x), Math.floor(e.y))].slippery ? [speed * ICE_KB, 0.3] : [speed, null]; }
@@ -492,7 +520,9 @@ class Sim {
       drop.gems = (n) => { for (let i = 0; i < n; i++) { const a = i / n * TAU; drop('gem5', Math.cos(a) * 0.5, Math.sin(a) * 0.5); } };
       elite.onDeath(this, e, drop); return;
     }
-    const item = rollDrop(def.drops, this);
+    let item = rollDrop(def.drops, this);
+    // in a dungeon with eye targets, foes drop arrows for whoever has the bow (hearts stay as likely as ever)
+    const L = this.W.levels[e.lvl]; if (L.eyeLinks && item !== 'heart' && item !== 'fairy' && Math.random() < 0.35 && Object.values(this.players).some(o => o.lvl === e.lvl && o.items.bow)) item = 'arrow';
     if (item) this.dropItem(item, e.lvl, e.x, e.y, { g: e.g });
   }
   win() {
@@ -550,6 +580,7 @@ class Sim {
       this.burnAt(L, nx, ny);
     }
     if (e.life <= 0 || (ti.solid && !ti.low) || (pr && PROP_INFO[pr] && PROP_INFO[pr].solid && pr !== PR.PEDESTAL)) {
+      if (ti.eye && def.eyeHit && e.life > 0) this.hitEye(L, L.idx(Math.floor(nx), Math.floor(ny)));
       if (def.fire || e.fireTrail) { this.spawn({ k: 'fire', lvl: e.lvl, x: e.x, y: e.y, life: 1.2, spr: 'flame', sc: 0.8, z: -0.05, pid: e.pid }); }
       if (def.endFx) this.spawn({ k: 'fx', lvl: e.lvl, x: e.x, y: e.y, spr: def.endFx, life: 0.25, sc: 0.8 });
       e.dead = true; return;
@@ -664,7 +695,7 @@ class Sim {
     const en = []; for (const e of this.ents) if (e.lvl === p.lvl) en.push(this.entView(e));
     const pl = []; for (const o of Object.values(this.players)) pl.push([o.id, o.lvl, Math.round(o.x * 100) / 100, Math.round(o.y * 100) / 100, Math.round(o.a * 100) / 100, o.color, o.armor, o.cls, o.alive ? 1 : 0, o.atk, o.name, Math.round(o.revive / REVIVE_TIME * 100) / 100, o.hp, o.maxHp, o.reviver || 0]);
     const me = {}; for (const k of ['lvl', 'hp', 'maxHp', 'gems', 'bombs', 'maxBombs', 'arrows', 'sword', 'armor', 'items', 'potions', 'alive', 'cls', 'sel', 'color', 'name', 'dbg', 'god']) me[k] = p[k]; me.chill = p.chill > 0 ? 1 : 0; me.respawnIn = p.alive ? 0 : Math.max(0, Math.ceil(RESPAWN_WAIT - (this.time - (p.downAt || 0))));
-    return { t: 's', paused: !!this.paused, pausedBy: this.pausedBy, me, pl, en, team: { keys: this.team.keys, maps: this.team.maps, comps: this.team.comps, shards: this.team.shards, done: this.team.done, relics: this.team.relics }, vp: this.ventPhase(), mv: this.modVer, over: this.over > 0 };
+    return { t: 's', paused: !!this.paused, pausedBy: this.pausedBy, me, pl, en, team: { keys: this.team.keys, maps: this.team.maps, comps: this.team.comps, shards: this.team.shards, done: this.team.done, relics: this.team.relics }, vp: this.ventPhase(), rg: this.rigCodes(p.lvl), mv: this.modVer, over: this.over > 0 };
   }
   // ---- save ----
   makeSave() {

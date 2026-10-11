@@ -237,6 +237,48 @@ attempt('shops sell slowly and only what you can carry', () => {
   p.gems = 300; p.hp = p.maxHp; sim.time += 2; sim.pickup(p, { k: 'shop', lvl: p.lvl, x: p.x, y: p.y, item: 'heart', price: 10 });
   __ok(p.gems === 300, 'no heart sales at full health');
 });
+attempt('sunken stair: bow first, then everything', () => {
+  const kinds = {}; let n = 0;
+  for (let i = 0; i < 40; i++) for (const mode of ['adv', 'rogue']) {
+    const W = genWorld(1000 + i * 7919, mode); const L = W.levels.d3; const all = Object.values(L.rooms);
+    const bowRoom = all.find(r => r.item === 'bow'); __ok(bowRoom, 'd3 needs a bow room');
+    __ok(dungeonSolve(L, false).has(bowRoom.id), 'bow must be reachable without the bow (seed ' + (1000 + i * 7919) + ' ' + mode + ')');
+    __ok(dungeonSolve(L, true).size === all.length, 'with the bow every room must be reachable (seed ' + (1000 + i * 7919) + ' ' + mode + ')');
+    __ok(all.some(r => r.drain === 'spiral'), 'd3 should have its spiral room');
+    __ok(Object.values(L.eyeLinks || {}).some(l => l.kind === 'seal') || !all.some(r => r.hidden), 'hidden room should be behind a small eye');
+    for (const r of all) if (r.drain) kinds[r.drain] = (kinds[r.drain] || 0) + 1; n++;
+    for (const rid in L.rigs) for (const i2 of L.rigs[rid].cells) __ok(L.tiles[i2] === TL.WATER, 'tide cells start deep');
+  }
+  __ok(kinds.channel > n * 0.5 && kinds.moat > 0 && kinds.pool > 0, 'room kinds look off: ' + JSON.stringify(kinds));
+});
+attempt('eyes and tides', () => {
+  const sim = freshSim(); const p = sim.players.p1; const q = sim.players.p2; const L = sim.W.levels.d3;
+  const rid = Object.keys(L.rigs).find(k => L.rooms[k].drain === 'moat' || L.rooms[k].drain === 'channel'); const rig = L.rigs[rid]; const room = L.rooms[rid];
+  for (const pl of [p, q]) sim.teleport(pl, 'd3', room.rx * DSX + 6.5, room.ry * DSY + 4.5, 0);
+  // an arrow flying into the eye shuts it; a sword beam doesn't
+  const eye = rig.eyes[0]; const ex = eye % L.w + 0.5, ey = Math.floor(eye / L.w) + 0.5;
+  // find an open approach to the eye
+  const dirs = [[1, 0], [-1, 0], [0, 1], [0, -1]]; const [ax, ay] = dirs.find(([dx, dy]) => !L.solidAt(ex + dx, ey + dy) || TINFO[L.get(Math.floor(ex + dx), Math.floor(ey + dy))].low);
+  const shootFrom = (type) => { const pr = sim.fireProj(type, 'd3', ex + ax * 0.9, ey + ay * 0.9, Math.atan2(-ay, -ax), 'p', 'p1', {}); for (let i = 0; i < 30 && !pr.dead; i++) sim.updateProj(pr, 1 / 60); };
+  shootFrom('beam'); sim.tick(1 / 60); __ok(L.tiles[rig.cells[0]] === TL.WATER, 'sword beams must not shut eyes');
+  shootFrom('arrow'); sim.tick(1 / 60);
+  __ok(L.tiles[eye] === TL.EYE_SHUT && rig.cells.every(i => L.tiles[i] === TL.WET), 'arrow should drain the room');
+  __ok(sim.snapshotFor('p1').rg[rid] === 1, 'snapshot should carry the tide');
+  // a skeleton wading back in the water when it returns sinks
+  const c = rig.cells[3]; const sk = sim.spawnEnemy('skeleton', 'd3', c % L.w + 0.5, Math.floor(c / L.w) + 0.5, { spawnFx: 0 }); sk.spawnFx = 0; sk.stun = 99;
+  const bat = sim.spawnEnemy('bat', 'd3', c % L.w + 0.5, Math.floor(c / L.w) + 0.5, { spawnFx: 0 }); bat.spawnFx = 0; bat.stun = 99;
+  const at = (t) => { while (sim.time < t0 + t) sim.tick(1 / 20); }; const t0 = sim.time;
+  at(TIDE.DRY - 1); __ok(L.tiles[eye] === TL.EYE && L.tiles[rig.cells[0]] === TL.WET, 'eye should creak open before the water comes back');
+  at(TIDE.DRY + 1); __ok(L.tiles[rig.cells[0]] === TL.SHALLOW, 'then shallow');
+  __ok(!sk.dead, 'shallow water is safe');
+  at(TIDE.DRY + TIDE.SHALLOW + 0.5); __ok(L.tiles[rig.cells[0]] === TL.WATER && !sim.rigShots['d3:' + rid], 'then deep again');
+  __ok(sk.dead && !bat.dead, 'deep water sinks walkers, not bats');
+  // the client side: a fresh copy of the world follows the snapshot codes
+  const W2 = genWorld(sim.W.seed, sim.W.mode); const L2 = W2.levels.d3; applyRig(L2, rid, 3); __ok(L2.tiles[rig.cells[0]] === TL.SHALLOW && L2.tiles[eye] === TL.EYE, 'applyRig should set shallow');
+  // sealed small eye opens the hidden passage
+  const seal = Object.keys(L.eyeLinks).find(k => L.eyeLinks[k].kind === 'seal');
+  if (seal) { const door = L.eyeLinks[seal].opens[0]; __ok(L.tiles[door] === TL.BRICK, 'hidden doorway starts as plain wall'); sim.hitEye(L, +seal); __ok(L.tiles[door] === TL.OPENDOOR && L.tiles[seal] === TL.EYE_SMALL_SHUT, 'small eye should open the hidden way'); }
+});
 attempt('tideglass opening', () => {
   for (const [seed, mode] of [[7319, 'adv'], [1234, 'rogue'], [99, 'rogue'], [4242, 'adv']]) {
     const W = genWorld(seed, mode); const D = W.levels.d6; const st = D.startRoom; const r2 = st.children[0]; const r3 = r2.children[0];

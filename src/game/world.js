@@ -40,6 +40,39 @@ const CAVE_MIX = ['shop1', 'shop2', 'armor', 'potion', 'sword1', 'sword2', 'hear
 // Caves that are hidden behind a bombable wall or a burnable bush.
 const SECRET_CAVES = ['heart', 'gift', 'dojo', 'sword2'];
 
+// ---- tide rooms (content/gimmicks/eyes.js) ----
+// L.rigs[roomId] = { cells: [tile idx of tide water], eyes: [tile idx of timed eyes] }; L.eyeLinks[eye idx] says what an eye does.
+// Shooting a timed eye starts the clock; the host sends each room's code and every machine swaps the tiles itself
+// (tide tiles are never saved or sent as tile changes).
+const TIDE = { DRY: 9, SHALLOW: 4, WARN: 2 }; // seconds drained, seconds shallow; the last WARN seconds of each are the warning
+// 0 deep (eye open), 1 drained (eye shut), 2 drained but the eye is creaking open, 3 shallow, 4 shallow and rising
+function tideCode(t) { if (t == null || t < 0) return 0; if (t < TIDE.DRY - TIDE.WARN) return 1; if (t < TIDE.DRY) return 2; if (t < TIDE.DRY + TIDE.SHALLOW - TIDE.WARN) return 3; if (t < TIDE.DRY + TIDE.SHALLOW) return 4; return 0; }
+function applyRig(L, rid, code) {
+  const rig = L.rigs && L.rigs[rid]; if (!rig) return; L.rigCode = L.rigCode || {}; L.rigCode[rid] = code;
+  const water = code === 0 ? TL.WATER : code <= 2 ? TL.WET : TL.SHALLOW;
+  for (const i of rig.cells) L.tiles[i] = water;
+  for (const i of rig.eyes) L.tiles[i] = code === 1 ? TL.EYE_SHUT : TL.EYE;
+}
+// Which rooms can a party reach, picking up keys and opening locks as it goes? hasBow false treats rooms that need the
+// bow (room.needsBow, from gimmicks/drain.js) as walls: a 'moat' room's prize is out of reach, and a 'channel' room
+// splits into the side by its way in and the far side.
+function dungeonSolve(L, hasBow) {
+  const rooms = L.rooms; const split = (r) => !hasBow && r.needsBow === 'channel';
+  const sideFor = (r, oid) => split(r) ? (r.parent && +oid === r.parent.id ? 'n' : 'f') : '';
+  let keys = 0; const opened = new Set(), got = new Set(), reached = new Set();
+  for (;;) {
+    const seen = new Map(); const st = [[L.startRoom, '']];
+    while (st.length) {
+      const [r, side] = st.pop(); const nk = r.id + side; if (seen.has(nk)) continue; seen.set(nk, [r, side]); reached.add(r.id);
+      const prizeOk = side !== 'n' && !(r.needsBow === 'moat' && !hasBow);
+      if ((r.key || r.looseKey) && prizeOk && !got.has(r.id)) { got.add(r.id); keys++; }
+      for (const oid in r.links) { if (sideFor(r, oid) !== side) continue; const lk = Math.min(r.id, +oid) + '-' + Math.max(r.id, +oid); if (r.links[oid] === TL.LOCKED && !opened.has(lk)) continue; const o = rooms[oid]; st.push([o, sideFor(o, r.id)]); }
+    }
+    let opn = false;
+    if (keys > 0) for (const [r, side] of seen.values()) { for (const oid in r.links) { const lk = Math.min(r.id, +oid) + '-' + Math.max(r.id, +oid); if (sideFor(r, oid) === side && r.links[oid] === TL.LOCKED && !opened.has(lk)) { opened.add(lk); keys--; opn = true; break; } } if (opn) break; }
+    if (!opn) return reached;
+  }
+}
 function genWorld(seed, mode) {
   const W = { seed, mode, levels: {}, caveCount: 0, dungeons: [] };
   const rnd = mulberry32(seed);
@@ -434,11 +467,17 @@ function genDungeon(W, d, rnd) {
   const mc = rnd.shuffle(order.filter(r => r !== start && !r.boss && !r.item && !r.intro));
   if (mc[0]) mc[0].map = true; if (mc[1]) mc[1].compass = true;
   // ---- hidden rooms: joined to one neighbor through a secret wall; each holds a heart piece and a lore tablet ----
-  const secretT = TL[def.secret || 'BRICK_BOMB'] != null ? TL[def.secret || 'BRICK_BOMB'] : TL.BRICK_BOMB;
+  const secretEye = def.secret === 'EYE'; // a plain wall that a small eye elsewhere in the same wall opens (bombs do nothing)
+  const secretT = secretEye ? TL.BRICK : TL[def.secret || 'BRICK_BOMB'] != null ? TL[def.secret || 'BRICK_BOMB'] : TL.BRICK_BOMB;
   const hidden = Object.values(rooms).filter(r => r.hidden);
   hidden.forEach((r, i) => {
     const nb = rnd.shuffle([[1, 0], [-1, 0], [0, 1], [0, -1]]).map(([dx, dy]) => normal(r.rx + dx, r.ry + dy)).filter(Boolean)[0];
     if (!nb) return; r.parent = nb; r.depth = nb.depth + 1; setDoor(nb, r, secretT, false);
+    if (secretEye) { // tucked into the far end of the same wall as the hidden doorway
+      const [dx2, dy2] = doorPos(nb, r); const end = rnd() < 0.5 ? -1 : 1;
+      const ex = nb.ry === r.ry ? dx2 : dx2 + end * 5, ey = nb.ry === r.ry ? dy2 + end * 3 : dy2;
+      L.set(ex, ey, TL.EYE_SMALL); L.eyeLinks = L.eyeLinks || {}; L.eyeLinks[L.idx(ex, ey)] = { kind: 'seal', opens: [L.idx(dx2, dy2)], text: 'A HIDDEN WAY OPENS.' };
+    }
     r.reward = i === 0 ? 'hpiece' : 'gems100';
     const lore = (def.lore || [])[i]; if (lore) { const si = L.idx(r.rx * DSX + 6, r.ry * DSY + 2); L.props[si] = PR.SIGN; L.signText = L.signText || {}; L.signText[si] = lore; }
   });
@@ -446,6 +485,7 @@ function genDungeon(W, d, rnd) {
   const gimmicks = (def.gimmicks || []).map(g => Content.gimmicks[g]).filter(Boolean);
   const gctx = { rnd, d, def };
   for (const g of gimmicks) if (g.doors) g.doors(L, doors, gctx);
+  for (const g of gimmicks) if (g.plan) g.plan(L, Object.assign({ rooms, start, boss, itemRoom, solve: (bow) => dungeonSolve(L, bow) }, gctx));
   // ---- room contents ----
   const pool = enemiesFor('dungeons', d);
   for (const r of order) {
@@ -458,6 +498,7 @@ function genDungeon(W, d, rnd) {
     const lane = (x, y) => x === 6 || y === 4; // keep the cross through each room's doors clear
     const rc = Object.assign({}, gctx, { ix, iy, lane, set: (x, y, t) => L.set(ix + x, iy + y, typeof t === 'string' ? TL[t] : t), prop: (x, y, pr) => { L.props[L.idx(ix + x, iy + y)] = pr; } });
     let decorated = false; for (const g of gimmicks) if (g.room && g.room(L, r, rc)) decorated = true;
+    if (r.custom) { r.enemies = r.custom.enemies.slice(); r.at = r.custom.at; r.shutter = !!r.custom.shutter; continue; } // a hand-built room set its own foes
     if (!decorated) {
       const pat = rnd.int(7);
       const blk = (x, y, t) => { if (lane(x, y)) return; L.set(ix + x, iy + y, t || TL.BRICK); };
@@ -474,7 +515,7 @@ function genDungeon(W, d, rnd) {
     const n = 2 + Math.floor(dd / 2) + rnd.int(3);
     if (rnd() < 0.12 && !r.key && !r.map && !r.compass) continue; // empty room
     for (let i = 0; i < n; i++) r.enemies.push(rnd.pick(pool));
-    r.shutter = rnd() < 0.25 || r.key;
+    r.shutter = (rnd() < 0.25 || r.key) && !r.needsBow; // never seal someone without a bow in with foes across the water
   }
   for (const g of gimmicks) if (g.level) g.level(L, gctx);
   L.gimmicks = def.gimmicks || [];
