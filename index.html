@@ -144,7 +144,7 @@ summary:hover { color:var(--gold); }
     <div class="status" id="pInfo"></div>
     <button id="pResume" class="primary">RESUME</button>
     <button id="pDbgToggle" style="display:none">DEBUG: OFF</button>
-    <div id="pDebug" style="display:none"><button id="pGodToggle">GOD MODE: OFF</button><label>DEBUG WARP</label><div class="warps" id="pWarps"></div></div>
+    <div id="pDebug" style="display:none"><button id="pGodToggle">GOD MODE: OFF</button><div class="row"><button id="pDbgMap">MAP HERE</button><button id="pDbgComp">COMPASS HERE</button></div><label>DEBUG WARP</label><div class="warps" id="pWarps"></div></div>
     <button id="pBag">INVENTORY (I)</button>
     <button id="pInvite">INVITE PLAYERS (CO-OP)</button>
     <button id="pSave">SAVE</button>
@@ -366,24 +366,36 @@ function tunicPal(hex, tier) {
   if (tier === 1) { const m = mix(base, STEEL, 0.45); return { T: m, t: mix(shade(base, 0.55), STEEL_D, 0.5), h: mix(STEEL_H, base, 0.2) }; }
   const m = mix(STEEL, base, 0.22); return { T: m, t: mix(base, [20, 20, 30], 0.35), h: STEEL_H };
 }
+// chainmail rings, tinted toward the tunic color: a bright ring and the dark gaps between rings
+function chainCols(hex) { const base = hexToRgb(hex); return { ring: mix(STEEL_H, base, 0.38), gap: mix(shade(base, 0.4), STEEL_D, 0.45) }; }
+// Tier 1 (chain): the cloth stays the tunic's own color, with a shirt of rings over the chest and upper arms;
+// the skirt below the belt stays cloth with a ring hem. Tier 2 (plate) keeps its steel palette and glints.
+function armorOverlay(s, hex, tier) {
+  if (tier < 1) return s;
+  const cloth = tunicPal(hex, 0); const u = (c) => c32(c) >>> 0; const T = u(cloth.T), t = u(cloth.t), h = u(cloth.h); // >>> 0: sprite pixels are unsigned
+  if (tier === 1) {
+    const ch = chainCols(hex); const ring = u(ch.ring), gap = u(ch.gap); const skin = u(hexToRgb(PAL.s));
+    const isCloth = (v) => v === T || v === t || v === h;
+    for (let y = 7; y <= 11; y++) for (let x = 0; x < s.w; x++) {
+      const i = y * s.w + x; const v = s.px[i];
+      const arm = y === 8 && v === skin && ((x > 0 && isCloth(s.px[i - 1])) || (x < s.w - 1 && isCloth(s.px[i + 1]))); // upper arm beside the body
+      if (!isCloth(v) && !arm) continue;
+      if (y === 11) { if (isCloth(v) && (x & 1)) s.px[i] = gap; continue; } // hem
+      s.px[i] = ((x + (y & 1)) & 1) ? gap : ring;
+    }
+    return s;
+  }
+  const pal = tunicPal(hex, tier); const tc = u(pal.T), hc = u(pal.h);
+  for (let y = 0; y < s.h; y++) for (let x = 0; x < s.w; x++) { const i = y * s.w + x; if (s.px[i] === tc && (x + y * 3) % 7 === 0) s.px[i] = hc; } // plate glints
+  return s;
+}
 const _heroCache = {};
 function heroSprite(cls, hex, tier, dir) { // dir: front/back/side/side_l
   const key = cls + hex + tier + dir;
   if (_heroCache[key]) return _heroCache[key];
   const base = (cls === 'monk' ? 'monk_' : 'hero_') + (dir === 'side_l' ? 'side' : dir);
-  let s = buildSprite(Content.sprites[base].rows, tunicPal(hex, cls === 'monk' ? 0 : tier));
+  const t2 = cls === 'monk' ? 0 : tier; let s = buildSprite(Content.sprites[base].rows, tunicPal(hex, t2 === 1 ? 0 : t2)); s = armorOverlay(s, hex, t2);
   if (dir === 'side_l') { const m = new Uint32Array(s.px.length); for (let y = 0; y < s.h; y++) for (let x = 0; x < s.w; x++) m[y * s.w + x] = s.px[y * s.w + (s.w - 1 - x)]; s = { w: s.w, h: s.h, px: m }; }
-  // plate armor: add specular sparkle dither on tunic pixels
-  if (cls !== 'monk' && tier >= 1) {
-    const pal = tunicPal(hex, tier); const tc = c32(pal.T), hc = c32(pal.h);
-    for (let y = 0; y < s.h; y++) for (let x = 0; x < s.w; x++) {
-      const i = y * s.w + x;
-      if (s.px[i] === tc) {
-        if (tier === 1 && ((x + y) & 1) === 0 && y % 2 === 0) s.px[i] = hc; // chain rings
-        if (tier === 2 && (x + y * 3) % 7 === 0) s.px[i] = hc; // plate glints
-      }
-    }
-  }
   _heroCache[key] = s; return s;
 }
 
@@ -405,9 +417,7 @@ function heroSpriteRun(cls, hex, tier, dir, frame, flip) {
   if (_heroCache[key]) return _heroCache[key];
   const baseDir = dir === 'side_l' ? 'side' : dir;
   const src = runRows(Content.sprites[(cls === 'monk' ? 'monk_' : 'hero_') + baseDir].rows, cls, baseDir === 'side' ? 'side' : 'front', frame);
-  const pal = tunicPal(hex, cls === 'monk' ? 0 : tier);
-  let s = buildSprite(src, pal);
-  if (cls !== 'monk' && tier >= 1) { const tc = c32(pal.T), hc = c32(pal.h); for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) { const i = y * 16 + x; if (s.px[i] === tc && ((tier === 1 && ((x + y) & 1) === 0 && y % 2 === 0) || (tier === 2 && (x + y * 3) % 7 === 0))) s.px[i] = hc; } }
+  const t2 = cls === 'monk' ? 0 : tier; let s = buildSprite(src, tunicPal(hex, t2 === 1 ? 0 : t2)); s = armorOverlay(s, hex, t2);
   if (dir === 'side_l' || flip) s = mirrorSpr(s);
   _heroCache[key] = s; return s;
 }
@@ -4466,6 +4476,7 @@ class Sim {
         if (!isDevName(p.name)) break; p.dbg = !!a.on; p.god = !!(a.on && a.god); if (!p.dbg && p.sel === 'devwarp') p.sel = null;
         if (p.dbg && a.loadout) this.grantLoadout(p, a.loadout); // switching debug on mid-game hands over the debug loadout
         this.hint(p, 'DEBUG ' + (p.dbg ? 'ON' : 'OFF') + (p.god ? ' + GOD MODE' : '')); break;
+      case 'dbgmap': if (p.dbg && this.W.levels[p.lvl].kind === 'dungeon') { const t = a.what === 'comp' ? 'comps' : 'maps'; this.team[t] = this.team[t] || {}; this.team[t][p.lvl] = true; this.hint(p, (a.what === 'comp' ? 'COMPASS' : 'MAP') + ' GIVEN (DEBUG)'); } break; // sanity checks for dungeon maps
       case 'god': if (p.dbg) { p.god = !!a.on; p.hp = p.maxHp; p.chill = 0; this.hint(p, 'GOD MODE ' + (p.god ? 'ON' : 'OFF')); } break;
       case 'warp': if (p.dbg) { const T = this.W.levels[a.to]; if (T) this.teleport(p, T.id, T.spawn.x, T.spawn.y, T.spawn.a); } break;
     }
@@ -5314,7 +5325,8 @@ function drawViewmodel(st) {
   const W = R.W, H = R.H; const me = st.me; if (!me) return;
   const bob = st.bob; const bx = Math.sin(bob) * 4, by = Math.abs(Math.cos(bob)) * 4;
   const col = hexToRgb((PCOLORS.find(c => c.name === me.color) || PCOLORS[0]).c);
-  const tier = me.cls === 'monk' ? 0 : me.armor; const pal = tunicPal(c32ToHex(col), tier);
+  const tier = me.cls === 'monk' ? 0 : me.armor; const pal = tunicPal(c32ToHex(col), tier === 1 ? 0 : tier); // chain is worn over the cloth sleeve (rings drawn below)
+  const chain = tier === 1 ? chainCols(c32ToHex(col)) : null;
   const sleeve = c32(pal.T), sleeveD = c32(pal.t), sleeveH = c32(pal.h); const skin = c32(hexToRgb(PAL.s)), skinD = c32(hexToRgb(PAL.S));
   const drawSleeve = (x, y, w, h) => {
     rect(x, y, w, h, sleeve); rect(x, y, 3, h, sleeveD);
@@ -5414,7 +5426,15 @@ function drawViewmodel(st) {
     brush(0, 1, 1.5, rgb(20, 18, 28), 0);                 // outline
     brush(0, cuffT, 0, sleeve, 0);                          // sleeve
     brush(0, cuffT, 0, sleeveD, -0.62, 0.4);                // shadow on the top edge (the side facing away)
-    if (tier >= 1) brush(0, cuffT, 0, sleeveH, 0.3, 0.22);  // metal sheen on the underside
+    if (tier >= 2) brush(0, cuffT, 0, sleeveH, 0.3, 0.22);  // plate: metal sheen on the underside
+    if (chain) { // chainmail: a sleeve of rings from the shoulder down to the elbow, tinted toward the tunic, with a ragged hem
+      const ELB = 0.42, ring = c32(chain.ring), gap = c32(chain.gap);
+      brush(0, ELB, 0, gap, 0); let row = 0, lastX = null, lastY = null;
+      for (let i = 0; i <= 400; i++) { const t = ELB * i / 400; const [x, y] = bez(t); if (lastX != null && Math.hypot(x - lastX, y - lastY) < 3.5) continue; lastX = x; lastY = y; row++;
+        const [x2, y2] = bez(Math.min(1, t + 0.01)); let nx = -(y2 - y), ny = x2 - x; const l = Math.hypot(nx, ny) || 1; nx /= l; ny /= l; const r = rr(t) - 1.5;
+        for (let o = -r + (row & 1) * 2; o <= r; o += 4) { const cx3 = Math.round(x + nx * o), cy3 = Math.round(y + ny * o); for (const [ax, ay] of [[-1, -1], [0, -1], [1, -1], [-1, 0], [1, 0], [-1, 1], [0, 1], [1, 1]]) px(cx3 + ax, cy3 + ay, ring); } }
+      { const [x, y] = bez(ELB); const [x2, y2] = bez(ELB + 0.01); let nx = -(y2 - y), ny = x2 - x; const l = Math.hypot(nx, ny) || 1; nx /= l; ny /= l; const r = rr(ELB); for (let o = -r; o <= r; o += 1) { const hx2 = Math.round(x + nx * o), hy2 = Math.round(y + ny * o); px(hx2, hy2, gap); if ((Math.round(o) & 1) === 0) px(hx2 + 1, hy2, ring); } }
+    }
     brush(cuffT - 0.04, 1, 0, skin, 0); brush(cuffT, 1, 0, skinL, 0.25, 0.4); // inner wrist
     { const [cx2, cy2] = bez(cuffT - 0.04); const r = rr(cuffT); rect(Math.round(cx2) - 1, Math.round(cy2 - r + 1), 3, Math.round(r * 2 - 1), sleeveD); }
     // hand: the grip bar shows above and below; four fingers wrap around it in front, tips curling back toward the wrist
@@ -5455,7 +5475,7 @@ function drawViewmodel(st) {
     const bez = (t) => { const u = 1 - t; return [u * u * P0x + 2 * u * t * P1x + t * t * P2x, u * u * P0y + 2 * u * t * P1y + t * t * P2y]; };
     const steps = 50, rr = (t) => (aw / 2) * (1.45 - 0.6 * t), cuffT = 0.8;
     const brush = (t0, t1, grow, c, off, scale) => { for (let i = Math.round(t0 * steps); i <= Math.round(t1 * steps); i++) { const t = i / steps; const [bx2, by2] = bez(t); const r = (scale ? rr(t) * scale : rr(t)) + grow; disc(Math.round(bx2 + off * rr(t) * 0.6), Math.round(by2 - off * rr(t) * 0.6), Math.max(1, Math.round(r)), c); } };
-    brush(0, 1, 1.5, OUT, 0); brush(0, cuffT, 0, sleeve, 0); brush(0, cuffT, 0, sleeveD, 0.9, 0.4); if (tier >= 1) brush(0, cuffT, 0, sleeveH, -0.5, 0.22);
+    brush(0, 1, 1.5, OUT, 0); brush(0, cuffT, 0, sleeve, 0); brush(0, cuffT, 0, sleeveD, 0.9, 0.4); if (tier >= 2) brush(0, cuffT, 0, sleeveH, -0.5, 0.22);
     brush(cuffT - 0.04, 1, 0, skin, 0); brush(cuffT, 1, 0, skinL, -0.4, 0.4);
     brush(cuffT - 0.06, cuffT - 0.02, 0, sleeveD, 0); // cuff
     // fist, drawn in grip space (u along the grip toward the blade, v across it): a rounded clump with finger creases
@@ -6202,6 +6222,7 @@ function updateLocal(dt, inp) {
   if (Lc.sel === 'bow') {
     const canLoad = me.items.loaded && me.arrows >= 2;
     if (inp.item) Lc.loadT = 0.001;
+    if (Lc.loadT > 0 && inp.atkP) Lc.loadT = 0; // swinging or punching lets the drawn arrow go slack (no shot); so does switching items
     if (Lc.loadT > 0) {
       if (inp.itemHeld) { const before = Lc.loadT; Lc.loadT += dt; if (canLoad && before < LOAD_TIME && Lc.loadT >= LOAD_TIME) sfx('nock'); Lc.useFlash = 0.3; Lc.useSpr = canLoad && Lc.loadT >= LOAD_TIME ? (me.cls === 'monk' ? 'beam' : 'arrow2') : itemSprite('bow', me.cls); }
       else { sendAction({ t: 'use', item: 'bow', loaded: canLoad && Lc.loadT >= LOAD_TIME, alt: !!inp.alt }); Lc.useFlash = 0.3; Lc.useSpr = itemSprite('bow', me.cls); Lc.loadT = 0; }
@@ -6505,6 +6526,7 @@ function bindUI() {
     setTimeout(updatePauseInfo, 150); showToast(now ? 'DEBUG ON' : 'DEBUG OFF');
   });
   on('dbgBack', () => { readDebugUI(); showScreen('titleScreen'); refreshTitle(); });
+  on('pDbgMap', () => { sendAction({ t: 'dbgmap', what: 'map' }); resume(); }); on('pDbgComp', () => { sendAction({ t: 'dbgmap', what: 'comp' }); resume(); });
   on('pGodToggle', () => { const now = !(G.snap && G.snap.me && G.snap.me.god); G.profile.dbg = Object.assign(defaultDebug(), G.profile.dbg || {}, { god: now }); saveProfile(); sendAction({ t: 'god', on: now }); setTimeout(updatePauseInfo, 150); showToast(now ? 'GOD MODE ON' : 'GOD MODE OFF'); });
   // EVERYTHING: best sword (the Dawnblade), plate, 16 hearts, every item and relic, all shards, god mode
   on('dbgAll', () => { G.profile.dbg = Object.assign(defaultDebug(), { on: true, sword: 4, armor: 2, hearts: 16, gems: 999, bombs: 16, arrows: 30, potions: 2, shards: 8, items: debugItems().map(i => i[0]), god: true }); fillDebugUI(); });

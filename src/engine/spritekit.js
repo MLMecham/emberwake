@@ -74,24 +74,36 @@ function tunicPal(hex, tier) {
   if (tier === 1) { const m = mix(base, STEEL, 0.45); return { T: m, t: mix(shade(base, 0.55), STEEL_D, 0.5), h: mix(STEEL_H, base, 0.2) }; }
   const m = mix(STEEL, base, 0.22); return { T: m, t: mix(base, [20, 20, 30], 0.35), h: STEEL_H };
 }
+// chainmail rings, tinted toward the tunic color: a bright ring and the dark gaps between rings
+function chainCols(hex) { const base = hexToRgb(hex); return { ring: mix(STEEL_H, base, 0.38), gap: mix(shade(base, 0.4), STEEL_D, 0.45) }; }
+// Tier 1 (chain): the cloth stays the tunic's own color, with a shirt of rings over the chest and upper arms;
+// the skirt below the belt stays cloth with a ring hem. Tier 2 (plate) keeps its steel palette and glints.
+function armorOverlay(s, hex, tier) {
+  if (tier < 1) return s;
+  const cloth = tunicPal(hex, 0); const u = (c) => c32(c) >>> 0; const T = u(cloth.T), t = u(cloth.t), h = u(cloth.h); // >>> 0: sprite pixels are unsigned
+  if (tier === 1) {
+    const ch = chainCols(hex); const ring = u(ch.ring), gap = u(ch.gap); const skin = u(hexToRgb(PAL.s));
+    const isCloth = (v) => v === T || v === t || v === h;
+    for (let y = 7; y <= 11; y++) for (let x = 0; x < s.w; x++) {
+      const i = y * s.w + x; const v = s.px[i];
+      const arm = y === 8 && v === skin && ((x > 0 && isCloth(s.px[i - 1])) || (x < s.w - 1 && isCloth(s.px[i + 1]))); // upper arm beside the body
+      if (!isCloth(v) && !arm) continue;
+      if (y === 11) { if (isCloth(v) && (x & 1)) s.px[i] = gap; continue; } // hem
+      s.px[i] = ((x + (y & 1)) & 1) ? gap : ring;
+    }
+    return s;
+  }
+  const pal = tunicPal(hex, tier); const tc = u(pal.T), hc = u(pal.h);
+  for (let y = 0; y < s.h; y++) for (let x = 0; x < s.w; x++) { const i = y * s.w + x; if (s.px[i] === tc && (x + y * 3) % 7 === 0) s.px[i] = hc; } // plate glints
+  return s;
+}
 const _heroCache = {};
 function heroSprite(cls, hex, tier, dir) { // dir: front/back/side/side_l
   const key = cls + hex + tier + dir;
   if (_heroCache[key]) return _heroCache[key];
   const base = (cls === 'monk' ? 'monk_' : 'hero_') + (dir === 'side_l' ? 'side' : dir);
-  let s = buildSprite(Content.sprites[base].rows, tunicPal(hex, cls === 'monk' ? 0 : tier));
+  const t2 = cls === 'monk' ? 0 : tier; let s = buildSprite(Content.sprites[base].rows, tunicPal(hex, t2 === 1 ? 0 : t2)); s = armorOverlay(s, hex, t2);
   if (dir === 'side_l') { const m = new Uint32Array(s.px.length); for (let y = 0; y < s.h; y++) for (let x = 0; x < s.w; x++) m[y * s.w + x] = s.px[y * s.w + (s.w - 1 - x)]; s = { w: s.w, h: s.h, px: m }; }
-  // plate armor: add specular sparkle dither on tunic pixels
-  if (cls !== 'monk' && tier >= 1) {
-    const pal = tunicPal(hex, tier); const tc = c32(pal.T), hc = c32(pal.h);
-    for (let y = 0; y < s.h; y++) for (let x = 0; x < s.w; x++) {
-      const i = y * s.w + x;
-      if (s.px[i] === tc) {
-        if (tier === 1 && ((x + y) & 1) === 0 && y % 2 === 0) s.px[i] = hc; // chain rings
-        if (tier === 2 && (x + y * 3) % 7 === 0) s.px[i] = hc; // plate glints
-      }
-    }
-  }
   _heroCache[key] = s; return s;
 }
 
@@ -113,9 +125,7 @@ function heroSpriteRun(cls, hex, tier, dir, frame, flip) {
   if (_heroCache[key]) return _heroCache[key];
   const baseDir = dir === 'side_l' ? 'side' : dir;
   const src = runRows(Content.sprites[(cls === 'monk' ? 'monk_' : 'hero_') + baseDir].rows, cls, baseDir === 'side' ? 'side' : 'front', frame);
-  const pal = tunicPal(hex, cls === 'monk' ? 0 : tier);
-  let s = buildSprite(src, pal);
-  if (cls !== 'monk' && tier >= 1) { const tc = c32(pal.T), hc = c32(pal.h); for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) { const i = y * 16 + x; if (s.px[i] === tc && ((tier === 1 && ((x + y) & 1) === 0 && y % 2 === 0) || (tier === 2 && (x + y * 3) % 7 === 0))) s.px[i] = hc; } }
+  const t2 = cls === 'monk' ? 0 : tier; let s = buildSprite(src, tunicPal(hex, t2 === 1 ? 0 : t2)); s = armorOverlay(s, hex, t2);
   if (dir === 'side_l' || flip) s = mirrorSpr(s);
   _heroCache[key] = s; return s;
 }

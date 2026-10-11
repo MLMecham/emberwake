@@ -158,6 +158,7 @@ class Sim {
         if (!isDevName(p.name)) break; p.dbg = !!a.on; p.god = !!(a.on && a.god); if (!p.dbg && p.sel === 'devwarp') p.sel = null;
         if (p.dbg && a.loadout) this.grantLoadout(p, a.loadout); // switching debug on mid-game hands over the debug loadout
         this.hint(p, 'DEBUG ' + (p.dbg ? 'ON' : 'OFF') + (p.god ? ' + GOD MODE' : '')); break;
+      case 'dbgmap': if (p.dbg && this.W.levels[p.lvl].kind === 'dungeon') { const t = a.what === 'comp' ? 'comps' : 'maps'; this.team[t] = this.team[t] || {}; this.team[t][p.lvl] = true; this.hint(p, (a.what === 'comp' ? 'COMPASS' : 'MAP') + ' GIVEN (DEBUG)'); } break; // sanity checks for dungeon maps
       case 'god': if (p.dbg) { p.god = !!a.on; p.hp = p.maxHp; p.chill = 0; this.hint(p, 'GOD MODE ' + (p.god ? 'ON' : 'OFF')); } break;
       case 'warp': if (p.dbg) { const T = this.W.levels[a.to]; if (T) this.teleport(p, T.id, T.spawn.x, T.spawn.y, T.spawn.a); } break;
     }
