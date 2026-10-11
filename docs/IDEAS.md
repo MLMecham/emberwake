@@ -2,8 +2,10 @@
 
 Not built yet. Parked here so they don't get lost. Newest at the bottom.
 
-## Next up
-- **Sunken Stair boss fight on four platforms** (drain water with eyes to get more ground). Waiting on Mitch's ideas before building.
+## Dev tools
+- **Enemy spawner (admin/debug).** A debug menu that spawns any enemy (and elite type) next to you, for testing.
+- **Boss warps.** A debug list that drops you straight into any boss room (the Boss Bell only cycles 12, 9, 10, 11).
+- **Test room.** A plain, empty arena level for trying items, enemies and techniques without a dungeon around it.
 
 ## Items to place
 - **Gale Cloak** (fly for 4 s over water, lava, pits and vents; walls still stop you). Built, but not in the world yet. Where should it come from? Maybe a late dungeon or a hard optional grotto.
