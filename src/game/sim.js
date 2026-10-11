@@ -30,6 +30,7 @@ function migrateSave(s) {
 const REVIVE_TIME = 1.5, REVIVE_R2 = 2.6 * 2.6; // seconds to help a teammate up, and how close you must stand
 const RESPAWN_WAIT = 30; // seconds a downed hero waits before they may give up and respawn at the start on their own
 const BUY_COOLDOWN = 0.8; // seconds between shop purchases for one player
+const SHIELD_STUN = 0.9; // seconds a knight reels after a loaded shot hits its shield
 const HAZARD_TICK = 0.5, ICE_KB = 1.5, SHALLOW_SLOW = 0.75; // how often lava/spikes/vents burn a grounded enemy; how much harder hits shove enemies standing on ice
 const SWORD_DMG = [1, 1, 2, 3, 4];             // damage per sword level (0 = no sword, punches still do 1)
 // Enemy health multiplier by how many heroes are in the room (1, 2, 3, 4+). Adjusts live as people come and go.
@@ -38,7 +39,7 @@ const partyMul = (n) => PARTY_HP[Math.min(4, Math.max(1, n))];
 
 function newPlayer(id, name, color, cls) {
   return {
-    id, name, color, cls: cls || 'sword', lvl: 'ow', x: 0, y: 0, a: 0, hp: 12, maxHp: 12, gems: 0, bombs: 0, maxBombs: 8, arrows: 0, sword: 0, armor: 0,
+    id, name, color, cls: cls || 'sword', lvl: 'ow', x: 0, y: 0, a: 0, hp: 12, maxHp: 12, gems: 0, bombs: 0, maxBombs: 8, arrows: 0, maxArrows: ARROWS_START, sword: 0, armor: 0,
     items: {}, potions: 0, alive: true, inv: 0, revive: 0, sel: 'boomerang', atk: 0, lastSeen: 0, warpIdx: 0, kills: 0,
   };
 }
@@ -58,7 +59,7 @@ class Sim {
       p = saved ? Object.assign(newPlayer(id, name, color, cls), saved, { id, name }) : newPlayer(id, name, color, cls);
       if (!saved) { // late joiners get team progression
         const any = Object.values(this.players)[0];
-        if (any) { p.items = Object.assign({}, any.items); p.sword = any.sword; p.maxHp = any.maxHp; p.hp = p.maxHp; if (any.armor === 2) p.armor = 2; if (p.items.bombbag) p.bombs = 4; }
+        if (any) { p.items = Object.assign({}, any.items); p.sword = any.sword; p.maxHp = any.maxHp; p.maxArrows = any.maxArrows || ARROWS_START; p.hp = p.maxHp; if (any.armor === 2) p.armor = 2; if (p.items.bombbag) p.bombs = 4; }
       }
       const host = Object.values(this.players)[0];
       const sp = host && host.alive ? host : null;
@@ -71,7 +72,7 @@ class Sim {
     return p;
   }
   removePlayer(id) { const p = this.players[id]; if (!p) return; this.savedPlayers = this.savedPlayers || {}; this.savedPlayers[p.color] = this.playerSaveData(p); delete this.players[id]; this.ev({ t: 'msg', text: p.name + ' LEFT.' }); }
-  playerSaveData(p) { const o = {}; for (const k of ['cls', 'lvl', 'x', 'y', 'a', 'hp', 'maxHp', 'gems', 'bombs', 'maxBombs', 'arrows', 'sword', 'armor', 'items', 'potions', 'sel']) o[k] = p[k]; o.alive = true; if (o.hp <= 0) o.hp = 12; return o; }
+  playerSaveData(p) { const o = {}; for (const k of ['cls', 'lvl', 'x', 'y', 'a', 'hp', 'maxHp', 'gems', 'bombs', 'maxBombs', 'arrows', 'maxArrows', 'sword', 'armor', 'items', 'potions', 'sel']) o[k] = p[k]; o.alive = true; if (o.hp <= 0) o.hp = 12; return o; }
   ev(e) { this.events.push(e); }
   sfx(s, lvl, x, y) { this.ev({ t: 'sfx', s, lvl, x, y }); }
   msg(text, pid) { this.ev({ t: 'msg', text, pid }); }
@@ -82,6 +83,13 @@ class Sim {
     const L = this.W.levels[lvl]; if (tile != null) L.tiles[idx] = tile; if (prop != null) L.props[idx] = prop;
     L.sealRoom = L.sealRoom || {}; if (sealRoom != null) L.sealRoom[idx] = sealRoom; else delete L.sealRoom[idx];
     (this.mods[lvl] = this.mods[lvl] || {})[idx] = sealRoom != null ? [L.tiles[idx], L.props[idx], sealRoom] : [L.tiles[idx], L.props[idx]]; this.modVer++;
+  }
+  // the glowing way out of a boss room (gimmicks/eyes.js WARP). It stays, so a later visit has a quick exit.
+  openWarp(p) {
+    const L = this.W.levels[p.lvl]; if (!L || L.kind !== 'dungeon') return; const room = dungeonRoomAt(L, p.x, p.y); if (!room) return;
+    const ix = room.rx * DSX, iy = room.ry * DSY; let best = null, bd = 1e9;
+    for (let y = 1; y < DSY; y++) for (let x = 1; x < DSX; x++) { const t = L.get(ix + x, iy + y); if (t !== TL.DFLOOR) continue; const d = (x - 6) ** 2 + (y - 6.5) ** 2; if (d < bd) { bd = d; best = [ix + x, iy + y]; } }
+    if (!best) return; this.setTile(L.id, L.idx(best[0], best[1]), TL.WARP); this.sfx('secret', L.id); this.msg('A WAY OUT GLOWS. STEP ON IT TO LEAVE.');
   }
   // ---- eye targets and tide water (content/gimmicks/eyes.js, game/world.js) ----
   updateRigs(L) {
@@ -100,7 +108,7 @@ class Sim {
     if (link.kind === 'timed') { this.rigShots[L.id + ':' + link.rid] = this.time; this.sfx('eyeshut', L.id, x, y); return; } // shooting it again keeps it shut longer
     if (link.kind === 'seal' && !TINFO[t].shut) {
       this.setTile(L.id, idx, TINFO[t].small ? TL.EYE_SMALL_SHUT : TL.EYE_SHUT); this.sfx('eyeshut', L.id, x, y);
-      for (const o of link.opens || []) this.setTile(L.id, o, TL.OPENDOOR);
+      for (const o of link.opens || []) this.setTile(L.id, o, link.openTo != null ? link.openTo : TL.OPENDOOR);
       this.sfx('secret', L.id); if (link.text) this.msg(link.text);
     }
   }
@@ -141,8 +149,9 @@ class Sim {
     const n = (v, hi) => clamp(v | 0, 0, hi);
     p.sword = Math.max(p.sword, n(d.sword, 4)); p.armor = Math.max(p.armor, n(d.armor, 2));
     const mh = clamp(d.hearts | 0, 3, 16) * 4; if (mh > p.maxHp) p.maxHp = mh; p.hp = p.maxHp;
-    p.gems = Math.max(p.gems, n(d.gems, 999)); p.arrows = Math.max(p.arrows, n(d.arrows, 30)); p.potions = Math.max(p.potions, n(d.potions, 2)); if (p.potions) p.items.potion = true;
+    p.gems = Math.max(p.gems, n(d.gems, 999)); p.potions = Math.max(p.potions, n(d.potions, 2)); if (p.potions) p.items.potion = true;
     for (const id of d.items || []) { const it = itemDef(id); if (!it || !it.debug) continue; if (it.debugGrant) it.debugGrant(p, this); else p.items[id] = true; }
+    p.arrows = Math.max(p.arrows, Math.min(p.maxArrows || ARROWS_START, n(d.arrows, 50)));
     if (d.bombs) { p.items.bombs = true; p.bombs = Math.max(p.bombs, Math.min(p.maxBombs, n(d.bombs, 16))); }
     for (let i = 1; i <= n(d.shards, 8); i++) { if (!this.team.shards.includes(i)) this.team.shards.push(i); if (!this.team.done.includes(i)) this.team.done.push(i); }
   }
@@ -327,6 +336,7 @@ class Sim {
     if (room.item && !this.team.taken[key + ':item']) {
       if (!this.ents.find(e => e.tk === key + ':item')) this.spawn({ k: 'pick', lvl: L.id, x: room.rx * DSX + 6.5, y: room.ry * DSY + 3.5, item: room.item, tk: key + ':item', perm: true, spr: itemSprite(room.item), sc: 0.6, z: 0.35, team: true });
     }
+    (room.stash || []).forEach((s, i) => { const tk = key + ':stash' + i; if (!this.team.taken[tk] && !this.ents.find(e => e.tk === tk)) this.spawn({ k: 'pick', lvl: L.id, x: room.rx * DSX + s.x, y: room.ry * DSY + s.y, item: s.item, tk, perm: true, spr: itemSprite(s.item), sc: 0.55, z: 0.15, team: true }); }); // hidden treasures (world.js bossEyeAlcove)
     if (room.looseKey && !this.team.taken[key + ':lkey'] && !this.ents.find(e => e.tk === key + ':lkey')) { // a key waiting somewhere awkward (gimmick intro rooms)
       this.spawn({ k: 'pick', lvl: L.id, x: room.rx * DSX + room.looseKey[0], y: room.ry * DSY + room.looseKey[1], item: 'key', tk: key + ':lkey', perm: true, spr: itemSprite('key'), sc: 0.55, z: 0.1, team: true });
     }
@@ -497,13 +507,17 @@ class Sim {
     const atk = opt.pid && this.players[opt.pid]; if (atk && atk.god) dmg *= 3; // god mode hits three times as hard
     if (e.dormant) { this.sfx('clink', e.lvl, e.x, e.y); this.wake(e); return false; }
     if (e.hurt > 0 && !opt.ignoreIframes) return false;
-    if (def.shield && src && !opt.pierceShield) { // blocks hits from the front
-      const toSrc = Math.atan2(src.y - e.y, src.x - e.x); if (Math.abs(angDiff(e.f, toSrc)) < 0.9) { this.sfx('clink', e.lvl, e.x, e.y); e.stun = 0.15; return false; }
+    if (def.shield && src && !opt.pierceShield && !(e.reelUntil > this.time)) { // blocks hits from the front (not while reeling from a loaded shot)
+      const toSrc = Math.atan2(src.y - e.y, src.x - e.x); if (Math.abs(angDiff(e.f, toSrc)) < 0.9) {
+        this.sfx('clink', e.lvl, e.x, e.y);
+        if (!opt.shieldBreak) { e.stun = 0.15; return false; }
+        dmg = opt.shieldBreak * (atk && atk.god ? 3 : 1); e.stun = Math.max(e.stun, SHIELD_STUN); e.reelUntil = this.time + SHIELD_STUN; // a loaded shot jars the shield: half damage, and the knight reels long enough for a sword strike
+      }
     }
     if (opt.stunOnly && !def.boss) { e.stun = 3; this.sfx('clink', e.lvl, e.x, e.y); if (!def.boomerangKills) return true; }
     if (def.onDamage && def.onDamage(this, e, dmg, opt) === false) return true;
     e.hp -= dmg; e.hurt = 0.35; this.sfx('hit', e.lvl, e.x, e.y); if (opt.pid) e.lastPid = opt.pid;
-    if (src && !def.boss) { const a = Math.atan2(e.y - src.y, e.x - src.x); const [v, t] = this.knockFor(e, def, 9); e.kb = [Math.cos(a) * v, Math.sin(a) * v]; e.kbT = t || 0.12; }
+    if (src && !def.boss) { const a = Math.atan2(e.y - src.y, e.x - src.x); const [v, t] = this.knockFor(e, def, 9 * (opt.kbMul || 1)); e.kb = [Math.cos(a) * v, Math.sin(a) * v]; e.kbT = t || 0.12; }
     if (e.hp <= 0) this.killEnemy(e, opt.pid);
     return true;
   }
@@ -557,9 +571,9 @@ class Sim {
       this.sfx('beam', p.lvl, p.x, p.y);
     }
   }
-  useItem(p, item) {
+  useItem(p, item, a) {
     const d = itemDef(item); if (!d || d.slot !== 'b' || !d.owned(p)) return;
-    d.use(this, p);
+    d.use(this, p, a || {});
   }
   updateProj(e, dt) {
     const L = this.W.levels[e.lvl]; const def = Content.projectiles[e.type];
@@ -581,6 +595,7 @@ class Sim {
     }
     if (e.life <= 0 || (ti.solid && !ti.low) || (pr && PROP_INFO[pr] && PROP_INFO[pr].solid && pr !== PR.PEDESTAL)) {
       if (ti.eye && def.eyeHit && e.life > 0) this.hitEye(L, L.idx(Math.floor(nx), Math.floor(ny)));
+      else if (ti.eye && !ti.shut && def.player && e.pid && this.players[e.pid]) { const pl = this.players[e.pid]; if (this.time - (pl.eyeHintAt || -99) > 8) { pl.eyeHintAt = this.time; this.hint(pl, 'THE EYE DOESN\'T EVEN BLINK. MAYBE AN ARROW...'); } }
       if (def.fire || e.fireTrail) { this.spawn({ k: 'fire', lvl: e.lvl, x: e.x, y: e.y, life: 1.2, spr: 'flame', sc: 0.8, z: -0.05, pid: e.pid }); }
       if (def.endFx) this.spawn({ k: 'fx', lvl: e.lvl, x: e.x, y: e.y, spr: def.endFx, life: 0.25, sc: 0.8 });
       e.dead = true; return;
@@ -603,7 +618,7 @@ class Sim {
         const r = this.enemyRadius(en) + 0.2;
         if (dist2(en.x, en.y, e.x, e.y) < r * r) {
           e.hitSet[en.id] = 1;
-          const landed = this.damageEnemy(en, e.dmg * (e.frost && enemyDef(en.type).hot ? 2 : 1), { x: e.x - e.vx * 0.1, y: e.y - e.vy * 0.1 }, { pid: e.pid, silver: e.silver, pierceShield: def.pierceShield, ignoreIframes: def.pierce });
+          const landed = this.damageEnemy(en, e.dmg * (e.frost && enemyDef(en.type).hot ? 2 : 1), { x: e.x - e.vx * 0.1, y: e.y - e.vy * 0.1 }, { pid: e.pid, silver: e.silver, pierceShield: def.pierceShield, ignoreIframes: def.pierce, kbMul: e.kbMul, shieldBreak: e.shieldBreak ? e.dmg / 2 : 0 });
           if (e.frost && landed && !en.dead) { en.stun = Math.max(en.stun, enemyDef(en.type).boss ? 0.6 : 2.5); this.spawn({ k: 'fx', lvl: e.lvl, x: en.x, y: en.y, spr: 'icefx', life: 0.4, sc: 1 }); this.sfx('freeze', e.lvl, en.x, en.y); }
           if (def.fire) this.spawn({ k: 'fire', lvl: e.lvl, x: e.x, y: e.y, life: 0.8, spr: 'flame', sc: 0.8, z: -0.05, pid: e.pid });
           if (!def.pierce) { e.dead = true; return; }
@@ -694,7 +709,7 @@ class Sim {
     const p = this.players[pid]; if (!p) return null;
     const en = []; for (const e of this.ents) if (e.lvl === p.lvl) en.push(this.entView(e));
     const pl = []; for (const o of Object.values(this.players)) pl.push([o.id, o.lvl, Math.round(o.x * 100) / 100, Math.round(o.y * 100) / 100, Math.round(o.a * 100) / 100, o.color, o.armor, o.cls, o.alive ? 1 : 0, o.atk, o.name, Math.round(o.revive / REVIVE_TIME * 100) / 100, o.hp, o.maxHp, o.reviver || 0]);
-    const me = {}; for (const k of ['lvl', 'hp', 'maxHp', 'gems', 'bombs', 'maxBombs', 'arrows', 'sword', 'armor', 'items', 'potions', 'alive', 'cls', 'sel', 'color', 'name', 'dbg', 'god']) me[k] = p[k]; me.chill = p.chill > 0 ? 1 : 0; me.respawnIn = p.alive ? 0 : Math.max(0, Math.ceil(RESPAWN_WAIT - (this.time - (p.downAt || 0))));
+    const me = {}; for (const k of ['lvl', 'hp', 'maxHp', 'gems', 'bombs', 'maxBombs', 'arrows', 'maxArrows', 'sword', 'armor', 'items', 'potions', 'alive', 'cls', 'sel', 'color', 'name', 'dbg', 'god']) me[k] = p[k]; me.chill = p.chill > 0 ? 1 : 0; me.respawnIn = p.alive ? 0 : Math.max(0, Math.ceil(RESPAWN_WAIT - (this.time - (p.downAt || 0))));
     return { t: 's', paused: !!this.paused, pausedBy: this.pausedBy, me, pl, en, team: { keys: this.team.keys, maps: this.team.maps, comps: this.team.comps, shards: this.team.shards, done: this.team.done, relics: this.team.relics }, vp: this.ventPhase(), rg: this.rigCodes(p.lvl), mv: this.modVer, over: this.over > 0 };
   }
   // ---- save ----

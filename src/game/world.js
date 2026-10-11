@@ -494,7 +494,7 @@ function genDungeon(W, d, rnd) {
     const ictx = Object.assign({}, gctx, { ix, iy, set: (x, y, t) => L.set(ix + x, iy + y, typeof t === 'string' ? TL[t] : t), prop: (x, y, pr) => { L.props[L.idx(ix + x, iy + y)] = pr; }, sign });
     if (r === start) { if (intro) intro.g.intro.start(L, r, ictx); L.set(ix + 6, iy + DSY, TL.DEXIT); continue; }
     if (r.intro) { intro.g.intro.room(L, r, ictx); continue; }
-    if (r.boss) { r.enemies = def.bossParty ? def.bossParty.slice() : [r.boss]; if (d >= 4 && !def.bossParty && pool.length) r.enemies.push(rnd.pick(pool)); r.shutter = true; continue; }
+    if (r.boss) { r.enemies = def.bossParty ? def.bossParty.slice() : [r.boss]; if (d >= 4 && !def.bossParty && pool.length) r.enemies.push(rnd.pick(pool)); r.shutter = true; if (def.bossEye) bossEyeAlcove(L, r, def.bossEye); continue; }
     const lane = (x, y) => x === 6 || y === 4; // keep the cross through each room's doors clear
     const rc = Object.assign({}, gctx, { ix, iy, lane, set: (x, y, t) => L.set(ix + x, iy + y, typeof t === 'string' ? TL[t] : t), prop: (x, y, pr) => { L.props[L.idx(ix + x, iy + y)] = pr; } });
     let decorated = false; for (const g of gimmicks) if (g.room && g.room(L, r, rc)) decorated = true;
@@ -522,6 +522,14 @@ function genDungeon(W, d, rnd) {
   L.spawn = { x: start.rx * DSX + 6.5, y: start.ry * DSY + 6.2, a: -Math.PI / 2 };
   L.bossRoom = boss.id;
   const ent = W.dungeons[d]; L.exit = ent ? { lvl: 'ow', x: ent.x + 0.5, y: ent.y + 1.6, a: Math.PI / 2 } : { lvl: 'ow', x: W.levels.ow.spawn.x, y: W.levels.ow.spawn.y, a: 0 };
+}
+// A walled-off nook in a boss room's top-right corner, opened by shooting the eye on its wall. def.bossEye = [items inside].
+function bossEyeAlcove(L, r, items) {
+  const ix = r.rx * DSX, iy = r.ry * DSY; const at = (x, y) => L.idx(ix + x, iy + y);
+  for (const [x, y] of [[9, 1], [9, 3], [10, 3], [11, 3]]) L.set(ix + x, iy + y, TL.BRICK);
+  L.set(ix + 9, iy + 2, TL.EYE);
+  L.eyeLinks = L.eyeLinks || {}; L.eyeLinks[at(9, 2)] = { kind: 'seal', opens: [at(10, 3)], openTo: TL.DFLOOR, text: 'THE GREAT EYE BLINKS... A NICHE OPENS IN THE WALL.' };
+  r.stash = items.map((item, i) => ({ item, x: 10.5 + (i % 2), y: 1.5 + Math.floor(i / 2) }));
 }
 function dungeonRoomAt(L, x, y) { const rx = Math.floor(x / DSX), ry = Math.floor(y / DSY); return L.rooms[ry * DGW + rx]; }
 function owRegionAt(L, x, y) { const rx = clamp(Math.floor(x / RSX), 0, RW - 1), ry = clamp(Math.floor(y / RSY), 0, RH - 1); return L.regions[ry * RW + rx]; }

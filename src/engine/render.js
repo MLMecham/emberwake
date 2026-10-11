@@ -468,6 +468,13 @@ function owSpot(world, p) {
   return { x: L.exit.x, y: L.exit.y - 1.1, inside: true };
 }
 function caveLabel(L) { const c = Content.caves[L.caveKind]; return (c && c.name) || 'CAVE'; }
+// Dungeon map rules: the map shows the main layout only. Secret rooms, and walls you can bomb or open, stay off it until
+// someone has been through them. The compass marks the boss room on its own, map or no map.
+function mapLinkShown(st, L, r, o) {
+  if (o.hidden && !st.seenRooms.has(L.id + ':' + o.id)) return false;
+  const [x, y] = r.ry === o.ry ? [Math.max(r.rx, o.rx) * DSX, r.ry * DSY + 4] : [r.rx * DSX + 6, Math.max(r.ry, o.ry) * DSY];
+  const t = L.get(x, y); return t === TL.LOCKED || t === TL.SHUTTER || !TINFO[t].solid; // anything else still solid is a secret wall
+}
 function drawMinimap(st, x0, y0, w, h) {
   const L = st.level; const me = st.me; const cam = st.cam;
   rect(x0 - 1, y0 - 1, w + 2, h + 2, rgb(0, 0, 0)); frame(x0 - 2, y0 - 2, w + 4, h + 4, rgb(200, 180, 120));
@@ -475,12 +482,13 @@ function drawMinimap(st, x0, y0, w, h) {
     const cw = Math.floor(w / DGW), ch = Math.floor(h / DGH); const hasMap = st.team.maps && st.team.maps[L.id], hasComp = st.team.comps && st.team.comps[L.id];
     for (const id in L.rooms) {
       const r = L.rooms[id]; const vis = st.seenRooms.has(L.id + ':' + id);
-      if (!vis && (!hasMap || r.hidden)) continue;
       const rx = x0 + r.rx * cw, ry = y0 + r.ry * ch;
+      if (r.boss && hasComp && Math.floor(R.time * 3) & 1) rect(rx + cw / 2 - 1, ry + ch / 2 - 1, 3, 3, rgb(255, 50, 50)); // the compass finds the boss even without the map
+      if (!vis && (!hasMap || r.hidden)) continue;
       rect(rx + 1, ry + 1, cw - 2, ch - 2, vis ? rgb(90, 110, 200) : rgb(50, 56, 100));
       if (r.boss && hasComp && Math.floor(R.time * 3) & 1) rect(rx + cw / 2 - 1, ry + ch / 2 - 1, 3, 3, rgb(255, 50, 50));
       // doors
-      for (const oid in r.links) { const o = L.rooms[oid]; if (!o || (o.hidden && !st.seenRooms.has(L.id + ':' + oid)) || (r.hidden && !vis)) continue; if (o.rx > r.rx) rect(rx + cw - 1, ry + ch / 2 - 1, 2, 2, rgb(160, 180, 255)); if (o.ry > r.ry) rect(rx + cw / 2 - 1, ry + ch - 1, 2, 2, rgb(160, 180, 255)); }
+      for (const oid in r.links) { const o = L.rooms[oid]; if (!o || !mapLinkShown(st, L, r, o) || (r.hidden && !vis)) continue; if (o.rx > r.rx) rect(rx + cw - 1, ry + ch / 2 - 1, 2, 2, rgb(160, 180, 255)); if (o.ry > r.ry) rect(rx + cw / 2 - 1, ry + ch - 1, 2, 2, rgb(160, 180, 255)); }
     }
     for (const p of st.players) { if (p[1] !== L.id) continue; const c = p[0] === st.myId ? rgb(255, 255, 255) : c32(hexToRgb((PCOLORS.find(c => c.name === p[5]) || PCOLORS[0]).c)); const px0 = x0 + p[2] / DSX * cw, py0 = y0 + p[3] / DSY * ch; rect(px0 - 1, py0 - 1, 3, 3, c); }
     text(L.dnum <= 9 ? 'L' + L.dnum : (Content.dungeons[L.dnum].mapLabel || 'L' + L.dnum), x0 + 1, y0 + h - 8, rgb(255, 255, 255));
@@ -513,14 +521,18 @@ function drawBigMap(st) {
     textC((L.dnum <= 9 ? 'LEVEL-' + L.dnum + '  ' : '') + dungeonName(L.dnum), W / 2, 8, rgb(255, 220, 120));
     const hasMap = st.team.maps[L.id], hasComp = st.team.comps[L.id];
     for (const id in L.rooms) {
-      const r = L.rooms[id]; const vis = st.seenRooms.has(L.id + ':' + id); if (!vis && (!hasMap || r.hidden)) continue;
-      const rx = x0 + r.rx * cw, ry = y0 + r.ry * ch; rect(rx + 2, ry + 2, cw - 4, ch - 4, vis ? rgb(80, 100, 190) : rgb(40, 46, 90));
-      for (const oid in r.links) { const o = L.rooms[oid]; if (!o || (o.hidden && !st.seenRooms.has(L.id + ':' + oid))) continue; const t = r.links[oid]; const c = t === TL.LOCKED ? rgb(240, 200, 60) : t === TL.BRICK_BOMB ? 0 : rgb(160, 180, 255); if (!c) continue; if (o.rx > r.rx) rect(rx + cw - 3, ry + ch / 2 - 2, 6, 4, c); if (o.ry > r.ry) rect(rx + cw / 2 - 2, ry + ch - 3, 4, 6, c); }
+      const r = L.rooms[id]; const vis = st.seenRooms.has(L.id + ':' + id);
+      const rx = x0 + r.rx * cw, ry = y0 + r.ry * ch;
+      if (r.boss && hasComp && !vis && !hasMap) { frame(rx + 2, ry + 2, cw - 4, ch - 4, rgb(120, 30, 30)); rect(rx + cw / 2 - 2, ry + ch / 2 - 2, 5, 5, Math.floor(R.time * 3) & 1 ? rgb(255, 50, 50) : rgb(120, 20, 20)); } // the compass alone still finds the boss
+      if (!vis && (!hasMap || r.hidden)) continue;
+      rect(rx + 2, ry + 2, cw - 4, ch - 4, vis ? rgb(80, 100, 190) : rgb(40, 46, 90));
+      for (const oid in r.links) { const o = L.rooms[oid]; if (!o || !mapLinkShown(st, L, r, o)) continue; const t = L.get(...(r.ry === o.ry ? [Math.max(r.rx, o.rx) * DSX, r.ry * DSY + 4] : [r.rx * DSX + 6, Math.max(r.ry, o.ry) * DSY])); const c = t === TL.LOCKED ? rgb(240, 200, 60) : rgb(160, 180, 255); if (o.rx > r.rx) rect(rx + cw - 3, ry + ch / 2 - 2, 6, 4, c); if (o.ry > r.ry) rect(rx + cw / 2 - 2, ry + ch - 3, 4, 6, c); }
       if (r.boss && hasComp) rect(rx + cw / 2 - 2, ry + ch / 2 - 2, 5, 5, Math.floor(R.time * 3) & 1 ? rgb(255, 50, 50) : rgb(120, 20, 20));
       if (r.item && st.seenRooms.has(L.id + ':' + id)) blit(SPR[itemSprite(r.item)], rx + 2, ry + 1, 1);
     }
     for (const p of st.players) { if (p[1] !== L.id) continue; const c = p[0] === st.myId ? rgb(255, 255, 255) : c32(hexToRgb((PCOLORS.find(c => c.name === p[5]) || PCOLORS[0]).c)); rect(x0 + p[2] / DSX * cw - 2, y0 + p[3] / DSY * ch - 2, 4, 4, c); }
     text((hasMap ? 'MAP ' : '') + (hasComp ? 'COMPASS' : ''), 6, H - 10, rgb(200, 200, 200));
+    if (hasComp) { const sec = Object.values(L.rooms).filter(r => r.hidden); if (sec.length) { const found = sec.filter(r => st.seenRooms.has(L.id + ':' + r.id)).length; const s = 'SECRETS ' + found + '/' + sec.length; text(s, W - 6 - s.length * 6, H - 10, found === sec.length ? rgb(255, 220, 120) : rgb(200, 200, 200)); } } // the compass also senses how many secret rooms there are
     return;
   }
   const Lo = st.world.levels.ow; const seen = st.seenOW;

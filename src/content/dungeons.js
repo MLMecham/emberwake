@@ -6,6 +6,7 @@
 // gimmicks: ids from content/gimmicks/. Enemies and bosses come from each enemy's spawns / bossOf.
 // Optional dungeons (10+) can also set: mapLabel (letter on the maps), bossDrop (item the boss leaves),
 // bossParty (several bosses at once, instead of the single bossOf one).
+// bossEye: [item ids] puts an eye in the boss room's wall; an arrow opens a niche holding those items.
 // Any dungeon can set intro: '<gimmick id>' to use that gimmick's hand-built first two rooms (the second holds the key onward).
 'use strict';
 defineDungeon(1, {
@@ -24,6 +25,7 @@ defineDungeon(1, {
 });
 defineDungeon(2, {
   name: 'BRAMBLE KEEP', item: 'bombbag', gimmicks: ['cracked'], loops: 0.4, bombLoops: 1,
+  bossEye: ['quiver', 'loadedshot'], // an eye in the boss room's wall hides these until someone comes back with a bow
   theme: { wall: [118, 110, 104], mortar: [52, 46, 44], hi: [150, 142, 134], floor: [104, 70, 60], edge: [58, 36, 30], fhi: [130, 90, 76], trim: [120, 50, 40] },
   shape: [ // a key
     '..###...',

@@ -32,3 +32,6 @@ defineTile('EYE_SMALL', { solid: true, wall: 'eye_small', eye: true, small: true
 defineTile('EYE_SMALL_SHUT', { solid: true, wall: 'eye_small_shut', eye: true, small: true, shut: true });
 defineTile('SHALLOW', { floor: 'shallow', shallow: true }); // walkable, 25% slower
 defineTile('WET', { floor: 'wetfloor', wet: true }); // drained tide water
+// the way out that glows in a boss room once its prize is taken (game/sim.js openWarp). Step on it to leave.
+defineTexture('warp', (x, y, r, f, ctx) => { const d = Math.hypot(x - 15.5, y - 15.5); const ring = Math.abs(((d - f * 2) % 8 + 8) % 8 - 4) < 1.4; if (d > 14) return [60, 50, 40]; if (d < 3) return [255, 250, 210]; return ring ? [255, 236, 140] : [200, 150, 60]; }, { frames: 4 });
+defineTile('WARP', { floor: 'warp', exit: true, warp: true });

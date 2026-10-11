@@ -9,7 +9,7 @@ defineItem({
     const d = +p.lvl.slice(1); const t = sim.team;
     if (!t.shards.includes(d)) t.shards.push(d); if (!t.done.includes(d)) t.done.push(d);
     ctx.banner('EMBER SHARD ' + t.shards.length + '/8', true);
-    sim.pendingExit = { lvl: p.lvl, at: sim.time + 3.5 }; // everyone in the dungeon returns outside after a beat
+    sim.openWarp(p); // a glowing tile appears that takes you outside (and stays, for a quick way out later)
     sim.autosave = true;
   },
 });

@@ -1,5 +1,6 @@
 // ===== ui/main.js : client game loop, local movement, events, menus and boot =====
 'use strict';
+const LOAD_TIME = 0.4; // seconds to nock a second arrow for a Loaded Shot
 const ADV_SEED = 7319;
 const G = {
   state: 'title', profile: { name: 'HERO', color: 'GREEN', cls: 'sword' }, world: null, sim: null, myId: 'p1', snap: null,
@@ -199,7 +200,16 @@ function updateLocal(dt, inp) {
   } else if (inp.atkP && Lc.atkCd <= 0 && me.sword > 0) {
     Lc.swing = 0; Lc.atkCd = 0.3; sfx('swing'); Lc.atkVis = 0.25; sendAction({ t: 'atk', kind: 'sword' });
   }
-  if (inp.item && Lc.sel) { sendAction({ t: 'use', item: Lc.sel }); Lc.useFlash = 0.3; Lc.useSpr = itemSprite(Lc.sel, me.cls); }
+  // Loaded Shot (items/techniques.js): with the bow, hold the item button to nock a second arrow; a quick tap still fires one
+  const canLoad = Lc.sel === 'bow' && me.items.loaded && me.arrows >= 2;
+  if (!canLoad) Lc.loadT = 0;
+  if (canLoad) {
+    if (inp.item) Lc.loadT = 0.001;
+    if (Lc.loadT > 0) {
+      if (inp.itemHeld) { const before = Lc.loadT; Lc.loadT += dt; if (before < LOAD_TIME && Lc.loadT >= LOAD_TIME) sfx('nock'); Lc.useFlash = 0.3; Lc.useSpr = Lc.loadT >= LOAD_TIME ? (me.cls === 'monk' ? 'beam' : 'arrow2') : itemSprite('bow', me.cls); }
+      else { sendAction({ t: 'use', item: 'bow', loaded: Lc.loadT >= LOAD_TIME }); Lc.useFlash = 0.3; Lc.useSpr = itemSprite('bow', me.cls); Lc.loadT = 0; }
+    }
+  } else if (inp.item && Lc.sel) { sendAction({ t: 'use', item: Lc.sel }); Lc.useFlash = 0.3; Lc.useSpr = itemSprite(Lc.sel, me.cls); }
   if (Lc.useFlash > 0) Lc.useFlash -= dt;
   // low hp beep
   if (me.hp <= 4 && me.hp > 0) { Lc.lowT -= dt; if (Lc.lowT <= 0) { Lc.lowT = 0.5; sfx('lowhp'); } }

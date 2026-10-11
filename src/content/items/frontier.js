@@ -14,7 +14,7 @@ const relic = (id, name, sprite, line) => defineItem({ id, name, sprite, team: t
     const t = sim.team; if (!t.relics.includes(id)) t.relics.push(id);
     const d = +p.lvl.slice(1); if (d && !t.done.includes(d)) t.done.push(d);
     ctx.banner(name + (t.relics.includes('fang') && t.relics.includes('emberheart') ? ': THE HEARTH WILL OPEN' : ': ' + line), true);
-    sim.pendingExit = { lvl: p.lvl, at: sim.time + 3.5 }; sim.autosave = true;
+    sim.openWarp(p); sim.autosave = true;
   } });
 relic('fang', 'FROST FANG', 'fang', 'ONE OF TWO HEARTH KEYS');
 relic('emberheart', 'EMBER HEART', 'emberheart', 'ONE OF TWO HEARTH KEYS');
@@ -22,5 +22,5 @@ defineItem({ id: 'dawnblade', name: 'DAWNBLADE', sprite: 'dawnblade', monk: { na
   give(sim, p, ctx) {
     p.sword = Math.max(p.sword, 4); const d = +p.lvl.slice(1); if (d && !sim.team.done.includes(d)) sim.team.done.push(d);
     ctx.banner(p.cls === 'monk' ? 'DAWN FISTS: THE LAST FLAME IS YOURS' : 'DAWNBLADE: ITS LIGHT CUTS THROUGH ANYTHING', true);
-    sim.pendingExit = { lvl: p.lvl, at: sim.time + 4 }; sim.autosave = true;
+    sim.openWarp(p); sim.autosave = true;
   } });

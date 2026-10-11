@@ -279,6 +279,36 @@ attempt('eyes and tides', () => {
   const seal = Object.keys(L.eyeLinks).find(k => L.eyeLinks[k].kind === 'seal');
   if (seal) { const door = L.eyeLinks[seal].opens[0]; __ok(L.tiles[door] === TL.BRICK, 'hidden doorway starts as plain wall'); sim.hitEye(L, +seal); __ok(L.tiles[door] === TL.OPENDOOR && L.tiles[seal] === TL.EYE_SMALL_SHUT, 'small eye should open the hidden way'); }
 });
+attempt('quiver and loaded shot', () => {
+  const sim = freshSim(); const p = sim.players.p1; p.god = false;
+  __ok(p.maxArrows === 15, 'heroes start with a 15-arrow quiver'); p.arrows = 10; itemDef('arrows').give(sim, p, { banner() {} }); __ok(p.arrows === 15, 'arrow bundle caps at the quiver');
+  sim.giveItem(p, 'quiver', false); __ok(p.maxArrows === 30 && p.arrows === 30 && sim.players.p2.maxArrows === 30, 'big quiver should hold 30 for everyone');
+  p.items.bow = true; sim.giveItem(p, 'loadedshot', false); __ok(p.items.loaded && sim.players.p2.items.loaded, 'scroll teaches the party');
+  // a knight facing the shot: a plain arrow bounces, a loaded one jars the shield, and a sword strike then lands
+  const k = sim.spawnEnemy('knight', p.lvl, p.x + 3, p.y, { spawnFx: 0 }); k.spawnFx = 0; k.hp = 50; k.f = Math.PI; // facing the hero
+  const fire = (loaded) => { sim.ents = sim.ents.filter(e => !e.dead); sim.useItem(p, 'bow', { t: 'use', item: 'bow', loaded }); const pr = sim.ents.find(e => e.k === 'proj' && e.pid === 'p1' && !e.dead); for (let i = 0; i < 40 && pr && !pr.dead; i++) sim.updateProj(pr, 1 / 60); return pr; };
+  p.a = 0; let before = p.arrows; fire(false); __ok(k.hp === 50 && p.arrows === before - 1, 'shield should stop a plain arrow');
+  k.stun = 0; k.hurt = 0; k.f = Math.PI; before = p.arrows; const pr = fire(true);
+  __ok(pr && pr.spr === 'arrow2' && p.arrows === before - 2, 'loaded shot uses two arrows and the double-arrow sprite');
+  __ok(k.hp === 48 && k.stun > 0.5 && k.reelUntil > sim.time, 'loaded shot into a shield: one arrow of damage and a stun (' + k.hp + ')');
+  k.hurt = 0; const h0 = k.hp; sim.damageEnemy(k, 1, { x: p.x, y: p.y }, { pid: 'p1' }); __ok(k.hp < h0, 'the reeling knight can be struck from the front');
+  // against something without a shield it hits twice as hard
+  const s = sim.spawnEnemy('skeleton', p.lvl, p.x + 3, p.y, { spawnFx: 0 }); s.spawnFx = 0; s.hp = 50; k.dead = true; fire(true); __ok(s.hp === 46, 'loaded shot does double damage (' + s.hp + ')');
+});
+attempt('bramble keep eye and the way out', () => {
+  const sim = freshSim(); const p = sim.players.p1; const L = sim.W.levels.d2; const boss = L.rooms[L.bossRoom];
+  const ix = boss.rx * DSX, iy = boss.ry * DSY; const eye = L.idx(ix + 9, iy + 2);
+  __ok(L.tiles[eye] === TL.EYE && L.eyeLinks[eye] && L.eyeLinks[eye].kind === 'seal', 'd2 boss room should have the eye');
+  __ok(dungeonSolve(L, false).size === Object.keys(L.rooms).length, 'alcove must not block anything');
+  sim.teleport(p, 'd2', ix + 6.5, iy + 6.5, -Math.PI / 2); for (const e of sim.ents) if (e.k === 'en') e.dead = true; sim.tick(1 / 60); sim.tick(1 / 60);
+  const stash = sim.ents.filter(e => e.k === 'pick' && (e.item === 'quiver' || e.item === 'loadedshot')); __ok(stash.length === 2, 'quiver and scroll wait in the niche');
+  __ok(L.solidAt(ix + 10.5, iy + 3.5), 'niche starts closed');
+  sim.hitEye(L, eye); __ok(!L.solidAt(ix + 10.5, iy + 3.5) && L.tiles[eye] === TL.EYE_SHUT, 'arrow in the eye opens the niche');
+  // the shard leaves a glowing way out instead of sending everyone outside
+  p.lvl = 'd2'; itemDef('shard').give(sim, p, { banner() {} }); for (let i = 0; i < 300; i++) sim.tick(1 / 60);
+  __ok(p.lvl === 'd2', 'taking the shard should not throw you out any more');
+  let warp = -1; for (let y = iy + 1; y < iy + DSY; y++) for (let x = ix + 1; x < ix + DSX; x++) if (L.get(x, y) === TL.WARP) warp = L.idx(x, y); __ok(warp >= 0, 'a glowing exit should appear in the boss room');
+});
 attempt('tideglass opening', () => {
   for (const [seed, mode] of [[7319, 'adv'], [1234, 'rogue'], [99, 'rogue'], [4242, 'adv']]) {
     const W = genWorld(seed, mode); const D = W.levels.d6; const st = D.startRoom; const r2 = st.children[0]; const r3 = r2.children[0];

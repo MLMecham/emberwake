@@ -77,6 +77,7 @@ function sfx(name, vol) {
     case 'hearthgate': seq([262, 330, 392, 523, 659, 784, 1047], 0.12, 'triangle', 0.16 * v); tone(65, 1.6, 'sawtooth', 0.14 * v, 130); break;
     case 'pitfall': tone(900, 0.7, 'sine', 0.13 * v, 70); noise(0.15, 0.1 * v, 500, AU.ctx.currentTime + 0.65); break; // an enemy drops into a pit
     case 'sizzle': noise(0.25, 0.14 * v, 7000); tone(1100, 0.12, 'sawtooth', 0.03 * v, 600); break; // an enemy burning on lava or a vent
+    case 'nock': tone(700, 0.06, 'square', 0.1 * v, 900); tone(1050, 0.08, 'triangle', 0.08 * v, 1300, AU.ctx.currentTime + 0.06); break; // a second arrow nocked
     case 'eyeshut': tone(320, 0.12, 'square', 0.14 * v, 140); noise(0.1, 0.12 * v, 900); break; // an arrow shuts an eye
     case 'eyecreak': tone(140, 0.7, 'sawtooth', 0.08 * v, 260); noise(0.6, 0.05 * v, 400); break; // the eye is opening again
     case 'drain': noise(1.2, 0.2 * v, 700); seq([523, 440, 349, 262], 0.12, 'triangle', 0.1 * v); break; // the water runs away
