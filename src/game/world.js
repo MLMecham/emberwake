@@ -500,7 +500,7 @@ function genDungeon(W, d, rnd) {
     const ictx = Object.assign({}, gctx, { ix, iy, set: (x, y, t) => L.set(ix + x, iy + y, typeof t === 'string' ? TL[t] : t), prop: (x, y, pr) => { L.props[L.idx(ix + x, iy + y)] = pr; }, sign });
     if (r === start) { if (intro) intro.g.intro.start(L, r, ictx); L.set(ix + 6, iy + DSY, TL.DEXIT); continue; }
     if (r.intro) { intro.g.intro.room(L, r, ictx); continue; }
-    if (r.boss) { r.enemies = def.bossParty ? def.bossParty.slice() : [r.boss]; if (d >= 4 && !def.bossParty && pool.length) r.enemies.push(rnd.pick(pool)); r.shutter = true; if (def.bossEye) bossEyeAlcove(L, r, def.bossEye); continue; }
+    if (r.boss) { r.enemies = def.bossParty ? def.bossParty.slice() : [r.boss]; if (d >= 4 && !def.bossParty && pool.length) r.enemies.push(rnd.pick(pool)); r.shutter = true; if (def.bossEye) bossEyeAlcove(L, r, def.bossEye); for (const g of gimmicks) if (g.arena) g.arena(L, r, ictx); continue; }
     const lane = (x, y) => x === 6 || y === 4; // keep the cross through each room's doors clear
     const rc = Object.assign({}, gctx, { ix, iy, lane, set: (x, y, t) => L.set(ix + x, iy + y, typeof t === 'string' ? TL[t] : t), prop: (x, y, pr) => { L.props[L.idx(ix + x, iy + y)] = pr; } });
     let decorated = false; for (const g of gimmicks) if (g.room && g.room(L, r, rc)) decorated = true;

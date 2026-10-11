@@ -79,6 +79,9 @@ function sfx(name, vol) {
     case 'sizzle': noise(0.25, 0.14 * v, 7000); tone(1100, 0.12, 'sawtooth', 0.03 * v, 600); break; // an enemy burning on lava or a vent
     case 'icecrack': for (let i = 0; i < 4; i++) tone(2600 + Math.random() * 1600, 0.05, 'square', 0.05 * v, 1800, AU.ctx.currentTime + i * 0.07); noise(0.2, 0.06 * v, 6000); break; // frost-arrow ice about to melt
     case 'gale': noise(0.9, 0.22 * v, 2400); seq([392, 523, 659, 784], 0.06, 'triangle', 0.1 * v); break; // the Gale Cloak lifts you
+    case 'croak': tone(150, 0.18, 'square', 0.16 * v, 110); tone(120, 0.22, 'square', 0.14 * v, 90, AU.ctx.currentTime + 0.2); break; // a frog
+    case 'bubble': tone(500, 0.12, 'sine', 0.1 * v, 900); tone(800, 0.06, 'sine', 0.06 * v, 1200, AU.ctx.currentTime + 0.1); break;
+    case 'poison': tone(260, 0.15, 'sawtooth', 0.06 * v, 200); noise(0.12, 0.05 * v, 900); break; // a poison tick
     case 'nock': tone(700, 0.06, 'square', 0.1 * v, 900); tone(1050, 0.08, 'triangle', 0.08 * v, 1300, AU.ctx.currentTime + 0.06); break; // a second arrow nocked
     case 'eyeshut': tone(320, 0.12, 'square', 0.14 * v, 140); noise(0.1, 0.12 * v, 900); break; // an arrow shuts an eye
     case 'eyecreak': tone(140, 0.7, 'sawtooth', 0.08 * v, 260); noise(0.6, 0.05 * v, 400); break; // the eye is opening again

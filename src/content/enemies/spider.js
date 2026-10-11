@@ -4,7 +4,7 @@
 defineEnemy({
   id: 'spider',
   hp: 8, spd: 3.2, dmg: 2, r: 0.6, sc: 1.5, boss: true,
-  bossOf: [3, 6],
+  bossOf: [6], // (the Sunken Stair has the Bog King now: enemies/frog.js)
   ai: AI.lunge(0.55, 0.5, 1.1),
   anim: { fps: 9, frames: (s, kit) => [s, kit.shearRows(kit.shearRows(s, 2, 5, 1), 10, 13, -1), kit.shearRows(kit.shearRows(s, 2, 5, -1), 10, 13, 1)] },
   sprite: [

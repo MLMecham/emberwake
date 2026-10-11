@@ -261,13 +261,13 @@ function drawViewmodel(st) {
     if (tier === 2) {
       for (const t of [0.2, 0.34, 0.48, 0.62]) brush(t, t + 0.012, 0, sleeveD, 0); // lames
       brush(cuffT - 0.1, cuffT - 0.085, 0, sleeveH, 0); // bracer edge
-      for (const t of [0.27, 0.41, 0.55]) { const [x, y, nx, ny] = nrm(t); const r = rr(t) * 0.55; px(Math.round(x + nx * r), Math.round(y + ny * r), rgb(255, 255, 255)); px(Math.round(x - nx * r), Math.round(y - ny * r), sleeveH); } // rivets
+      for (const t of [0.27, 0.41, 0.55]) { const [x, y, nx, ny] = nrm(t); const r = rr(t) * 0.55; px(Math.round(x + nx * r), Math.round(y + ny * r), sleeveH); px(Math.round(x - nx * r), Math.round(y - ny * r), sleeveH); } // rivets
       const [x, y] = bez(0.14); const R0 = Math.round(rr(0.14) * 1.25); // pauldron
       disc(Math.round(x), Math.round(y), R0 + 2, rgb(20, 18, 28)); disc(Math.round(x), Math.round(y), R0, sleeve); disc(Math.round(x - R0 * 0.25), Math.round(y - R0 * 0.3), Math.round(R0 * 0.55), sleeveH);
       for (let k = 0; k < 2; k++) { const rr2 = R0 - 3 - k * 4; if (rr2 > 2) for (let a = -2.6; a < -0.4; a += 0.05) px(Math.round(x + Math.cos(a) * rr2), Math.round(y + Math.sin(a) * rr2), sleeveD); }
     }
   };
-  const plateCols = tier === 2 ? [mix(STEEL, col, 0.12), mix(STEEL_D, col, 0.12), STEEL_H] : null; // plate arms are steel through and through
+  const plateCols = tier === 2 ? [mix(STEEL, col, 0.12), mix(STEEL_D, col, 0.12), mix(STEEL_H, STEEL, 0.55)] : null; // plate arms are steel through and through
   const sleeve = c32(plateCols ? plateCols[0] : pal.T), sleeveD = c32(plateCols ? plateCols[1] : pal.t), sleeveH = c32(plateCols ? plateCols[2] : pal.h); const skin = c32(hexToRgb(PAL.s)), skinD = c32(hexToRgb(PAL.S));
   const drawSleeve = (x, y, w, h) => {
     rect(x, y, w, h, sleeve); rect(x, y, 3, h, sleeveD);

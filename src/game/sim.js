@@ -31,6 +31,7 @@ const REVIVE_TIME = 1.5, REVIVE_R2 = 2.6 * 2.6; // seconds to help a teammate up
 const RESPAWN_WAIT = 30; // seconds a downed hero waits before they may give up and respawn at the start on their own
 const BUY_COOLDOWN = 0.8; // seconds between shop purchases for one player
 const FLY_TIME = 4, FLY_COOLDOWN = 2; // Gale Cloak: seconds aloft, and the rest after landing before it works again
+const POISON_FRAC = 0.05; // poison takes 5% of max health a tick
 const SHIELD_STUN = 0.9; // seconds a knight reels after a loaded shot hits its shield
 const FREEZE_TIME = 6, FREEZE_PATH = 6; // seconds frost-arrow ice lasts; how many tiles of water one arrow freezes along its flight
 const HAZARD_TICK = 0.5, ICE_KB = 1.5, SHALLOW_SLOW = 0.75; // how often lava/spikes/vents burn a grounded enemy; how much harder hits shove enemies standing on ice
@@ -272,7 +273,7 @@ class Sim {
       if (!p.alive) continue;
       const L = this.W.levels[p.lvl];
       // hazard tiles
-      if (p.chill > 0) p.chill -= dt;
+      if (p.chill > 0) p.chill -= dt; this.tickPoison(p);
       const t = L.get(Math.floor(p.x), Math.floor(p.y)); const ti = TINFO[t]; const boots = !!p.items.magmaboots;
       if (p.inv <= 0 && !this.flying(p) && ((ti.hurt && !(boots && ti.lava)) || (ti.vent && this.ventPhase() === 2 && !boots))) this.hurtPlayer(p, 1, null); // fliers are above it all
       p.swordMax = Math.max(p.swordMax || 0, p.sword); p.armorMax = Math.max(p.armorMax || 0, p.armor); // best gear ever owned (the inventory lets you wear less)
@@ -337,7 +338,8 @@ class Sim {
       const at = room.at && room.at[ei]; // a hand-built room can pin where each enemy appears
       if (at) { x = room.rx * DSX + at[0]; y = room.ry * DSY + at[1]; } else do {
         x = rnd.range(b.x0, b.x1 - 1) + 0.5; y = rnd.range(b.y0, b.y1 - 1) + 0.5; tries++;
-        if (def.boss && L.kind === 'dungeon') { x = room.rx * DSX + 6.5; y = room.ry * DSY + 2.5; break; }
+        if (def.boss && L.kind === 'dungeon') { x = room.rx * DSX + (def.spawnAt ? def.spawnAt[0] : 6.5); y = room.ry * DSY + (def.spawnAt ? def.spawnAt[1] : 2.5); break; }
+        if (def.swim && tries < 25 && TINFO[L.get(Math.floor(x), Math.floor(y))].water && !TINFO[L.get(Math.floor(x), Math.floor(y))].ocean && dist2(x, y, p.x, p.y) >= 9) break; // frogs like to start in the water
       } while (tries < 40 && (L.solidAt(x, y) || TINFO[L.get(Math.floor(x), Math.floor(y))].hurt || TINFO[L.get(Math.floor(x), Math.floor(y))].pit || dist2(x, y, p.x, p.y) < 9));
       let hp = Math.ceil(def.hp * (def.boss ? 1 + (L.dnum || 1) * 0.35 : tierMul));
       if (def.fixedHp) hp = def.hp;
@@ -433,7 +435,7 @@ class Sim {
       if (e.b && (x < e.b.x0 + 0.2 || y < e.b.y0 + 0.2 || x > e.b.x1 - 0.2 || y > e.b.y1 - 0.2)) return true;
       for (const [ox, oy] of [[-r, -r], [r, -r], [-r, r], [r, r]]) {
         const tx = Math.floor(x + ox), ty = Math.floor(y + oy); const t = L.get(tx, ty); const ti = TINFO[t];
-        if (def && def.fly) { if (ti.solid && !ti.low) return true; } else { if (ti.solid || (avoid && (ti.hurt || ti.pit))) return true; }
+        if (def && def.fly) { if (ti.solid && !ti.low) return true; } else { if ((ti.solid && !(def && def.swim && ti.water && !ti.ocean)) || (avoid && (ti.hurt || ti.pit))) return true; } // swimmers (frogs) go through fresh water
         const pr = L.props[ty * L.w + tx]; if (pr && PROP_INFO[pr].solid) return true;
       }
       return false;
@@ -473,7 +475,7 @@ class Sim {
     if (e.dead) return;
     if (!skipAi) def.ai(this, e, dt, ctx);
     // contact damage
-    if (elite && elite.noContact) return;
+    if ((elite && elite.noContact) || e.sub || e.air) return; // can't bite you from under the water or in mid-air
     for (const pl of Object.values(this.players)) {
       if (!pl.alive || pl.lvl !== e.lvl || pl.inv > 0) continue;
       const rr = this.enemyRadius(e) + 0.28; if (dist2(pl.x, pl.y, e.x, e.y) < rr * rr) this.hurtPlayer(pl, def.dmg * (def.boss ? 1 : e.dmgMul), e);
@@ -485,7 +487,7 @@ class Sim {
     if (def.fly || def.phase || def.boss || e.dormant) return;
     const L = this.W.levels[e.lvl]; const ti = TINFO[L.get(Math.floor(e.x), Math.floor(e.y))];
     if (ti.pit) { this.enemyFalls(e); return; }
-    if (ti.water && !ti.ocean) { this.enemyFalls(e, true); return; } // tide water came back over it
+    if (ti.water && !ti.ocean && !def.swim) { this.enemyFalls(e, true); return; } // tide water came back over it (frogs just swim)
     const burn = (ti.hurt && !(def.hot && ti.lava)) || (ti.vent && this.ventPhase() === 2 && !def.hot);
     if (!burn) { e.hazT = 0; return; }
     e.hazT = (e.hazT || 0) - dt; if (e.hazT > 0) return; e.hazT = HAZARD_TICK;
@@ -502,6 +504,7 @@ class Sim {
   // ---- elites (content/elites.js) ----
   makeElite(e, rnd) {
     const list = Content.elites; let total = 0; for (const d of list) total += d.weight;
+    const no = enemyDef(e.type).noElites; if (no) { const ok = list.filter(d => !no.includes(d.id)); if (!ok.length) return; total = 0; for (const d of ok) total += d.weight; let r2 = rnd() * total; for (const d of ok) { if (r2 < d.weight) { e.elite = d.idx; if (d.apply) d.apply(e, this); return; } r2 -= d.weight; } return; } // e.g. the poison frog is never a giant
     let r = rnd() * total; let pick = list[list.length - 1];
     for (const d of list) { if (r < d.weight) { pick = d; break; } r -= d.weight; }
     e.elite = pick.idx; if (pick.apply) pick.apply(e, this);
@@ -525,6 +528,7 @@ class Sim {
   // opt: pid (who hit it), silver, pierceShield, ignoreIframes, stunOnly. Returns true if the hit landed.
   damageEnemy(e, dmg, src, opt) {
     const def = enemyDef(e.type); opt = opt || {}; if (e.dead || e.spawnFx > 0) return false;
+    if (e.sub || e.air) return false; // under the water, or mid-leap: out of reach
     const atk = opt.pid && this.players[opt.pid]; if (atk && atk.god) dmg *= 3; // god mode hits three times as hard
     if (e.dormant) { this.sfx('clink', e.lvl, e.x, e.y); this.wake(e); return false; }
     if (e.hurt > 0 && !opt.ignoreIframes) return false;
@@ -597,6 +601,13 @@ class Sim {
     if (a && a.alt && d.useAlt) return d.useAlt(this, p, a); // Shift + item: the item's technique, when it has one (otherwise the plain use)
     d.use(this, p, a || {});
   }
+  // Poison: POISON_FRAC of max health every second for 2-5 ticks. A new dose restarts the count. It can't kill.
+  poisonPlayer(p) { if (p.god || !p.alive) return; p.poisonTicks = 2 + Math.floor(Math.random() * 4); p.poisonNext = this.time + 1; this.ev({ t: 'poison', pid: p.id }); }
+  tickPoison(p) {
+    if (!(p.poisonTicks > 0) || this.time < p.poisonNext) return;
+    p.poisonTicks--; p.poisonNext = this.time + 1; if (p.hp > 1) { p.hp = Math.max(1, p.hp - Math.max(1, Math.round(p.maxHp * POISON_FRAC))); this.clearBeam(p); }
+    this.ev({ t: 'poisontick', pid: p.id }); this.sfx('poison', p.lvl, p.x, p.y);
+  }
   flying(p) { return (p.flyUntil || 0) > this.time; }
   // inventory choices: wear a lesser sword or tunic than your best, or fire plain arrows instead of frost ones
   equip(p, a) {
@@ -637,6 +648,7 @@ class Sim {
         if (dist2(p.x, p.y, e.x, e.y) < 0.16) {
           // sword-class shield blocks weak front projectiles when not attacking
           const toP = Math.atan2(e.y - p.y, e.x - p.x);
+          if (def.poison) this.poisonPlayer(p); // poison gets through a shield
           if (p.cls !== 'monk' && def.blockable && Math.abs(angDiff(p.a, toP)) < 0.7) { e.dead = true; this.sfx('clink', e.lvl); this.ev({ t: 'block', pid: p.id }); return; }
           if (def.chill && p.inv <= 0 && !p.god) p.chill = Math.max(p.chill || 0, def.chill);
           this.hurtPlayer(p, e.dmg, e); e.dead = true; return;
@@ -644,7 +656,7 @@ class Sim {
       }
     } else {
       for (const en of this.ents) {
-        if (en.k !== 'en' || en.lvl !== e.lvl || en.dead || e.hitSet[en.id]) continue;
+        if (en.k !== 'en' || en.lvl !== e.lvl || en.dead || e.hitSet[en.id] || en.sub || en.air) continue; // shots pass over a submerged or leaping foe
         const r = this.enemyRadius(en) + 0.2;
         if (dist2(en.x, en.y, e.x, e.y) < r * r) {
           e.hitSet[en.id] = 1;
@@ -723,6 +735,7 @@ class Sim {
     if (e.k === 'en') {
       const def = enemyDef(e.type); spr = e.dormant ? 'statue' : e.type; sc = e.dormant ? 1.1 : def.sc * (e.scMul || 1); z = e.dormant ? 0 : def.z || 0;
       if (def.fly) z += Math.sin(e.t * 6) * 0.06;
+      if (def.sprFor) { const s2 = def.sprFor(e); if (s2) spr = s2; } // e.g. a frog's head poking out of the water
       if (e.hurt > 0) fl |= 1; if (e.stun > 0) fl |= 2; if (def.phase) fl |= 4; if (e.spawnFx > 0) { spr = 'puff'; }
       if (def.view) z += def.view(e);
     }
@@ -739,7 +752,7 @@ class Sim {
     const p = this.players[pid]; if (!p) return null;
     const en = []; for (const e of this.ents) if (e.lvl === p.lvl) en.push(this.entView(e));
     const pl = []; for (const o of Object.values(this.players)) pl.push([o.id, o.lvl, Math.round(o.x * 100) / 100, Math.round(o.y * 100) / 100, Math.round(o.a * 100) / 100, o.color, o.armor, o.cls, o.alive ? 1 : 0, o.atk, o.name, Math.round(o.revive / REVIVE_TIME * 100) / 100, o.hp, o.maxHp, o.reviver || 0]);
-    const me = {}; for (const k of ['lvl', 'hp', 'maxHp', 'gems', 'bombs', 'maxBombs', 'arrows', 'maxArrows', 'swordMax', 'armorMax', 'plainArrows', 'sword', 'armor', 'items', 'potions', 'alive', 'cls', 'sel', 'color', 'name', 'dbg', 'god']) me[k] = p[k]; me.chill = p.chill > 0 ? 1 : 0; me.fly = this.flying(p) ? Math.round((p.flyUntil - this.time) * 10) / 10 : 0; me.respawnIn = p.alive ? 0 : Math.max(0, Math.ceil(RESPAWN_WAIT - (this.time - (p.downAt || 0))));
+    const me = {}; for (const k of ['lvl', 'hp', 'maxHp', 'gems', 'bombs', 'maxBombs', 'arrows', 'maxArrows', 'swordMax', 'armorMax', 'plainArrows', 'sword', 'armor', 'items', 'potions', 'alive', 'cls', 'sel', 'color', 'name', 'dbg', 'god']) me[k] = p[k]; me.chill = p.chill > 0 ? 1 : 0; me.poison = p.poisonTicks > 0 ? p.poisonTicks : 0; me.fly = this.flying(p) ? Math.round((p.flyUntil - this.time) * 10) / 10 : 0; me.respawnIn = p.alive ? 0 : Math.max(0, Math.ceil(RESPAWN_WAIT - (this.time - (p.downAt || 0))));
     return { t: 's', paused: !!this.paused, pausedBy: this.pausedBy, me, pl, en, team: { keys: this.team.keys, maps: this.team.maps, comps: this.team.comps, shards: this.team.shards, done: this.team.done, relics: this.team.relics }, vp: this.ventPhase(), rg: this.rigCodes(p.lvl), fz: this.frozenList(p.lvl), mv: this.modVer, over: this.over > 0 };
   }
   // ---- save ----

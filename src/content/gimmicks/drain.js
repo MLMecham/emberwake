@@ -7,6 +7,7 @@
 //   moat    a moat around an island with the room's prize; only an arrow in the island's eye drains it   [needs the bow]
 //   channel deep water across the room between the door you came in by and every other door; an eye at its
 //           end drains it for a while                                                               [needs the bow]
+// arena: the boss room (the Bog King, enemies/frog.js).
 // The planner keeps the bow reachable without the bow (game/world.js dungeonSolve), so nothing softlocks.
 'use strict';
 defineTexture('switch', (x, y, r, th, ctx) => { const d = Math.max(Math.abs(x - 15.5), Math.abs(y - 15.5)); if (d < 8) return d < 6 ? [230, 200, 60] : [120, 100, 30]; return ctx.vary(th.floor, x, y, 0.15); }, { themed: true });
@@ -78,6 +79,17 @@ defineGimmick('drain', {
       return true;
     }
     return false;
+  },
+  // The Bog King's room: four small platforms, one at each doorway, in deep tide water. Two eyes in opposite corners
+  // drain it all for a while (then you can chase him anywhere). Without the bow you fight from the platform you came in on.
+  arena(L, r, { ix, iy }) {
+    const land = (x, y) => (x >= 5 && x <= 7 && (y <= 2 || y >= 6)) || (y >= 3 && y <= 5 && (x <= 3 || x >= 9));
+    const cells = [], eyes = [[1, 1], [11, 7]];
+    for (let y = 1; y <= 7; y++) for (let x = 1; x <= 11; x++) { if (eyes.some(([ex, ey]) => ex === x && ey === y)) continue; if (land(x, y)) L.set(ix + x, iy + y, TL.DFLOOR); else cells.push([x, y]); }
+    rig(L, r, ix, iy, cells, eyes);
+    // the prize lands on the platform you came in on, so it's always in reach
+    const p = r.parent; const dx = p ? p.rx - r.rx : 0, dy = p ? p.ry - r.ry : 1;
+    r.rewardAt = dy > 0 ? [6.5, 6.5] : dy < 0 ? [6.5, 1.5] : dx < 0 ? [2.5, 4.5] : [10.5, 4.5];
   },
   update(sim, L) { // floor switches drain their room for good
     for (const p of Object.values(sim.players)) {

@@ -31,5 +31,7 @@ Not built yet. Parked here so they don't get lost. Newest at the bottom.
 - Give players a reason to want more bombs later, so the bag's value rises.
 
 ## World
+- **Test the darkness.** Play the dark rooms (Starless Deep) with and without the candle and tune how much the light matters, now that the candle only flames every 4 s.
+- **More grottos and push-open tombs.** Extra hidden grottos, and graves or tombs you push aside to find stairs, so exploring pays off beyond bombing walls.
 - **Salt water.** Tiles marked `salty` never freeze (only the rough southern sea for now). Later: salty pools or a coastal dungeon where frost arrows don't work, so you need another way across.
 - Grottos you've already found still regrow their trees, just differently.

@@ -71,6 +71,8 @@ function handleEvent(e) {
     case 'msg': if (!e.pid || e.pid === me) pushMsg(e.text); break;
     case 'hint': if (e.pid === me) pushMsg(e.text, 2); break;
     case 'sfx': if (e.lvl && e.lvl !== Lc.lvl) break; { let v = 1; if (e.x != null) v = clamp(1.3 - Math.sqrt(dist2(e.x, e.y, Lc.x, Lc.y)) / 14, 0.1, 1); sfx(e.s, v); } break;
+    case 'poison': if (e.pid === me) { Lc.flash = 0.3; Lc.flashC = rgb(150, 60, 210); pushMsg('POISONED!', 1.5); } break;
+    case 'poisontick': if (e.pid === me) { Lc.flash = 0.18; Lc.flashC = rgb(120, 220, 60); } break;
     case 'hurt': if (e.pid === me) { Lc.kx = e.kx; Lc.ky = e.ky; Lc.flash = 0.25; Lc.flashC = rgb(255, 40, 40); Lc.shake = 0.2; sfx('hurt'); if (navigator.vibrate) try { navigator.vibrate(60); } catch (er) { } } break;
     case 'block': if (e.pid === me) { Lc.blockT = 0.32; } break;
     case 'tp': if (e.pid === me) { Lc.lvl = e.lvl; Lc.x = e.x; Lc.y = e.y; Lc.a = e.a; Lc.fade = 0; Lc.pitch = 0; G.smooth = {}; Lc.npcTalked = {}; } break;
@@ -310,10 +312,11 @@ function draw(dt) {
   // pow words
   for (const p of Lc.pow) { const sc = projectPt(cam, p.x, p.y); if (sc) { const c = p.big ? rgb(255, 230, 60) : rgb(255, 255, 255); text(p.word, sc.x - p.word.length * 3, sc.y - 30 - p.t * 30, Math.floor(p.t * 20) & 1 ? c : rgb(255, 80, 40)); } }
   const bossE = ents.find(e => e[8] >= 0);
-  const st = { me, bob: Lc.bob, moveK: Lc.moveK || 0, readyK: Lc.readyK || 0, blockT: Lc.blockT || 0, swing: Lc.swing, punch: Lc.punch, charge: Lc.charge, useFlash: Lc.useFlash, useSpr: Lc.useSpr, level: L, cam, players: snap ? snap.pl : [], myId: G.myId, team: snap ? snap.team : { keys: {}, maps: {}, comps: {}, shards: [], done: [] }, seen: G.seen[L.id] || new Uint8Array(L.w * L.h), seenOW: G.seen.ow || new Uint8Array(1), seenRooms: G.seenRooms, selItem: Lc.sel, pitch: Lc.pitch, lvlKind: L.kind, bossHp: bossE ? bossE[8] : -1, bossName: bossE && enemyDef(bossE[1]) ? enemyDef(bossE[1]).title : null, world: G.world };
+  const st = { me, bob: Lc.bob, moveK: Lc.moveK || 0, readyK: Lc.readyK || 0, blockT: Lc.blockT || 0, swing: Lc.swing, punch: Lc.punch, charge: Lc.charge, useFlash: Lc.useFlash, useSpr: Lc.useSpr, level: L, cam, players: snap ? snap.pl : [], myId: G.myId, team: snap ? snap.team : { keys: {}, maps: {}, comps: {}, shards: [], done: [] }, seen: G.seen[L.id] || new Uint8Array(L.w * L.h), seenOW: G.seen.ow || new Uint8Array(1), seenRooms: G.seenRooms, selItem: Lc.sel, pitch: Lc.pitch, lvlKind: L.kind, bossHp: bossE ? bossE[8] : -1, bossName: bossE ? ((enemyDef(bossE[1]) || enemyDef(String(bossE[1]).replace(/_sub$/, '')) || {}).title || null) : null, world: G.world };
   if (me && !down) drawViewmodel(st);
   if (me && me.cls === 'monk' && me.armor > 0 && !down) { const ac = me.armor === 2 ? rgb(255, 248, 200) : rgb(100, 190, 255); for (let i = 0; i < 18; i++) { const side = Math.random() < 0.5; const x = side ? (Math.random() < 0.5 ? Math.random() * 10 : R.W - Math.random() * 10) : Math.random() * R.W; const y = side ? Math.random() * R.H : R.H - Math.random() * 8; px(x, y, ac); } }
   if (Lc.dashT > 0) rectA(0, 0, R.W, R.H, rgb(200, 240, 255), 0.15);
+  if (me && me.poison > 0 && !down) { const a = 0.1 + 0.05 * Math.sin(R.time * 6); rectA(0, 0, R.W, 6, rgb(120, 200, 60), a * 3); rectA(0, R.H - 6, R.W, 6, rgb(120, 200, 60), a * 3); rectA(0, 0, 6, R.H, rgb(150, 70, 210), a * 3); rectA(R.W - 6, 0, 6, R.H, rgb(150, 70, 210), a * 3); } // poisoned: a sickly green and purple edge
   if (me && me.fly > 0 && !down) { // aloft: wind streaks at the edges and a bar for the time left (it blinks near the end)
     for (let i = 0; i < 26; i++) { const y = (i * 37 + R.time * 260) % R.H, x = i % 2 ? (i * 13) % 40 : R.W - 1 - (i * 13) % 40; rectA(x, y, 1, 8, rgb(230, 245, 255), 0.5); }
     const k = Math.min(1, me.fly / FLY_TIME); if (me.fly > 1 || Math.floor(R.time * 8) & 1) { rect(R.W / 2 - 30, R.H - 34, 60, 3, rgb(40, 50, 70)); rect(R.W / 2 - 30, R.H - 34, Math.round(60 * k), 3, rgb(220, 240, 255)); }

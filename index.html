@@ -250,6 +250,7 @@ function uid() { return _uid++; }
 
 // Developer names: only heroes with these names can use debug mode (title-screen DEBUG button, pause-menu toggle, Warp Stone).
 const DEV_NAMES = ['MITCH', 'LOGAN'];
+const CANDLE_COOLDOWN = 4; // seconds between candle flames (items/candle.js)
 const ARROWS_START = 15; // arrows a hero can carry before any quiver (items/techniques.js)
 function isDevName(name) { return DEV_NAMES.includes(String(name || '').trim().toUpperCase()); }
 
@@ -364,7 +365,7 @@ function tunicPal(hex, tier) {
   const base = hexToRgb(hex);
   if (tier === 0) return { T: base, t: shade(base, 0.6), h: mix(base, [255, 255, 255], 0.4) };
   if (tier === 1) { const m = mix(base, STEEL, 0.45); return { T: m, t: mix(shade(base, 0.55), STEEL_D, 0.5), h: mix(STEEL_H, base, 0.2) }; }
-  const m = mix(STEEL, base, 0.22); return { T: m, t: mix(base, [20, 20, 30], 0.35), h: STEEL_H };
+  const m = mix(STEEL, base, 0.22); return { T: m, t: mix(base, [20, 20, 30], 0.35), h: mix(mix(STEEL_H, STEEL, 0.55), base, 0.15) }; // plate shine, kept soft
 }
 // chainmail rings, tinted toward the tunic color: a bright ring and the dark gaps between rings
 function chainCols(hex) { const base = hexToRgb(hex); return { ring: mix(STEEL_H, base, 0.38), gap: mix(shade(base, 0.4), STEEL_D, 0.45) }; }
@@ -389,7 +390,7 @@ function armorOverlay(s, hex, tier, dir) {
   // plume in the tunic color, and pauldrons that square off the shoulders
   const pal = tunicPal(hex, tier); const tc = u(pal.T), td = u(pal.t), hc = u(pal.h); const steel = (v) => v === tc || v === td || v === hc;
   const P = (x, y) => (x >= 0 && y >= 0 && x < s.w && y < s.h) ? s.px[y * s.w + x] : 0; const S = (x, y, c) => { if (x >= 0 && y >= 0 && x < s.w && y < s.h) s.px[y * s.w + x] = c; };
-  for (let y = 0; y < s.h; y++) for (let x = 0; x < s.w; x++) if (P(x, y) === tc && (x + y * 3) % 7 === 0) S(x, y, hc); // glints
+  for (let y = 0; y < s.h; y++) for (let x = 0; x < s.w; x++) if (P(x, y) === tc && (x + y * 3) % 11 === 0) S(x, y, hc); // a few soft glints
   const cT = u(cloth.T), cD = u(cloth.t), gold = u([248, 216, 64]);
   const cols = dir === 'side' ? [9] : [7, 8];
   for (let y = 7; y <= 12; y++) for (const x of cols) if (steel(P(x, y))) S(x, y, x === cols[cols.length - 1] && cols.length > 1 ? cD : cT); // tabard
@@ -883,6 +884,50 @@ defineSprite('puff', [
   '................',
   '................',
 ]);
+
+// ---- src/content/sprites/frogs.js ----
+// ===== content/sprites/frogs.js : the frog's head poking out of the water, and bubbles =====
+// Underwater sprites are named <enemy id>_sub, so the boss bar can still tell who it is (ui/main.js).
+'use strict';
+defineSprite('frog_sub', [
+  '................',
+  '................',
+  '................',
+  '................',
+  '................',
+  '................',
+  '................',
+  '................',
+  '................',
+  '................',
+  '...kkk....kkk...',
+  '..kwkwk..kwkwk..',
+  '..klllkkkklllk..',
+  '.cCvcCcvcCcvcCc.',
+  '..cccvccccvccc..',
+  '................',
+]);
+defineSpriteVariant('frog_poison_sub', 'frog_sub', { l: '#b048e0', e: '#5a1a80' });
+defineSpriteVariant('bogking_sub', 'frog_sub', { l: '#5f8f3a', e: '#2c4a1c' });
+defineSprite('bubble', [
+  '................',
+  '................',
+  '................',
+  '................',
+  '................',
+  '......cccc......',
+  '.....cvvvvc.....',
+  '....cvwvvvvc....',
+  '....cvvvvvvc....',
+  '....cvvvvvvc....',
+  '.....cvvvvc.....',
+  '......cccc......',
+  '................',
+  '................',
+  '................',
+  '................',
+]);
+defineSpriteVariant('bubble_p', 'bubble', { c: '#9a40c8', v: '#c8f080', w: '#f0ffd0' });
 
 // ---- src/content/sprites/frontier.js ----
 // ===== content/sprites/frontier.js : art for the Frozen Reach, the Cinder Wastes and the dragons =====
@@ -2337,6 +2382,9 @@ defineProjectile({ id: 'fire', spr: 'fireball', spd: 4.5, dmg: 2 });
 // chill: seconds the hero is slowed when it hits
 defineProjectile({ id: 'icebolt', spr: 'icebolt', spd: 5, dmg: 1, sc: 0.7, chill: 1.5 });
 defineProjectile({ id: 'icebreath', spr: 'icebolt', spd: 6.5, dmg: 2, sc: 0.75, chill: 2.5 });
+// frogs (enemies/frog.js): a slow bubble; the poison one poisons even when a shield stops it (game/sim.js poisonPlayer)
+defineProjectile({ id: 'bubble', spr: 'bubble', spd: 3.4, dmg: 1, sc: 0.7, blockable: true, range: 7 });
+defineProjectile({ id: 'poisonbubble', spr: 'bubble_p', spd: 3.4, dmg: 1, sc: 0.7, blockable: true, range: 7, poison: true });
 defineProjectile({ id: 'firebreath', spr: 'fireball', spd: 6.5, dmg: 2, sc: 0.85 });
 // hero shots
 defineProjectile({ id: 'beam', spr: 'beam', spd: 9, dmg: 1, sc: 0.8, player: true, range: 7, beam: true });
@@ -2453,6 +2501,7 @@ defineGimmick('darkness', {
 //   moat    a moat around an island with the room's prize; only an arrow in the island's eye drains it   [needs the bow]
 //   channel deep water across the room between the door you came in by and every other door; an eye at its
 //           end drains it for a while                                                               [needs the bow]
+// arena: the boss room (the Bog King, enemies/frog.js).
 // The planner keeps the bow reachable without the bow (game/world.js dungeonSolve), so nothing softlocks.
 'use strict';
 defineTexture('switch', (x, y, r, th, ctx) => { const d = Math.max(Math.abs(x - 15.5), Math.abs(y - 15.5)); if (d < 8) return d < 6 ? [230, 200, 60] : [120, 100, 30]; return ctx.vary(th.floor, x, y, 0.15); }, { themed: true });
@@ -2524,6 +2573,17 @@ defineGimmick('drain', {
       return true;
     }
     return false;
+  },
+  // The Bog King's room: four small platforms, one at each doorway, in deep tide water. Two eyes in opposite corners
+  // drain it all for a while (then you can chase him anywhere). Without the bow you fight from the platform you came in on.
+  arena(L, r, { ix, iy }) {
+    const land = (x, y) => (x >= 5 && x <= 7 && (y <= 2 || y >= 6)) || (y >= 3 && y <= 5 && (x <= 3 || x >= 9));
+    const cells = [], eyes = [[1, 1], [11, 7]];
+    for (let y = 1; y <= 7; y++) for (let x = 1; x <= 11; x++) { if (eyes.some(([ex, ey]) => ex === x && ey === y)) continue; if (land(x, y)) L.set(ix + x, iy + y, TL.DFLOOR); else cells.push([x, y]); }
+    rig(L, r, ix, iy, cells, eyes);
+    // the prize lands on the platform you came in on, so it's always in reach
+    const p = r.parent; const dx = p ? p.rx - r.rx : 0, dy = p ? p.ry - r.ry : 1;
+    r.rewardAt = dy > 0 ? [6.5, 6.5] : dy < 0 ? [6.5, 1.5] : dx < 0 ? [2.5, 4.5] : [10.5, 4.5];
   },
   update(sim, L) { // floor switches drain their room for good
     for (const p of Object.values(sim.players)) {
@@ -2860,6 +2920,129 @@ headDef({
     special(sim, e) { for (let i = 0; i < 2; i++) sim.spawnMinion(e, 'bat'); } }),
   onDeath(sim, e) { lastHead(sim, e, 'THE HOLLOW HEAD FALLS... AND THE STOLEN LIGHT RETURNS.'); },
 });
+
+})();
+// ---- src/content/enemies/frog.js ----
+(function () {
+// ===== content/enemies/frog.js : frogs, the poison frog, and the Bog King (boss of the Sunken Stair) =====
+// Frogs swim (def.swim): water is open to them, and they never drown. In the water they hide under the surface
+// (e.sub: nothing can hit them), swim to another spot in the same body of water, then hop up and spit a bubble.
+// On land they're weak hoppers, like a slime, that head back to the water when it's close.
+'use strict';
+const FROG_ROWS = [
+  '................',
+  '................',
+  '................',
+  '................',
+  '...kkk....kkk...',
+  '..kwwwk..kwwwk..',
+  '..kwkwkkkkwkwk..',
+  '.kleelllllleelk.',
+  'kllllllllllllllk',
+  'klkkkkkkkkkkkklk',
+  'kllllzzzzzzllllk',
+  '.kllzzzzzzzzllk.',
+  'kllkllzzzzllkllk',
+  'kekkkkekkekkkkek',
+  '................',
+  '................',
+];
+const waterAt = (L, x, y) => { const ti = TINFO[L.get(Math.floor(x), Math.floor(y))]; return !!(ti.water && !ti.ocean); };
+// the water tiles joined to (x, y), up to `max` of them (centers), optionally kept inside bounds b
+function pondFrom(L, x, y, max, b) {
+  const out = [], seen = new Set(), st = [[Math.floor(x), Math.floor(y)]];
+  while (st.length && out.length < max) {
+    const [tx, ty] = st.shift(); const k = ty * L.w + tx; if (seen.has(k)) continue; seen.add(k);
+    if (!waterAt(L, tx + 0.5, ty + 0.5)) continue; if (b && (tx < b.x0 || ty < b.y0 || tx >= b.x1 || ty >= b.y1)) continue;
+    out.push([tx + 0.5, ty + 0.5]); st.push([tx + 1, ty], [tx - 1, ty], [tx, ty + 1], [tx, ty - 1]);
+  }
+  return out;
+}
+function nearWater(L, x, y, r) { for (let d = 1; d <= r; d++) for (let a = 0; a < 8; a++) { const ax = x + Math.cos(a * Math.PI / 4) * d, ay = y + Math.sin(a * Math.PI / 4) * d; if (waterAt(L, ax, ay)) return [ax, ay]; } return null; }
+// pick a spot in the pond a few tiles from the hero (so the frog pops up within spitting range)
+function pickSpot(L, e, p, near, far) {
+  const pond = pondFrom(L, e.x, e.y, 160, e.b);
+  const good = p ? pond.filter(([x, y]) => { const d = Math.hypot(x - p.x, y - p.y); return d >= near && d <= far; }) : [];
+  const list = good.length ? good : pond; return list.length ? list[Math.floor(Math.random() * list.length)] : null;
+}
+const spit = (sim, e, p, proj, spread) => {
+  if (!p) return; const a = Math.atan2(p.y - e.y, p.x - e.x); const d = Content.projectiles[proj].dmg * (enemyDef(e.type).boss ? 1 : e.dmgMul);
+  for (const s of spread || [0]) sim.fireProj(proj, e.lvl, e.x, e.y, a + s, 'e', null, { dmg: d });
+  sim.sfx('bubble', e.lvl, e.x, e.y);
+};
+// in the water: hide, swim, surface, spit, dive. Returns true while it handled the frog (it's in water).
+function swimCycle(sim, e, dt, p, spd, opt) {
+  const L = sim.W.levels[e.lvl]; if (!waterAt(L, e.x, e.y)) return false;
+  if (e.st === 0) { // under: swim to a new spot in the same water
+    e.sub = true;
+    if (!e.tgt) { e.tgt = pickSpot(L, e, p, opt.near, opt.far); e.tm = 1.2 + Math.random() * 1.2; }
+    if (e.tgt) { const dx = e.tgt[0] - e.x, dy = e.tgt[1] - e.y, d = Math.hypot(dx, dy); if (d > 0.15) { const s = Math.min(d, spd * 1.6 * dt); const nx = e.x + dx / d * s, ny = e.y + dy / d * s; if (waterAt(L, nx, ny)) { e.x = nx; e.y = ny; } else e.tgt = null; } }
+    if (e.tm <= 0) { if (p && dist2(p.x, p.y, e.x, e.y) < opt.range * opt.range) { e.st = 1; e.tm = opt.rise; e.sub = false; sim.sfx('splash', e.lvl, e.x, e.y); } else e.tgt = null; }
+  } else if (e.st === 1) { if (e.tm <= 0) { spit(sim, e, p, opt.proj, opt.spread); e.st = 2; e.tm = opt.up; } } // hopping up out of the water
+  else if (e.st === 2) { if (e.tm <= 0) { e.st = 0; e.tgt = null; e.sub = true; sim.sfx('splash', e.lvl, e.x, e.y); } } // a moment in the open, then back under
+  return true;
+}
+// on land: hop like a slime (half the time toward the hero), and back into the water when it's close
+function landHop(sim, e, dt, p, spd, def) {
+  e.sub = false; if (e.st !== 0) e.st = 0;
+  const L = sim.W.levels[e.lvl];
+  if (e.tm <= 0) { e.tm = 0.9 + Math.random() * 0.6; let a = p && Math.random() < 0.6 ? Math.atan2(p.y - e.y, p.x - e.x) + (Math.random() - 0.5) : Math.random() * TAU; const w = nearWater(L, e.x, e.y, 2); if (w && Math.random() < 0.45) a = Math.atan2(w[1] - e.y, w[0] - e.x); e.f = a; e.hop = 0.4; }
+  if (e.hop > 0) { e.hop -= dt; sim.moveEnt(e, Math.cos(e.f) * spd * 2 * dt, Math.sin(e.f) * spd * 2 * dt, def); }
+}
+const frogAi = (proj) => function (sim, e, dt, { p, spd, def }) {
+  if (!swimCycle(sim, e, dt, p, spd, { proj, near: 1.8, far: 5, range: 9, rise: 0.45, up: 0.7 })) landHop(sim, e, dt, p, spd, def);
+};
+const frogView = (e) => e.sub ? -0.12 : e.st === 1 ? 0.3 * Math.sin((1 - Math.max(0, e.tm) / 0.45) * Math.PI) : e.hop > 0 ? 0.15 * Math.sin((0.4 - e.hop) / 0.4 * Math.PI) : 0;
+defineEnemy({
+  id: 'frog', hp: 1, spd: 1.4, dmg: 1, r: 0.32, sc: 0.75, swim: true,
+  spawns: { biomes: ['lake'], dungeons: [3] },
+  ai: frogAi('bubble'), view: frogView, sprFor: (e) => e.sub ? 'frog_sub' : null,
+  anim: { fps: 5, frames: (s, kit) => [s, kit.squash(s, 1.1)] },
+  sprite: FROG_ROWS,
+});
+// POISON FROG: its bubble poisons (projectiles.js 'poisonbubble'), even through a shield. Never comes as a giant.
+defineEnemy(Object.assign({}, enemyDef('frog'), {
+  id: 'frog_poison', ai: frogAi('poisonbubble'), sprFor: (e) => e.sub ? 'frog_poison_sub' : null, noElites: ['giant'],
+  pal: { l: '#b048e0', e: '#5a1a80', z: '#f8d840' }, spawns: { biomes: ['lake'], dungeons: [3, 7] },
+}));
+// THE BOG KING. Phase 1: hides in the water, surfaces near you and spits a fan of bubbles; three hits drive him out.
+// Phase 2 (or straight away if the room is drained): leaps from platform to platform (anywhere, once the water's gone),
+// landing with a ring of bubbles, and sits still for a moment after each landing.
+const LEAP_TIME = 0.9;
+function roomHasWater(sim, e) { const L = sim.W.levels[e.lvl]; if (e.waterAt != null && sim.time - e.waterAt < 0.5) return e.hasWater; e.waterAt = sim.time; const b = e.b; let w = false; for (let y = b.y0; y < b.y1 && !w; y++) for (let x = b.x0; x < b.x1; x++) if (waterAt(L, x + 0.5, y + 0.5)) { w = true; break; } return (e.hasWater = w); }
+function leapTarget(sim, e, p) {
+  const L = sim.W.levels[e.lvl]; const b = e.b; const wet = roomHasWater(sim, e); const spots = [];
+  for (let y = b.y0; y < b.y1; y++) for (let x = b.x0; x < b.x1; x++) { const cx = x + 0.5, cy = y + 0.5; if (L.solidAt(cx, cy) || (wet && waterAt(L, cx, cy)) || TINFO[L.get(x, y)].hurt) continue; if (dist2(cx, cy, e.x, e.y) < 2.5) continue; spots.push([cx, cy]); }
+  if (!spots.length) return null;
+  const near = p ? spots.filter(([x, y]) => dist2(x, y, p.x, p.y) < 9) : [];
+  const list = near.length && Math.random() < 0.6 ? near : spots; return list[Math.floor(Math.random() * list.length)];
+}
+defineEnemy(Object.assign({}, enemyDef('frog'), {
+  id: 'bogking', title: 'THE BOG KING', boss: true, bossOf: [3], hp: 9, spd: 1.8, dmg: 2, r: 0.75, sc: 1.9,
+  spawns: {}, spawnAt: [6.5, 4.5], pal: { l: '#5f8f3a', e: '#2c4a1c', z: '#d8c890' }, sprFor: (e) => e.sub ? 'bogking_sub' : null,
+  onDamage(sim, e) { if (e.ph === 0 && ++e.hits >= 3) driveOut(sim, e); },
+  view: (e) => e.air ? 1.4 * Math.sin(Math.min(1, e.airT / LEAP_TIME) * Math.PI) : frogView(e),
+  ai(sim, e, dt, { p, spd, def }) {
+    if (e.ph == null) { e.ph = 0; e.hits = 0; }
+    if (e.ph === 0) {
+      if (!roomHasWater(sim, e)) return driveOut(sim, e); // nowhere to hide
+      if (!swimCycle(sim, e, dt, p, spd, { proj: 'bubble', spread: [-0.35, 0, 0.35], near: 0.8, far: 2.2, range: 12, rise: 0.5, up: 1.4 } /* pops up right beside your platform, within sword reach */)) { e.st = 0; e.tgt = pickSpot(sim.W.levels[e.lvl], e, p, 1, 99); if (e.tgt) { e.x = e.tgt[0]; e.y = e.tgt[1]; } } // stranded on land: slip back in
+      return;
+    }
+    if (e.air) { // mid-leap: fly in a straight line to the landing spot
+      e.airT += dt; const k = Math.min(1, e.airT / LEAP_TIME); e.x = lerp(e.lx, e.tx, k); e.y = lerp(e.ly, e.ty, k);
+      if (k >= 1) { e.air = false; e.tm = 1.3; sim.sfx('boom', e.lvl, e.x, e.y); for (let i = 0; i < 8; i++) sim.fireProj('bubble', e.lvl, e.x, e.y, i * Math.PI / 4 + 0.2, 'e', null, { dmg: 1 }); }
+      return;
+    }
+    e.sub = false;
+    if (e.tm <= 0.6 && !e.spat) { e.spat = true; spit(sim, e, p, 'bubble', [-0.2, 0.2]); }
+    if (e.tm <= 0) { const t = leapTarget(sim, e, p); if (t) { e.air = true; e.airT = 0; e.lx = e.x; e.ly = e.y; e.tx = t[0]; e.ty = t[1]; e.spat = false; sim.sfx('croak', e.lvl, e.x, e.y); } else e.tm = 0.8; }
+  },
+}));
+function driveOut(sim, e) {
+  e.ph = 1; e.sub = false; e.st = 0; e.tm = 0.4; sim.sfx('croak', e.lvl, e.x, e.y); sim.msg('THE BOG KING CLIMBS OUT OF THE WATER!');
+  for (let i = 0; i < 2; i++) sim.spawnMinion(e, 'frog');
+}
 
 })();
 // ---- src/content/enemies/frostling.js ----
@@ -3209,7 +3392,7 @@ defineEnemy({
 defineEnemy({
   id: 'spider',
   hp: 8, spd: 3.2, dmg: 2, r: 0.6, sc: 1.5, boss: true,
-  bossOf: [3, 6],
+  bossOf: [6], // (the Sunken Stair has the Bog King now: enemies/frog.js)
   ai: AI.lunge(0.55, 0.5, 1.1),
   anim: { fps: 9, frames: (s, kit) => [s, kit.shearRows(kit.shearRows(s, 2, 5, 1), 10, 13, -1), kit.shearRows(kit.shearRows(s, 2, 5, -1), 10, 13, 1)] },
   sprite: [
@@ -3501,7 +3684,9 @@ defineItem({
   full: (p) => !!p.items.candle,
   give(sim, p, ctx) { p.items.candle = true; p.sel = 'candle'; ctx.banner(); },
   use(sim, p) {
+    if (sim.time < (p.candleReady || 0)) return; // one flame every CANDLE_COOLDOWN seconds (it's a light, not a weapon)
     if (sim.ents.some(e => e.k === 'proj' && e.pid === p.id && (e.type === 'candle' || e.type === 'palm'))) return;
+    p.candleReady = sim.time + CANDLE_COOLDOWN;
     sim.fireProj(p.cls === 'monk' ? 'palm' : 'candle', p.lvl, p.x, p.y, p.a, 'p', p.id, {}); sim.sfx('fire', p.lvl);
   },
 });
@@ -4282,7 +4467,7 @@ function genDungeon(W, d, rnd) {
     const ictx = Object.assign({}, gctx, { ix, iy, set: (x, y, t) => L.set(ix + x, iy + y, typeof t === 'string' ? TL[t] : t), prop: (x, y, pr) => { L.props[L.idx(ix + x, iy + y)] = pr; }, sign });
     if (r === start) { if (intro) intro.g.intro.start(L, r, ictx); L.set(ix + 6, iy + DSY, TL.DEXIT); continue; }
     if (r.intro) { intro.g.intro.room(L, r, ictx); continue; }
-    if (r.boss) { r.enemies = def.bossParty ? def.bossParty.slice() : [r.boss]; if (d >= 4 && !def.bossParty && pool.length) r.enemies.push(rnd.pick(pool)); r.shutter = true; if (def.bossEye) bossEyeAlcove(L, r, def.bossEye); continue; }
+    if (r.boss) { r.enemies = def.bossParty ? def.bossParty.slice() : [r.boss]; if (d >= 4 && !def.bossParty && pool.length) r.enemies.push(rnd.pick(pool)); r.shutter = true; if (def.bossEye) bossEyeAlcove(L, r, def.bossEye); for (const g of gimmicks) if (g.arena) g.arena(L, r, ictx); continue; }
     const lane = (x, y) => x === 6 || y === 4; // keep the cross through each room's doors clear
     const rc = Object.assign({}, gctx, { ix, iy, lane, set: (x, y, t) => L.set(ix + x, iy + y, typeof t === 'string' ? TL[t] : t), prop: (x, y, pr) => { L.props[L.idx(ix + x, iy + y)] = pr; } });
     let decorated = false; for (const g of gimmicks) if (g.room && g.room(L, r, rc)) decorated = true;
@@ -4361,6 +4546,7 @@ const REVIVE_TIME = 1.5, REVIVE_R2 = 2.6 * 2.6; // seconds to help a teammate up
 const RESPAWN_WAIT = 30; // seconds a downed hero waits before they may give up and respawn at the start on their own
 const BUY_COOLDOWN = 0.8; // seconds between shop purchases for one player
 const FLY_TIME = 4, FLY_COOLDOWN = 2; // Gale Cloak: seconds aloft, and the rest after landing before it works again
+const POISON_FRAC = 0.05; // poison takes 5% of max health a tick
 const SHIELD_STUN = 0.9; // seconds a knight reels after a loaded shot hits its shield
 const FREEZE_TIME = 6, FREEZE_PATH = 6; // seconds frost-arrow ice lasts; how many tiles of water one arrow freezes along its flight
 const HAZARD_TICK = 0.5, ICE_KB = 1.5, SHALLOW_SLOW = 0.75; // how often lava/spikes/vents burn a grounded enemy; how much harder hits shove enemies standing on ice
@@ -4602,7 +4788,7 @@ class Sim {
       if (!p.alive) continue;
       const L = this.W.levels[p.lvl];
       // hazard tiles
-      if (p.chill > 0) p.chill -= dt;
+      if (p.chill > 0) p.chill -= dt; this.tickPoison(p);
       const t = L.get(Math.floor(p.x), Math.floor(p.y)); const ti = TINFO[t]; const boots = !!p.items.magmaboots;
       if (p.inv <= 0 && !this.flying(p) && ((ti.hurt && !(boots && ti.lava)) || (ti.vent && this.ventPhase() === 2 && !boots))) this.hurtPlayer(p, 1, null); // fliers are above it all
       p.swordMax = Math.max(p.swordMax || 0, p.sword); p.armorMax = Math.max(p.armorMax || 0, p.armor); // best gear ever owned (the inventory lets you wear less)
@@ -4667,7 +4853,8 @@ class Sim {
       const at = room.at && room.at[ei]; // a hand-built room can pin where each enemy appears
       if (at) { x = room.rx * DSX + at[0]; y = room.ry * DSY + at[1]; } else do {
         x = rnd.range(b.x0, b.x1 - 1) + 0.5; y = rnd.range(b.y0, b.y1 - 1) + 0.5; tries++;
-        if (def.boss && L.kind === 'dungeon') { x = room.rx * DSX + 6.5; y = room.ry * DSY + 2.5; break; }
+        if (def.boss && L.kind === 'dungeon') { x = room.rx * DSX + (def.spawnAt ? def.spawnAt[0] : 6.5); y = room.ry * DSY + (def.spawnAt ? def.spawnAt[1] : 2.5); break; }
+        if (def.swim && tries < 25 && TINFO[L.get(Math.floor(x), Math.floor(y))].water && !TINFO[L.get(Math.floor(x), Math.floor(y))].ocean && dist2(x, y, p.x, p.y) >= 9) break; // frogs like to start in the water
       } while (tries < 40 && (L.solidAt(x, y) || TINFO[L.get(Math.floor(x), Math.floor(y))].hurt || TINFO[L.get(Math.floor(x), Math.floor(y))].pit || dist2(x, y, p.x, p.y) < 9));
       let hp = Math.ceil(def.hp * (def.boss ? 1 + (L.dnum || 1) * 0.35 : tierMul));
       if (def.fixedHp) hp = def.hp;
@@ -4763,7 +4950,7 @@ class Sim {
       if (e.b && (x < e.b.x0 + 0.2 || y < e.b.y0 + 0.2 || x > e.b.x1 - 0.2 || y > e.b.y1 - 0.2)) return true;
       for (const [ox, oy] of [[-r, -r], [r, -r], [-r, r], [r, r]]) {
         const tx = Math.floor(x + ox), ty = Math.floor(y + oy); const t = L.get(tx, ty); const ti = TINFO[t];
-        if (def && def.fly) { if (ti.solid && !ti.low) return true; } else { if (ti.solid || (avoid && (ti.hurt || ti.pit))) return true; }
+        if (def && def.fly) { if (ti.solid && !ti.low) return true; } else { if ((ti.solid && !(def && def.swim && ti.water && !ti.ocean)) || (avoid && (ti.hurt || ti.pit))) return true; } // swimmers (frogs) go through fresh water
         const pr = L.props[ty * L.w + tx]; if (pr && PROP_INFO[pr].solid) return true;
       }
       return false;
@@ -4803,7 +4990,7 @@ class Sim {
     if (e.dead) return;
     if (!skipAi) def.ai(this, e, dt, ctx);
     // contact damage
-    if (elite && elite.noContact) return;
+    if ((elite && elite.noContact) || e.sub || e.air) return; // can't bite you from under the water or in mid-air
     for (const pl of Object.values(this.players)) {
       if (!pl.alive || pl.lvl !== e.lvl || pl.inv > 0) continue;
       const rr = this.enemyRadius(e) + 0.28; if (dist2(pl.x, pl.y, e.x, e.y) < rr * rr) this.hurtPlayer(pl, def.dmg * (def.boss ? 1 : e.dmgMul), e);
@@ -4815,7 +5002,7 @@ class Sim {
     if (def.fly || def.phase || def.boss || e.dormant) return;
     const L = this.W.levels[e.lvl]; const ti = TINFO[L.get(Math.floor(e.x), Math.floor(e.y))];
     if (ti.pit) { this.enemyFalls(e); return; }
-    if (ti.water && !ti.ocean) { this.enemyFalls(e, true); return; } // tide water came back over it
+    if (ti.water && !ti.ocean && !def.swim) { this.enemyFalls(e, true); return; } // tide water came back over it (frogs just swim)
     const burn = (ti.hurt && !(def.hot && ti.lava)) || (ti.vent && this.ventPhase() === 2 && !def.hot);
     if (!burn) { e.hazT = 0; return; }
     e.hazT = (e.hazT || 0) - dt; if (e.hazT > 0) return; e.hazT = HAZARD_TICK;
@@ -4832,6 +5019,7 @@ class Sim {
   // ---- elites (content/elites.js) ----
   makeElite(e, rnd) {
     const list = Content.elites; let total = 0; for (const d of list) total += d.weight;
+    const no = enemyDef(e.type).noElites; if (no) { const ok = list.filter(d => !no.includes(d.id)); if (!ok.length) return; total = 0; for (const d of ok) total += d.weight; let r2 = rnd() * total; for (const d of ok) { if (r2 < d.weight) { e.elite = d.idx; if (d.apply) d.apply(e, this); return; } r2 -= d.weight; } return; } // e.g. the poison frog is never a giant
     let r = rnd() * total; let pick = list[list.length - 1];
     for (const d of list) { if (r < d.weight) { pick = d; break; } r -= d.weight; }
     e.elite = pick.idx; if (pick.apply) pick.apply(e, this);
@@ -4855,6 +5043,7 @@ class Sim {
   // opt: pid (who hit it), silver, pierceShield, ignoreIframes, stunOnly. Returns true if the hit landed.
   damageEnemy(e, dmg, src, opt) {
     const def = enemyDef(e.type); opt = opt || {}; if (e.dead || e.spawnFx > 0) return false;
+    if (e.sub || e.air) return false; // under the water, or mid-leap: out of reach
     const atk = opt.pid && this.players[opt.pid]; if (atk && atk.god) dmg *= 3; // god mode hits three times as hard
     if (e.dormant) { this.sfx('clink', e.lvl, e.x, e.y); this.wake(e); return false; }
     if (e.hurt > 0 && !opt.ignoreIframes) return false;
@@ -4927,6 +5116,13 @@ class Sim {
     if (a && a.alt && d.useAlt) return d.useAlt(this, p, a); // Shift + item: the item's technique, when it has one (otherwise the plain use)
     d.use(this, p, a || {});
   }
+  // Poison: POISON_FRAC of max health every second for 2-5 ticks. A new dose restarts the count. It can't kill.
+  poisonPlayer(p) { if (p.god || !p.alive) return; p.poisonTicks = 2 + Math.floor(Math.random() * 4); p.poisonNext = this.time + 1; this.ev({ t: 'poison', pid: p.id }); }
+  tickPoison(p) {
+    if (!(p.poisonTicks > 0) || this.time < p.poisonNext) return;
+    p.poisonTicks--; p.poisonNext = this.time + 1; if (p.hp > 1) { p.hp = Math.max(1, p.hp - Math.max(1, Math.round(p.maxHp * POISON_FRAC))); this.clearBeam(p); }
+    this.ev({ t: 'poisontick', pid: p.id }); this.sfx('poison', p.lvl, p.x, p.y);
+  }
   flying(p) { return (p.flyUntil || 0) > this.time; }
   // inventory choices: wear a lesser sword or tunic than your best, or fire plain arrows instead of frost ones
   equip(p, a) {
@@ -4967,6 +5163,7 @@ class Sim {
         if (dist2(p.x, p.y, e.x, e.y) < 0.16) {
           // sword-class shield blocks weak front projectiles when not attacking
           const toP = Math.atan2(e.y - p.y, e.x - p.x);
+          if (def.poison) this.poisonPlayer(p); // poison gets through a shield
           if (p.cls !== 'monk' && def.blockable && Math.abs(angDiff(p.a, toP)) < 0.7) { e.dead = true; this.sfx('clink', e.lvl); this.ev({ t: 'block', pid: p.id }); return; }
           if (def.chill && p.inv <= 0 && !p.god) p.chill = Math.max(p.chill || 0, def.chill);
           this.hurtPlayer(p, e.dmg, e); e.dead = true; return;
@@ -4974,7 +5171,7 @@ class Sim {
       }
     } else {
       for (const en of this.ents) {
-        if (en.k !== 'en' || en.lvl !== e.lvl || en.dead || e.hitSet[en.id]) continue;
+        if (en.k !== 'en' || en.lvl !== e.lvl || en.dead || e.hitSet[en.id] || en.sub || en.air) continue; // shots pass over a submerged or leaping foe
         const r = this.enemyRadius(en) + 0.2;
         if (dist2(en.x, en.y, e.x, e.y) < r * r) {
           e.hitSet[en.id] = 1;
@@ -5053,6 +5250,7 @@ class Sim {
     if (e.k === 'en') {
       const def = enemyDef(e.type); spr = e.dormant ? 'statue' : e.type; sc = e.dormant ? 1.1 : def.sc * (e.scMul || 1); z = e.dormant ? 0 : def.z || 0;
       if (def.fly) z += Math.sin(e.t * 6) * 0.06;
+      if (def.sprFor) { const s2 = def.sprFor(e); if (s2) spr = s2; } // e.g. a frog's head poking out of the water
       if (e.hurt > 0) fl |= 1; if (e.stun > 0) fl |= 2; if (def.phase) fl |= 4; if (e.spawnFx > 0) { spr = 'puff'; }
       if (def.view) z += def.view(e);
     }
@@ -5069,7 +5267,7 @@ class Sim {
     const p = this.players[pid]; if (!p) return null;
     const en = []; for (const e of this.ents) if (e.lvl === p.lvl) en.push(this.entView(e));
     const pl = []; for (const o of Object.values(this.players)) pl.push([o.id, o.lvl, Math.round(o.x * 100) / 100, Math.round(o.y * 100) / 100, Math.round(o.a * 100) / 100, o.color, o.armor, o.cls, o.alive ? 1 : 0, o.atk, o.name, Math.round(o.revive / REVIVE_TIME * 100) / 100, o.hp, o.maxHp, o.reviver || 0]);
-    const me = {}; for (const k of ['lvl', 'hp', 'maxHp', 'gems', 'bombs', 'maxBombs', 'arrows', 'maxArrows', 'swordMax', 'armorMax', 'plainArrows', 'sword', 'armor', 'items', 'potions', 'alive', 'cls', 'sel', 'color', 'name', 'dbg', 'god']) me[k] = p[k]; me.chill = p.chill > 0 ? 1 : 0; me.fly = this.flying(p) ? Math.round((p.flyUntil - this.time) * 10) / 10 : 0; me.respawnIn = p.alive ? 0 : Math.max(0, Math.ceil(RESPAWN_WAIT - (this.time - (p.downAt || 0))));
+    const me = {}; for (const k of ['lvl', 'hp', 'maxHp', 'gems', 'bombs', 'maxBombs', 'arrows', 'maxArrows', 'swordMax', 'armorMax', 'plainArrows', 'sword', 'armor', 'items', 'potions', 'alive', 'cls', 'sel', 'color', 'name', 'dbg', 'god']) me[k] = p[k]; me.chill = p.chill > 0 ? 1 : 0; me.poison = p.poisonTicks > 0 ? p.poisonTicks : 0; me.fly = this.flying(p) ? Math.round((p.flyUntil - this.time) * 10) / 10 : 0; me.respawnIn = p.alive ? 0 : Math.max(0, Math.ceil(RESPAWN_WAIT - (this.time - (p.downAt || 0))));
     return { t: 's', paused: !!this.paused, pausedBy: this.pausedBy, me, pl, en, team: { keys: this.team.keys, maps: this.team.maps, comps: this.team.comps, shards: this.team.shards, done: this.team.done, relics: this.team.relics }, vp: this.ventPhase(), rg: this.rigCodes(p.lvl), fz: this.frozenList(p.lvl), mv: this.modVer, over: this.over > 0 };
   }
   // ---- save ----
@@ -5354,13 +5552,13 @@ function drawViewmodel(st) {
     if (tier === 2) {
       for (const t of [0.2, 0.34, 0.48, 0.62]) brush(t, t + 0.012, 0, sleeveD, 0); // lames
       brush(cuffT - 0.1, cuffT - 0.085, 0, sleeveH, 0); // bracer edge
-      for (const t of [0.27, 0.41, 0.55]) { const [x, y, nx, ny] = nrm(t); const r = rr(t) * 0.55; px(Math.round(x + nx * r), Math.round(y + ny * r), rgb(255, 255, 255)); px(Math.round(x - nx * r), Math.round(y - ny * r), sleeveH); } // rivets
+      for (const t of [0.27, 0.41, 0.55]) { const [x, y, nx, ny] = nrm(t); const r = rr(t) * 0.55; px(Math.round(x + nx * r), Math.round(y + ny * r), sleeveH); px(Math.round(x - nx * r), Math.round(y - ny * r), sleeveH); } // rivets
       const [x, y] = bez(0.14); const R0 = Math.round(rr(0.14) * 1.25); // pauldron
       disc(Math.round(x), Math.round(y), R0 + 2, rgb(20, 18, 28)); disc(Math.round(x), Math.round(y), R0, sleeve); disc(Math.round(x - R0 * 0.25), Math.round(y - R0 * 0.3), Math.round(R0 * 0.55), sleeveH);
       for (let k = 0; k < 2; k++) { const rr2 = R0 - 3 - k * 4; if (rr2 > 2) for (let a = -2.6; a < -0.4; a += 0.05) px(Math.round(x + Math.cos(a) * rr2), Math.round(y + Math.sin(a) * rr2), sleeveD); }
     }
   };
-  const plateCols = tier === 2 ? [mix(STEEL, col, 0.12), mix(STEEL_D, col, 0.12), STEEL_H] : null; // plate arms are steel through and through
+  const plateCols = tier === 2 ? [mix(STEEL, col, 0.12), mix(STEEL_D, col, 0.12), mix(STEEL_H, STEEL, 0.55)] : null; // plate arms are steel through and through
   const sleeve = c32(plateCols ? plateCols[0] : pal.T), sleeveD = c32(plateCols ? plateCols[1] : pal.t), sleeveH = c32(plateCols ? plateCols[2] : pal.h); const skin = c32(hexToRgb(PAL.s)), skinD = c32(hexToRgb(PAL.S));
   const drawSleeve = (x, y, w, h) => {
     rect(x, y, w, h, sleeve); rect(x, y, 3, h, sleeveD);
@@ -5749,6 +5947,9 @@ function sfx(name, vol) {
     case 'sizzle': noise(0.25, 0.14 * v, 7000); tone(1100, 0.12, 'sawtooth', 0.03 * v, 600); break; // an enemy burning on lava or a vent
     case 'icecrack': for (let i = 0; i < 4; i++) tone(2600 + Math.random() * 1600, 0.05, 'square', 0.05 * v, 1800, AU.ctx.currentTime + i * 0.07); noise(0.2, 0.06 * v, 6000); break; // frost-arrow ice about to melt
     case 'gale': noise(0.9, 0.22 * v, 2400); seq([392, 523, 659, 784], 0.06, 'triangle', 0.1 * v); break; // the Gale Cloak lifts you
+    case 'croak': tone(150, 0.18, 'square', 0.16 * v, 110); tone(120, 0.22, 'square', 0.14 * v, 90, AU.ctx.currentTime + 0.2); break; // a frog
+    case 'bubble': tone(500, 0.12, 'sine', 0.1 * v, 900); tone(800, 0.06, 'sine', 0.06 * v, 1200, AU.ctx.currentTime + 0.1); break;
+    case 'poison': tone(260, 0.15, 'sawtooth', 0.06 * v, 200); noise(0.12, 0.05 * v, 900); break; // a poison tick
     case 'nock': tone(700, 0.06, 'square', 0.1 * v, 900); tone(1050, 0.08, 'triangle', 0.08 * v, 1300, AU.ctx.currentTime + 0.06); break; // a second arrow nocked
     case 'eyeshut': tone(320, 0.12, 'square', 0.14 * v, 140); noise(0.1, 0.12 * v, 900); break; // an arrow shuts an eye
     case 'eyecreak': tone(140, 0.7, 'sawtooth', 0.08 * v, 260); noise(0.6, 0.05 * v, 400); break; // the eye is opening again
@@ -6110,6 +6311,8 @@ function handleEvent(e) {
     case 'msg': if (!e.pid || e.pid === me) pushMsg(e.text); break;
     case 'hint': if (e.pid === me) pushMsg(e.text, 2); break;
     case 'sfx': if (e.lvl && e.lvl !== Lc.lvl) break; { let v = 1; if (e.x != null) v = clamp(1.3 - Math.sqrt(dist2(e.x, e.y, Lc.x, Lc.y)) / 14, 0.1, 1); sfx(e.s, v); } break;
+    case 'poison': if (e.pid === me) { Lc.flash = 0.3; Lc.flashC = rgb(150, 60, 210); pushMsg('POISONED!', 1.5); } break;
+    case 'poisontick': if (e.pid === me) { Lc.flash = 0.18; Lc.flashC = rgb(120, 220, 60); } break;
     case 'hurt': if (e.pid === me) { Lc.kx = e.kx; Lc.ky = e.ky; Lc.flash = 0.25; Lc.flashC = rgb(255, 40, 40); Lc.shake = 0.2; sfx('hurt'); if (navigator.vibrate) try { navigator.vibrate(60); } catch (er) { } } break;
     case 'block': if (e.pid === me) { Lc.blockT = 0.32; } break;
     case 'tp': if (e.pid === me) { Lc.lvl = e.lvl; Lc.x = e.x; Lc.y = e.y; Lc.a = e.a; Lc.fade = 0; Lc.pitch = 0; G.smooth = {}; Lc.npcTalked = {}; } break;
@@ -6349,10 +6552,11 @@ function draw(dt) {
   // pow words
   for (const p of Lc.pow) { const sc = projectPt(cam, p.x, p.y); if (sc) { const c = p.big ? rgb(255, 230, 60) : rgb(255, 255, 255); text(p.word, sc.x - p.word.length * 3, sc.y - 30 - p.t * 30, Math.floor(p.t * 20) & 1 ? c : rgb(255, 80, 40)); } }
   const bossE = ents.find(e => e[8] >= 0);
-  const st = { me, bob: Lc.bob, moveK: Lc.moveK || 0, readyK: Lc.readyK || 0, blockT: Lc.blockT || 0, swing: Lc.swing, punch: Lc.punch, charge: Lc.charge, useFlash: Lc.useFlash, useSpr: Lc.useSpr, level: L, cam, players: snap ? snap.pl : [], myId: G.myId, team: snap ? snap.team : { keys: {}, maps: {}, comps: {}, shards: [], done: [] }, seen: G.seen[L.id] || new Uint8Array(L.w * L.h), seenOW: G.seen.ow || new Uint8Array(1), seenRooms: G.seenRooms, selItem: Lc.sel, pitch: Lc.pitch, lvlKind: L.kind, bossHp: bossE ? bossE[8] : -1, bossName: bossE && enemyDef(bossE[1]) ? enemyDef(bossE[1]).title : null, world: G.world };
+  const st = { me, bob: Lc.bob, moveK: Lc.moveK || 0, readyK: Lc.readyK || 0, blockT: Lc.blockT || 0, swing: Lc.swing, punch: Lc.punch, charge: Lc.charge, useFlash: Lc.useFlash, useSpr: Lc.useSpr, level: L, cam, players: snap ? snap.pl : [], myId: G.myId, team: snap ? snap.team : { keys: {}, maps: {}, comps: {}, shards: [], done: [] }, seen: G.seen[L.id] || new Uint8Array(L.w * L.h), seenOW: G.seen.ow || new Uint8Array(1), seenRooms: G.seenRooms, selItem: Lc.sel, pitch: Lc.pitch, lvlKind: L.kind, bossHp: bossE ? bossE[8] : -1, bossName: bossE ? ((enemyDef(bossE[1]) || enemyDef(String(bossE[1]).replace(/_sub$/, '')) || {}).title || null) : null, world: G.world };
   if (me && !down) drawViewmodel(st);
   if (me && me.cls === 'monk' && me.armor > 0 && !down) { const ac = me.armor === 2 ? rgb(255, 248, 200) : rgb(100, 190, 255); for (let i = 0; i < 18; i++) { const side = Math.random() < 0.5; const x = side ? (Math.random() < 0.5 ? Math.random() * 10 : R.W - Math.random() * 10) : Math.random() * R.W; const y = side ? Math.random() * R.H : R.H - Math.random() * 8; px(x, y, ac); } }
   if (Lc.dashT > 0) rectA(0, 0, R.W, R.H, rgb(200, 240, 255), 0.15);
+  if (me && me.poison > 0 && !down) { const a = 0.1 + 0.05 * Math.sin(R.time * 6); rectA(0, 0, R.W, 6, rgb(120, 200, 60), a * 3); rectA(0, R.H - 6, R.W, 6, rgb(120, 200, 60), a * 3); rectA(0, 0, 6, R.H, rgb(150, 70, 210), a * 3); rectA(R.W - 6, 0, 6, R.H, rgb(150, 70, 210), a * 3); } // poisoned: a sickly green and purple edge
   if (me && me.fly > 0 && !down) { // aloft: wind streaks at the edges and a bar for the time left (it blinks near the end)
     for (let i = 0; i < 26; i++) { const y = (i * 37 + R.time * 260) % R.H, x = i % 2 ? (i * 13) % 40 : R.W - 1 - (i * 13) % 40; rectA(x, y, 1, 8, rgb(230, 245, 255), 0.5); }
     const k = Math.min(1, me.fly / FLY_TIME); if (me.fly > 1 || Math.floor(R.time * 8) & 1) { rect(R.W / 2 - 30, R.H - 34, 60, 3, rgb(40, 50, 70)); rect(R.W / 2 - 30, R.H - 34, Math.round(60 * k), 3, rgb(220, 240, 255)); }

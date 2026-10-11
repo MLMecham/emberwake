@@ -11,6 +11,9 @@ defineProjectile({ id: 'fire', spr: 'fireball', spd: 4.5, dmg: 2 });
 // chill: seconds the hero is slowed when it hits
 defineProjectile({ id: 'icebolt', spr: 'icebolt', spd: 5, dmg: 1, sc: 0.7, chill: 1.5 });
 defineProjectile({ id: 'icebreath', spr: 'icebolt', spd: 6.5, dmg: 2, sc: 0.75, chill: 2.5 });
+// frogs (enemies/frog.js): a slow bubble; the poison one poisons even when a shield stops it (game/sim.js poisonPlayer)
+defineProjectile({ id: 'bubble', spr: 'bubble', spd: 3.4, dmg: 1, sc: 0.7, blockable: true, range: 7 });
+defineProjectile({ id: 'poisonbubble', spr: 'bubble_p', spd: 3.4, dmg: 1, sc: 0.7, blockable: true, range: 7, poison: true });
 defineProjectile({ id: 'firebreath', spr: 'fireball', spd: 6.5, dmg: 2, sc: 0.85 });
 // hero shots
 defineProjectile({ id: 'beam', spr: 'beam', spd: 9, dmg: 1, sc: 0.8, player: true, range: 7, beam: true });

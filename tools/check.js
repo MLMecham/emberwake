@@ -349,6 +349,39 @@ attempt('gale cloak, skeleton key, inventory choices', () => {
   p.items.bow = true; p.items.frostarrows = true; p.arrows = 9; sim.onAction('p1', { t: 'equip', slot: 'arrows', plain: true }); sim.ents = sim.ents.filter(e => e.k !== 'proj');
   sim.useItem(p, 'bow', { alt: true }); const pr = sim.ents.find(e => e.k === 'proj' && e.pid === 'p1'); __ok(pr && !pr.frost && p.arrows === 8, 'plain arrows when chosen, and Shift falls back to a normal shot');
 });
+attempt('frogs and poison', () => {
+  const sim = freshSim(); const p = sim.players.p1; p.god = false; const L = sim.W.levels.ow; const x0 = Math.floor(p.x) + 3, y0 = Math.floor(p.y);
+  for (let dy = -2; dy <= 2; dy++) for (let dx = 0; dx < 5; dx++) L.set(x0 + dx, y0 + dy, TL.WATER);
+  const f = sim.spawnEnemy('frog', 'ow', x0 + 2.5, y0 + 0.5, {}); f.spawnFx = 0; f.hp = 5;
+  let surfaced = false, sawSub = false, bubbles = 0;
+  for (let i = 0; i < 60 * 8; i++) { sim.updateEnemy(f, 1 / 60); sim.time += 1 / 60; if (f.sub) { sawSub = true; __ok(!sim.damageEnemy(f, 1, null, { ignoreIframes: true }), 'a submerged frog cannot be hit'); } if (f.st >= 1) surfaced = true; }
+  bubbles = sim.ents.filter(e => e.k === 'proj' && e.type === 'bubble').length;
+  __ok(sawSub && surfaced && bubbles > 0, 'frog should hide, surface and spit (' + sawSub + surfaced + bubbles + ')');
+  __ok(TINFO[L.get(Math.floor(f.x), Math.floor(f.y))].water && !f.dead, 'frog stays in its pond and never drowns');
+  // poison: ticks 5% of max health, never kills, a new dose restarts it, and it gets through a shield
+  p.hp = p.maxHp; sim.poisonPlayer(p); const n = p.poisonTicks; __ok(n >= 2 && n <= 5, 'poison lasts 2-5 ticks');
+  const h0 = p.hp; sim.time += 1.01; sim.tickPoison(p); __ok(p.hp === h0 - Math.max(1, Math.round(p.maxHp * 0.05)), 'poison takes 5% a tick');
+  p.hp = 1; p.poisonTicks = 3; p.poisonNext = sim.time; sim.tickPoison(p); __ok(p.hp === 1 && p.alive, 'poison cannot kill');
+  p.hp = p.maxHp; p.inv = 0; p.poisonTicks = 0; p.a = 0; const b = sim.fireProj('poisonbubble', 'ow', p.x + 1, p.y, Math.PI, 'e', null, { dmg: 1 }); for (let i = 0; i < 30 && !b.dead; i++) sim.updateProj(b, 1 / 60);
+  __ok(p.hp === p.maxHp && p.poisonTicks > 0, 'a blocked poison bubble still poisons');
+  // the poison frog is never a giant
+  let giant = 0; for (let i = 0; i < 300; i++) { const e = sim.spawnEnemy('frog_poison', 'ow', x0 + 1.5, y0 + 0.5, {}); sim.makeElite(e, Math.random); if (e.elite && eliteByIdx(e.elite).id === 'giant') giant++; e.dead = true; } __ok(giant === 0, 'no giant poison frogs');
+});
+attempt('the bog king', () => {
+  const sim = freshSim(); const p = sim.players.p1; p.god = true; const L = sim.W.levels.d3; const room = L.rooms[L.bossRoom];
+  __ok(L.rigs[room.id] && L.rigs[room.id].eyes.length === 2, 'boss room is a tide room with two eyes');
+  const ix = room.rx * DSX, iy = room.ry * DSY; const entry = room.rewardAt; __ok(!L.solidAt(ix + entry[0], iy + entry[1]), 'you arrive on a platform');
+  sim.teleport(p, 'd3', ix + entry[0], iy + entry[1], 0); sim.tick(1 / 60);
+  const k = sim.ents.find(e => e.k === 'en' && e.type === 'bogking'); __ok(k, 'the bog king should be here');
+  k.spawnFx = 0; let hits = 0;
+  for (let i = 0; i < 60 * 30 && k.ph !== 1; i++) { sim.updateEnemy(k, 1 / 60); sim.time += 1 / 60; if (!k.sub && k.ph === 0 && k.st >= 1) { k.hurt = 0; if (sim.damageEnemy(k, 0.01, null, { pid: 'p1' })) hits++; } }
+  __ok(k.ph === 1 && hits === 3, 'three hits while he surfaces drive him out (' + hits + ')');
+  let landed = 0, wasAir = false; for (let i = 0; i < 60 * 8; i++) { sim.updateEnemy(k, 1 / 60); sim.time += 1 / 60; if (k.air) { wasAir = true; __ok(!sim.damageEnemy(k, 1, null, {}), 'no hitting him mid-leap'); } else if (wasAir) { wasAir = false; landed++; __ok(!TINFO[L.get(Math.floor(k.x), Math.floor(k.y))].water, 'with the water deep he lands on a platform'); } }
+  __ok(landed >= 2, 'he keeps leaping (' + landed + ')');
+  // drained: a fresh fight goes straight to phase 2
+  const s2 = freshSim(); const L2 = s2.W.levels.d3; s2.rigShots['d3:' + room.id] = s2.time; s2.updateRigs(L2); const p2 = s2.players.p1; p2.god = true; s2.teleport(p2, 'd3', ix + entry[0], iy + entry[1], 0); s2.tick(1 / 60);
+  const k2 = s2.ents.find(e => e.k === 'en' && e.type === 'bogking'); k2.spawnFx = 0; s2.updateEnemy(k2, 1 / 60); __ok(k2.ph === 1, 'no water, no hiding');
+});
 attempt('tideglass opening', () => {
   for (const [seed, mode] of [[7319, 'adv'], [1234, 'rogue'], [99, 'rogue'], [4242, 'adv']]) {
     const W = genWorld(seed, mode); const D = W.levels.d6; const st = D.startRoom; const r2 = st.children[0]; const r3 = r2.children[0];

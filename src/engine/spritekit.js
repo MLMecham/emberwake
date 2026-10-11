@@ -72,7 +72,7 @@ function tunicPal(hex, tier) {
   const base = hexToRgb(hex);
   if (tier === 0) return { T: base, t: shade(base, 0.6), h: mix(base, [255, 255, 255], 0.4) };
   if (tier === 1) { const m = mix(base, STEEL, 0.45); return { T: m, t: mix(shade(base, 0.55), STEEL_D, 0.5), h: mix(STEEL_H, base, 0.2) }; }
-  const m = mix(STEEL, base, 0.22); return { T: m, t: mix(base, [20, 20, 30], 0.35), h: STEEL_H };
+  const m = mix(STEEL, base, 0.22); return { T: m, t: mix(base, [20, 20, 30], 0.35), h: mix(mix(STEEL_H, STEEL, 0.55), base, 0.15) }; // plate shine, kept soft
 }
 // chainmail rings, tinted toward the tunic color: a bright ring and the dark gaps between rings
 function chainCols(hex) { const base = hexToRgb(hex); return { ring: mix(STEEL_H, base, 0.38), gap: mix(shade(base, 0.4), STEEL_D, 0.45) }; }
@@ -97,7 +97,7 @@ function armorOverlay(s, hex, tier, dir) {
   // plume in the tunic color, and pauldrons that square off the shoulders
   const pal = tunicPal(hex, tier); const tc = u(pal.T), td = u(pal.t), hc = u(pal.h); const steel = (v) => v === tc || v === td || v === hc;
   const P = (x, y) => (x >= 0 && y >= 0 && x < s.w && y < s.h) ? s.px[y * s.w + x] : 0; const S = (x, y, c) => { if (x >= 0 && y >= 0 && x < s.w && y < s.h) s.px[y * s.w + x] = c; };
-  for (let y = 0; y < s.h; y++) for (let x = 0; x < s.w; x++) if (P(x, y) === tc && (x + y * 3) % 7 === 0) S(x, y, hc); // glints
+  for (let y = 0; y < s.h; y++) for (let x = 0; x < s.w; x++) if (P(x, y) === tc && (x + y * 3) % 11 === 0) S(x, y, hc); // a few soft glints
   const cT = u(cloth.T), cD = u(cloth.t), gold = u([248, 216, 64]);
   const cols = dir === 'side' ? [9] : [7, 8];
   for (let y = 7; y <= 12; y++) for (const x of cols) if (steel(P(x, y))) S(x, y, x === cols[cols.length - 1] && cols.length > 1 ? cD : cT); // tabard
