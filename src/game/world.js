@@ -19,7 +19,7 @@ class Level {
     x = Math.floor(x); y = Math.floor(y);
     if (x < 0 || y < 0 || x >= this.w || y >= this.h) return true;
     const t = this.tiles[y * this.w + x]; const ti = TINFO[t];
-    if (ti.water && !ti.ocean && opts && opts.raft) return false;
+    if (ti.water && !ti.ocean && opts && opts.raft && this.kind !== 'dungeon') return false; // the raft is for open water, not dungeon halls
     // sealed-room doors are one-way: teammates can come in, nobody leaves until the room is clear
     if (t === TL.SHUTTER && opts && opts.mx != null && this.kind === 'dungeon') {
       const rid = this.sealRoom && this.sealRoom[y * this.w + x];
@@ -50,7 +50,7 @@ function tideCode(t) { if (t == null || t < 0) return 0; if (t < TIDE.DRY - TIDE
 function applyRig(L, rid, code) {
   const rig = L.rigs && L.rigs[rid]; if (!rig) return; L.rigCode = L.rigCode || {}; L.rigCode[rid] = code;
   const water = code === 0 ? TL.WATER : code <= 2 ? TL.WET : TL.SHALLOW;
-  for (const i of rig.cells) L.tiles[i] = water;
+  for (const i of rig.cells) { if (L.frozen && i in L.frozen) L.frozen[i] = water; else L.tiles[i] = water; } // frozen cells keep their ice; they thaw into whatever the tide is by then
   for (const i of rig.eyes) L.tiles[i] = code === 1 ? TL.EYE_SHUT : TL.EYE;
 }
 // Which rooms can a party reach, picking up keys and opening locks as it goes? hasBow false treats rooms that need the
@@ -73,6 +73,11 @@ function dungeonSolve(L, hasBow) {
     if (!opn) return reached;
   }
 }
+// ---- frost arrows (items/bow.js, game/sim.js freezeAlong) ----
+// Deep fresh water freezes into ice for a while (salt water never does). L.frozen[idx] = the tile underneath.
+// The host decides what freezes and when it thaws; snapshots carry the list and every machine swaps its own tiles.
+function freezeTile(L, i) { L.frozen = L.frozen || {}; if (i in L.frozen) return false; const ti = TINFO[L.tiles[i]]; if (!ti.water || ti.salty) return false; L.frozen[i] = L.tiles[i]; L.tiles[i] = TL.FROZEN; return true; }
+function thawTile(L, i) { if (!L.frozen || !(i in L.frozen)) return; if (L.tiles[i] === TL.FROZEN) L.tiles[i] = L.frozen[i]; delete L.frozen[i]; }
 function genWorld(seed, mode) {
   const W = { seed, mode, levels: {}, caveCount: 0, dungeons: [] };
   const rnd = mulberry32(seed);

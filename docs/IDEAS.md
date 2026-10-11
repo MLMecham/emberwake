@@ -26,4 +26,5 @@ Not built yet. Parked here so they don't get lost. Newest at the bottom.
 - Give players a reason to want more bombs later, so the bag's value rises.
 
 ## World
+- **Salt water.** Tiles marked `salty` never freeze (only the rough southern sea for now). Later: salty pools or a coastal dungeon where frost arrows don't work, so you need another way across.
 - Grottos you've already found still regrow their trees, just differently.

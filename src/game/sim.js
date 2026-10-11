@@ -31,6 +31,7 @@ const REVIVE_TIME = 1.5, REVIVE_R2 = 2.6 * 2.6; // seconds to help a teammate up
 const RESPAWN_WAIT = 30; // seconds a downed hero waits before they may give up and respawn at the start on their own
 const BUY_COOLDOWN = 0.8; // seconds between shop purchases for one player
 const SHIELD_STUN = 0.9; // seconds a knight reels after a loaded shot hits its shield
+const FREEZE_TIME = 6, FREEZE_PATH = 6; // seconds frost-arrow ice lasts; how many tiles of water one arrow freezes along its flight
 const HAZARD_TICK = 0.5, ICE_KB = 1.5, SHALLOW_SLOW = 0.75; // how often lava/spikes/vents burn a grounded enemy; how much harder hits shove enemies standing on ice
 const SWORD_DMG = [1, 1, 2, 3, 4];             // damage per sword level (0 = no sword, punches still do 1)
 // Enemy health multiplier by how many heroes are in the room (1, 2, 3, 4+). Adjusts live as people come and go.
@@ -46,7 +47,8 @@ function newPlayer(id, name, color, cls) {
 
 class Sim {
   constructor(world, save) {
-    this.W = world; this.players = {}; this.ents = []; this.mods = {}; this.modVer = 1; this.events = []; this.rigShots = {}; // rigShots: 'lvl:room' -> when its timed eye was last shot
+    this.W = world; this.players = {}; this.ents = []; this.mods = {}; this.modVer = 1; this.events = []; this.rigShots = {}; this.thaws = {}; // thaws: 'lvl' -> { tile idx: when it melts }.
+    // rigShots: 'lvl:room' -> when its timed eye was last shot
     this.team = { keys: {}, maps: {}, comps: {}, shards: [], done: [], relics: [], taken: {}, cleared: {}, clearedAt: {} };
     this.groups = {}; this.time = 0; this.levelInit = {}; this.over = 0; this.won = false; this.mode = world.mode;
     if (save) this.loadSave(save);
@@ -102,6 +104,20 @@ class Sim {
       const r = L.rooms[rid]; this.sfx(['flood', 'drain', 'eyecreak', 'flood', 'tidewarn'][code], L.id, r.rx * DSX + 6.5, r.ry * DSY + 4.5);
     }
   }
+  // frost arrows freeze the deep fresh water they fly over: a path of ice three tiles wide, up to FREEZE_PATH long, that melts after a while
+  freezeAlong(e, L, x, y) {
+    const tx = Math.floor(x), ty = Math.floor(y); const k = tx + ',' + ty; if (e.lastIce === k) return; e.lastIce = k;
+    if (!(e.iceLeft > 0)) return; const ti = TINFO[L.get(tx, ty)]; if ((!ti.water && !ti.frozen) || ti.salty) return;
+    e.iceLeft--; let any = false; const th = this.thaws[L.id] = this.thaws[L.id] || {};
+    for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) { const i = L.idx(tx + dx, ty + dy); if (freezeTile(L, i) || (L.frozen && i in L.frozen)) { th[i] = this.time + FREEZE_TIME + Math.random() * 0.6; any = true; } }
+    if (any && !e.froze) { e.froze = true; this.sfx('freeze', L.id, x, y); }
+  }
+  updateThaws(L) {
+    const th = this.thaws[L.id]; if (!th) return; let crack = null;
+    for (const i in th) { const left = th[i] - this.time; if (left <= 0) { thawTile(L, +i); delete th[i]; } else if (left < 1.5 && crack == null) crack = +i; }
+    if (crack != null && this.time - (L.crackAt || -9) > 1.5) { L.crackAt = this.time; this.sfx('icecrack', L.id, crack % L.w + 0.5, Math.floor(crack / L.w) + 0.5); } // a warning crack before the ice gives way
+  }
+  frozenList(lvl) { const L = this.W.levels[lvl]; if (!L || !L.frozen) return undefined; const k = Object.keys(L.frozen); return k.length ? k.map(Number) : undefined; } // for snapshots
   rigCodes(lvl) { const L = this.W.levels[lvl]; if (!L || !L.rigCode) return undefined; const o = {}; let any = false; for (const rid in L.rigCode) if (L.rigCode[rid]) { o[rid] = L.rigCode[rid]; any = true; } return any ? o : undefined; } // for snapshots
   hitEye(L, idx) {
     const link = L.eyeLinks && L.eyeLinks[idx]; if (!link) return; const t = L.tiles[idx]; const x = idx % L.w + 0.5, y = Math.floor(idx / L.w) + 0.5;
@@ -238,7 +254,7 @@ class Sim {
     for (const lvl of active) {
       this.initLevel(lvl);
       const L = this.W.levels[lvl]; for (const g of L.gimmicks || []) { const gm = Content.gimmicks[g]; if (gm && gm.update) gm.update(this, L, dt); }
-      this.updateRigs(L);
+      this.updateRigs(L); this.updateThaws(L);
     }
     // groups activation
     for (const p of plist) if (p.alive) this.activateGroupFor(p);
@@ -601,6 +617,7 @@ class Sim {
       e.dead = true; return;
     }
     e.x = nx; e.y = ny;
+    if (e.frost && e.owner !== 'e') this.freezeAlong(e, L, nx, ny);
     if (e.owner === 'e') {
       for (const p of Object.values(this.players)) {
         if (!p.alive || p.lvl !== e.lvl) continue;
@@ -710,7 +727,7 @@ class Sim {
     const en = []; for (const e of this.ents) if (e.lvl === p.lvl) en.push(this.entView(e));
     const pl = []; for (const o of Object.values(this.players)) pl.push([o.id, o.lvl, Math.round(o.x * 100) / 100, Math.round(o.y * 100) / 100, Math.round(o.a * 100) / 100, o.color, o.armor, o.cls, o.alive ? 1 : 0, o.atk, o.name, Math.round(o.revive / REVIVE_TIME * 100) / 100, o.hp, o.maxHp, o.reviver || 0]);
     const me = {}; for (const k of ['lvl', 'hp', 'maxHp', 'gems', 'bombs', 'maxBombs', 'arrows', 'maxArrows', 'sword', 'armor', 'items', 'potions', 'alive', 'cls', 'sel', 'color', 'name', 'dbg', 'god']) me[k] = p[k]; me.chill = p.chill > 0 ? 1 : 0; me.respawnIn = p.alive ? 0 : Math.max(0, Math.ceil(RESPAWN_WAIT - (this.time - (p.downAt || 0))));
-    return { t: 's', paused: !!this.paused, pausedBy: this.pausedBy, me, pl, en, team: { keys: this.team.keys, maps: this.team.maps, comps: this.team.comps, shards: this.team.shards, done: this.team.done, relics: this.team.relics }, vp: this.ventPhase(), rg: this.rigCodes(p.lvl), mv: this.modVer, over: this.over > 0 };
+    return { t: 's', paused: !!this.paused, pausedBy: this.pausedBy, me, pl, en, team: { keys: this.team.keys, maps: this.team.maps, comps: this.team.comps, shards: this.team.shards, done: this.team.done, relics: this.team.relics }, vp: this.ventPhase(), rg: this.rigCodes(p.lvl), fz: this.frozenList(p.lvl), mv: this.modVer, over: this.over > 0 };
   }
   // ---- save ----
   makeSave() {

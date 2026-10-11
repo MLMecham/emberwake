@@ -558,7 +558,7 @@ defTile(TL.BUSHFLOOR, { floor: 'grass' });
 defTile(TL.CEXIT = 27, { solid: true, wall: 'cexit', exitWall: true }); // daylight archway out of a cave
 // The edges of the Wilds, and the tall towers over dungeon gates. tall: wall height in tiles (seen over shorter walls),
 // jag: how the top edge is cut ('peak' ridge, 'trees' canopy, 'battlement'), snow: white caps on the high parts.
-defTile(TL.OCEAN = 28, { solid: true, floor: 'surf', water: true, ocean: true, low: true }); // rough sea: the raft can't cross it
+defTile(TL.OCEAN = 28, { solid: true, floor: 'surf', water: true, ocean: true, salty: true, low: true }); // rough sea: the raft can't cross it, and salt water won't freeze
 defTile(TL.PEAKS = 29, { solid: true, wall: 'mountain', tall: 3.4, jag: 'peak', snow: true });
 defTile(TL.FIREPEAKS = 30, { solid: true, wall: 'volcrock', tall: 2.8, jag: 'peak' });
 defTile(TL.BIGWOOD = 31, { solid: true, wall: 'treewall', tall: 2.6, jag: 'trees' });
@@ -2497,6 +2497,7 @@ defineTile('EYE_SMALL', { solid: true, wall: 'eye_small', eye: true, small: true
 defineTile('EYE_SMALL_SHUT', { solid: true, wall: 'eye_small_shut', eye: true, small: true, shut: true });
 defineTile('SHALLOW', { floor: 'shallow', shallow: true }); // walkable, 25% slower
 defineTile('WET', { floor: 'wetfloor', wet: true }); // drained tide water
+defineTile('FROZEN', { floor: 'ice', slippery: true, frozen: true }); // water a frost arrow froze; it thaws back (game/world.js freezeTile)
 // the way out that glows in a boss room once its prize is taken (game/sim.js openWarp). Step on it to leave.
 defineTexture('warp', (x, y, r, f, ctx) => { const d = Math.hypot(x - 15.5, y - 15.5); const ring = Math.abs(((d - f * 2) % 8 + 8) % 8 - 4) < 1.4; if (d > 14) return [60, 50, 40]; if (d < 3) return [255, 250, 210]; return ring ? [255, 236, 140] : [200, 150, 60]; }, { frames: 4 });
 defineTile('WARP', { floor: 'warp', exit: true, warp: true });
@@ -3400,7 +3401,7 @@ defineItem({
     if (sim.ents.filter(e => e.k === 'proj' && e.pid === p.id && (e.type === 'arrow' || e.type === 'dart')).length >= (monk ? 3 : 1)) return;
     p.arrows -= loaded ? 2 : 1;
     const silver = !!p.items.silver; const dmg = silver ? 4 : 2; const frost = !!p.items.frostarrows; // frost arrows (Rimefang Hollow) freeze
-    const extra = loaded ? { kbMul: 1.6, shieldBreak: true } : {}; const mul = loaded ? 2 : 1;
+    const extra = Object.assign(loaded ? { kbMul: 1.6, shieldBreak: true } : {}, frost ? { iceLeft: FREEZE_PATH } : {}); const mul = loaded ? 2 : 1; // frost arrows freeze water they fly over (sim.freezeAlong)
     if (monk) for (const s of [-0.12, 0, 0.12]) sim.fireProj('dart', p.lvl, p.x, p.y, p.a + s, 'p', p.id, Object.assign({ dmg: (dmg - 1) * mul, silver, life: 1.5, frost }, extra, frost ? { spr: 'icebolt' } : {}, loaded ? { sc: 0.75 } : {}));
     else sim.fireProj('arrow', p.lvl, p.x, p.y, p.a, 'p', p.id, Object.assign({ dmg: dmg * mul, silver, frost }, extra, { spr: (loaded ? 'arrow2' : 'arrow') + (frost ? '_ice' : '') }));
     sim.sfx('arrow', p.lvl);
@@ -3702,7 +3703,7 @@ class Level {
     x = Math.floor(x); y = Math.floor(y);
     if (x < 0 || y < 0 || x >= this.w || y >= this.h) return true;
     const t = this.tiles[y * this.w + x]; const ti = TINFO[t];
-    if (ti.water && !ti.ocean && opts && opts.raft) return false;
+    if (ti.water && !ti.ocean && opts && opts.raft && this.kind !== 'dungeon') return false; // the raft is for open water, not dungeon halls
     // sealed-room doors are one-way: teammates can come in, nobody leaves until the room is clear
     if (t === TL.SHUTTER && opts && opts.mx != null && this.kind === 'dungeon') {
       const rid = this.sealRoom && this.sealRoom[y * this.w + x];
@@ -3733,7 +3734,7 @@ function tideCode(t) { if (t == null || t < 0) return 0; if (t < TIDE.DRY - TIDE
 function applyRig(L, rid, code) {
   const rig = L.rigs && L.rigs[rid]; if (!rig) return; L.rigCode = L.rigCode || {}; L.rigCode[rid] = code;
   const water = code === 0 ? TL.WATER : code <= 2 ? TL.WET : TL.SHALLOW;
-  for (const i of rig.cells) L.tiles[i] = water;
+  for (const i of rig.cells) { if (L.frozen && i in L.frozen) L.frozen[i] = water; else L.tiles[i] = water; } // frozen cells keep their ice; they thaw into whatever the tide is by then
   for (const i of rig.eyes) L.tiles[i] = code === 1 ? TL.EYE_SHUT : TL.EYE;
 }
 // Which rooms can a party reach, picking up keys and opening locks as it goes? hasBow false treats rooms that need the
@@ -3756,6 +3757,11 @@ function dungeonSolve(L, hasBow) {
     if (!opn) return reached;
   }
 }
+// ---- frost arrows (items/bow.js, game/sim.js freezeAlong) ----
+// Deep fresh water freezes into ice for a while (salt water never does). L.frozen[idx] = the tile underneath.
+// The host decides what freezes and when it thaws; snapshots carry the list and every machine swaps its own tiles.
+function freezeTile(L, i) { L.frozen = L.frozen || {}; if (i in L.frozen) return false; const ti = TINFO[L.tiles[i]]; if (!ti.water || ti.salty) return false; L.frozen[i] = L.tiles[i]; L.tiles[i] = TL.FROZEN; return true; }
+function thawTile(L, i) { if (!L.frozen || !(i in L.frozen)) return; if (L.tiles[i] === TL.FROZEN) L.tiles[i] = L.frozen[i]; delete L.frozen[i]; }
 function genWorld(seed, mode) {
   const W = { seed, mode, levels: {}, caveCount: 0, dungeons: [] };
   const rnd = mulberry32(seed);
@@ -4256,6 +4262,7 @@ const REVIVE_TIME = 1.5, REVIVE_R2 = 2.6 * 2.6; // seconds to help a teammate up
 const RESPAWN_WAIT = 30; // seconds a downed hero waits before they may give up and respawn at the start on their own
 const BUY_COOLDOWN = 0.8; // seconds between shop purchases for one player
 const SHIELD_STUN = 0.9; // seconds a knight reels after a loaded shot hits its shield
+const FREEZE_TIME = 6, FREEZE_PATH = 6; // seconds frost-arrow ice lasts; how many tiles of water one arrow freezes along its flight
 const HAZARD_TICK = 0.5, ICE_KB = 1.5, SHALLOW_SLOW = 0.75; // how often lava/spikes/vents burn a grounded enemy; how much harder hits shove enemies standing on ice
 const SWORD_DMG = [1, 1, 2, 3, 4];             // damage per sword level (0 = no sword, punches still do 1)
 // Enemy health multiplier by how many heroes are in the room (1, 2, 3, 4+). Adjusts live as people come and go.
@@ -4271,7 +4278,8 @@ function newPlayer(id, name, color, cls) {
 
 class Sim {
   constructor(world, save) {
-    this.W = world; this.players = {}; this.ents = []; this.mods = {}; this.modVer = 1; this.events = []; this.rigShots = {}; // rigShots: 'lvl:room' -> when its timed eye was last shot
+    this.W = world; this.players = {}; this.ents = []; this.mods = {}; this.modVer = 1; this.events = []; this.rigShots = {}; this.thaws = {}; // thaws: 'lvl' -> { tile idx: when it melts }.
+    // rigShots: 'lvl:room' -> when its timed eye was last shot
     this.team = { keys: {}, maps: {}, comps: {}, shards: [], done: [], relics: [], taken: {}, cleared: {}, clearedAt: {} };
     this.groups = {}; this.time = 0; this.levelInit = {}; this.over = 0; this.won = false; this.mode = world.mode;
     if (save) this.loadSave(save);
@@ -4327,6 +4335,20 @@ class Sim {
       const r = L.rooms[rid]; this.sfx(['flood', 'drain', 'eyecreak', 'flood', 'tidewarn'][code], L.id, r.rx * DSX + 6.5, r.ry * DSY + 4.5);
     }
   }
+  // frost arrows freeze the deep fresh water they fly over: a path of ice three tiles wide, up to FREEZE_PATH long, that melts after a while
+  freezeAlong(e, L, x, y) {
+    const tx = Math.floor(x), ty = Math.floor(y); const k = tx + ',' + ty; if (e.lastIce === k) return; e.lastIce = k;
+    if (!(e.iceLeft > 0)) return; const ti = TINFO[L.get(tx, ty)]; if ((!ti.water && !ti.frozen) || ti.salty) return;
+    e.iceLeft--; let any = false; const th = this.thaws[L.id] = this.thaws[L.id] || {};
+    for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) { const i = L.idx(tx + dx, ty + dy); if (freezeTile(L, i) || (L.frozen && i in L.frozen)) { th[i] = this.time + FREEZE_TIME + Math.random() * 0.6; any = true; } }
+    if (any && !e.froze) { e.froze = true; this.sfx('freeze', L.id, x, y); }
+  }
+  updateThaws(L) {
+    const th = this.thaws[L.id]; if (!th) return; let crack = null;
+    for (const i in th) { const left = th[i] - this.time; if (left <= 0) { thawTile(L, +i); delete th[i]; } else if (left < 1.5 && crack == null) crack = +i; }
+    if (crack != null && this.time - (L.crackAt || -9) > 1.5) { L.crackAt = this.time; this.sfx('icecrack', L.id, crack % L.w + 0.5, Math.floor(crack / L.w) + 0.5); } // a warning crack before the ice gives way
+  }
+  frozenList(lvl) { const L = this.W.levels[lvl]; if (!L || !L.frozen) return undefined; const k = Object.keys(L.frozen); return k.length ? k.map(Number) : undefined; } // for snapshots
   rigCodes(lvl) { const L = this.W.levels[lvl]; if (!L || !L.rigCode) return undefined; const o = {}; let any = false; for (const rid in L.rigCode) if (L.rigCode[rid]) { o[rid] = L.rigCode[rid]; any = true; } return any ? o : undefined; } // for snapshots
   hitEye(L, idx) {
     const link = L.eyeLinks && L.eyeLinks[idx]; if (!link) return; const t = L.tiles[idx]; const x = idx % L.w + 0.5, y = Math.floor(idx / L.w) + 0.5;
@@ -4463,7 +4485,7 @@ class Sim {
     for (const lvl of active) {
       this.initLevel(lvl);
       const L = this.W.levels[lvl]; for (const g of L.gimmicks || []) { const gm = Content.gimmicks[g]; if (gm && gm.update) gm.update(this, L, dt); }
-      this.updateRigs(L);
+      this.updateRigs(L); this.updateThaws(L);
     }
     // groups activation
     for (const p of plist) if (p.alive) this.activateGroupFor(p);
@@ -4826,6 +4848,7 @@ class Sim {
       e.dead = true; return;
     }
     e.x = nx; e.y = ny;
+    if (e.frost && e.owner !== 'e') this.freezeAlong(e, L, nx, ny);
     if (e.owner === 'e') {
       for (const p of Object.values(this.players)) {
         if (!p.alive || p.lvl !== e.lvl) continue;
@@ -4935,7 +4958,7 @@ class Sim {
     const en = []; for (const e of this.ents) if (e.lvl === p.lvl) en.push(this.entView(e));
     const pl = []; for (const o of Object.values(this.players)) pl.push([o.id, o.lvl, Math.round(o.x * 100) / 100, Math.round(o.y * 100) / 100, Math.round(o.a * 100) / 100, o.color, o.armor, o.cls, o.alive ? 1 : 0, o.atk, o.name, Math.round(o.revive / REVIVE_TIME * 100) / 100, o.hp, o.maxHp, o.reviver || 0]);
     const me = {}; for (const k of ['lvl', 'hp', 'maxHp', 'gems', 'bombs', 'maxBombs', 'arrows', 'maxArrows', 'sword', 'armor', 'items', 'potions', 'alive', 'cls', 'sel', 'color', 'name', 'dbg', 'god']) me[k] = p[k]; me.chill = p.chill > 0 ? 1 : 0; me.respawnIn = p.alive ? 0 : Math.max(0, Math.ceil(RESPAWN_WAIT - (this.time - (p.downAt || 0))));
-    return { t: 's', paused: !!this.paused, pausedBy: this.pausedBy, me, pl, en, team: { keys: this.team.keys, maps: this.team.maps, comps: this.team.comps, shards: this.team.shards, done: this.team.done, relics: this.team.relics }, vp: this.ventPhase(), rg: this.rigCodes(p.lvl), mv: this.modVer, over: this.over > 0 };
+    return { t: 's', paused: !!this.paused, pausedBy: this.pausedBy, me, pl, en, team: { keys: this.team.keys, maps: this.team.maps, comps: this.team.comps, shards: this.team.shards, done: this.team.done, relics: this.team.relics }, vp: this.ventPhase(), rg: this.rigCodes(p.lvl), fz: this.frozenList(p.lvl), mv: this.modVer, over: this.over > 0 };
   }
   // ---- save ----
   makeSave() {
@@ -5588,6 +5611,7 @@ function sfx(name, vol) {
     case 'hearthgate': seq([262, 330, 392, 523, 659, 784, 1047], 0.12, 'triangle', 0.16 * v); tone(65, 1.6, 'sawtooth', 0.14 * v, 130); break;
     case 'pitfall': tone(900, 0.7, 'sine', 0.13 * v, 70); noise(0.15, 0.1 * v, 500, AU.ctx.currentTime + 0.65); break; // an enemy drops into a pit
     case 'sizzle': noise(0.25, 0.14 * v, 7000); tone(1100, 0.12, 'sawtooth', 0.03 * v, 600); break; // an enemy burning on lava or a vent
+    case 'icecrack': for (let i = 0; i < 4; i++) tone(2600 + Math.random() * 1600, 0.05, 'square', 0.05 * v, 1800, AU.ctx.currentTime + i * 0.07); noise(0.2, 0.06 * v, 6000); break; // frost-arrow ice about to melt
     case 'nock': tone(700, 0.06, 'square', 0.1 * v, 900); tone(1050, 0.08, 'triangle', 0.08 * v, 1300, AU.ctx.currentTime + 0.06); break; // a second arrow nocked
     case 'eyeshut': tone(320, 0.12, 'square', 0.14 * v, 140); noise(0.1, 0.12 * v, 900); break; // an arrow shuts an eye
     case 'eyecreak': tone(140, 0.7, 'sawtooth', 0.08 * v, 260); noise(0.6, 0.05 * v, 400); break; // the eye is opening again
@@ -5929,12 +5953,14 @@ function clientOnMsg(m) {
   if (m.t === 's') {
     if (!G.world) return;
     if (m.mods) applyMods(m.mods);
-    if (m.me) syncRigs(G.world.levels[m.me.lvl], m.rg || {});
+    if (m.me) { const Lm = G.world.levels[m.me.lvl]; syncRigs(Lm, m.rg || {}); syncFrozen(Lm, m.fz || []); }
     G.snap = m; if (m.ev) for (const e of m.ev) handleEvent(e);
   }
 }
 // tide rooms: the host sends each room's water code, and we swap the tiles ourselves (game/world.js applyRig)
 function syncRigs(L, rg) { if (!L || !L.rigs) return; for (const rid in L.rigs) { const want = rg[rid] || 0; if (((L.rigCode && L.rigCode[rid]) || 0) !== want) applyRig(L, rid, want); } }
+// frost-arrow ice: the host sends which tiles are frozen; we freeze and thaw our own copies (game/world.js freezeTile)
+function syncFrozen(L, fz) { if (!L) return; const want = new Set(fz); for (const i of want) if (!L.frozen || !(i in L.frozen)) freezeTile(L, i); if (L.frozen) for (const k in L.frozen) if (!want.has(+k)) thawTile(L, +k); }
 function applyMods(mods) {
   for (const lvl in mods) { const L = G.world.levels[lvl]; if (!L) continue; L.sealRoom = {}; for (const i in mods[lvl]) { const [t, pr, seal] = mods[lvl][i]; L.tiles[i] = t; L.props[i] = pr; if (seal != null) L.sealRoom[i] = seal; } }
 }
@@ -6011,7 +6037,7 @@ function updateLocal(dt, inp) {
   const moving = Math.abs(inp.fwd) + Math.abs(inp.str) > 0.1; if (moving) Lc.bob += dt * spd * 2.6;
   Lc.moveK = lerp(Lc.moveK || 0, moving ? 1 : 0, Math.min(1, dt * 8)); if (Lc.blockT > 0) Lc.blockT -= dt;
   Lc.stillT = moving || Lc.swing != null ? 0 : (Lc.stillT || 0) + dt; Lc.readyK = lerp(Lc.readyK || 0, Lc.stillT > 0.3 ? 1 : 0, Math.min(1, dt * (Lc.stillT > 0.3 ? 5 : 10))); // shield comes up after standing still
-  const raft = !!me.items.raft; const rad = 0.22; const sop = { raft, mx: Lc.x, my: Lc.y };
+  const raft = !!me.items.raft && L.kind !== 'dungeon'; const rad = 0.22; // the raft only works on open water const sop = { raft, mx: Lc.x, my: Lc.y };
   // tide water that rose under the edge of you doesn't pin you in place: you can step off it (into it, you sink)
   const wetEdge = new Set(); for (const [ox, oy] of [[-rad, -rad], [rad, -rad], [-rad, rad], [rad, rad]]) { const tx = Math.floor(Lc.x + ox), ty = Math.floor(Lc.y + oy); if (TINFO[L.get(tx, ty)].water && L.solidAt(tx, ty, sop)) wetEdge.add(ty * L.w + tx); }
   const solid = (x, y) => { for (const [ox, oy] of [[-rad, -rad], [rad, -rad], [-rad, rad], [rad, rad]]) { const tx = Math.floor(x + ox), ty = Math.floor(y + oy); if (wetEdge.has(ty * L.w + tx)) continue; if (L.solidAt(x + ox, y + oy, sop)) return true; } return false; };
@@ -6020,6 +6046,7 @@ function updateLocal(dt, inp) {
   if (!solid(Lc.x, ny)) Lc.y = ny; else { blockedY = true; Lc.svy = 0; }
   // the southern sea is too rough to sail
   if ((blockedX || blockedY) && moving && L.kind === 'ow' && R.time - (Lc.seaMsgAt || -99) > 6) { const ax = Math.floor(Lc.x + Math.cos(Lc.a) * 0.7), ay = Math.floor(Lc.y + Math.sin(Lc.a) * 0.7); if (TINFO[L.get(ax, ay)].ocean) { Lc.seaMsgAt = R.time; pushMsg(raft ? 'THE SEA IS FAR TOO ROUGH FOR A RAFT.' : 'ROUGH WATER. NOTHING COULD SAIL THIS.', 3); } }
+  if ((blockedX || blockedY) && moving && L.kind === 'dungeon' && me.items.raft && R.time - (Lc.seaMsgAt || -99) > 6) { const ax = Math.floor(Lc.x + Math.cos(Lc.a) * 0.7), ay = Math.floor(Lc.y + Math.sin(Lc.a) * 0.7); if (TINFO[L.get(ax, ay)].water) { Lc.seaMsgAt = R.time; pushMsg('NO ROOM FOR THE RAFT IN HERE.', 3); } }
   // bump interactions
   Lc.bumpT -= dt;
   if ((blockedX || blockedY) && moving && Lc.bumpT <= 0) {
@@ -6040,7 +6067,7 @@ function updateLocal(dt, inp) {
   // pits: fall in once your center is over one, and come back where you last stood safely
   if (cti.pit) { const fx = Lc.x - Math.floor(Lc.x), fy = Lc.y - Math.floor(Lc.y); if (fx > 0.25 && fx < 0.75 && fy > 0.25 && fy < 0.75 && performance.now() - (Lc.fellAt || 0) > 900) { Lc.fellAt = performance.now(); sendAction({ t: 'fall', x: Lc.safeX, y: Lc.safeY }); Lc.flash = 0.4; Lc.flashC = rgb(0, 0, 0); } }
   else if (cti.water && !cti.ocean && !raft && performance.now() - (Lc.fellAt || 0) > 900) { Lc.fellAt = performance.now(); sendAction({ t: 'fall', x: Lc.safeX, y: Lc.safeY }); Lc.flash = 0.4; Lc.flashC = rgb(40, 90, 200); sfx('splash'); } // the tide came back over you
-  else if (!cti.hurt && !cti.glass && !cti.conveyor && !cti.water && !cti.wet && !cti.shallow) { Lc.safeX = Lc.x; Lc.safeY = Lc.y; }
+  else if (!cti.hurt && !cti.glass && !cti.conveyor && !cti.water && !cti.wet && !cti.shallow && !cti.frozen) { Lc.safeX = Lc.x; Lc.safeY = Lc.y; }
   // walls you can walk through whisper when you're close
   if (L.kind === 'dungeon' && R.time - (Lc.whisperAt || 0) > 2.5) {
     let near = false; for (let dy = -2; dy <= 2 && !near; dy++) for (let dx = -2; dx <= 2; dx++) if (TINFO[L.get(Math.floor(Lc.x) + dx, Math.floor(Lc.y) + dy)].fake) { near = true; break; }

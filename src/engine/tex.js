@@ -157,7 +157,7 @@ defTile(TL.BUSHFLOOR, { floor: 'grass' });
 defTile(TL.CEXIT = 27, { solid: true, wall: 'cexit', exitWall: true }); // daylight archway out of a cave
 // The edges of the Wilds, and the tall towers over dungeon gates. tall: wall height in tiles (seen over shorter walls),
 // jag: how the top edge is cut ('peak' ridge, 'trees' canopy, 'battlement'), snow: white caps on the high parts.
-defTile(TL.OCEAN = 28, { solid: true, floor: 'surf', water: true, ocean: true, low: true }); // rough sea: the raft can't cross it
+defTile(TL.OCEAN = 28, { solid: true, floor: 'surf', water: true, ocean: true, salty: true, low: true }); // rough sea: the raft can't cross it, and salt water won't freeze
 defTile(TL.PEAKS = 29, { solid: true, wall: 'mountain', tall: 3.4, jag: 'peak', snow: true });
 defTile(TL.FIREPEAKS = 30, { solid: true, wall: 'volcrock', tall: 2.8, jag: 'peak' });
 defTile(TL.BIGWOOD = 31, { solid: true, wall: 'treewall', tall: 2.6, jag: 'trees' });

@@ -309,6 +309,24 @@ attempt('bramble keep eye and the way out', () => {
   __ok(p.lvl === 'd2', 'taking the shard should not throw you out any more');
   let warp = -1; for (let y = iy + 1; y < iy + DSY; y++) for (let x = ix + 1; x < ix + DSX; x++) if (L.get(x, y) === TL.WARP) warp = L.idx(x, y); __ok(warp >= 0, 'a glowing exit should appear in the boss room');
 });
+attempt('frost arrows freeze fresh water, not salt', () => {
+  const sim = freshSim(); const p = sim.players.p1; const L = sim.W.levels.ow; const x0 = Math.floor(p.x) + 2, y0 = Math.floor(p.y);
+  for (let dx = 0; dx < 10; dx++) for (let dy = -1; dy <= 1; dy++) L.set(x0 + dx, y0 + dy, dx < 5 ? TL.WATER : TL.OCEAN);
+  for (let dy = -1; dy <= 1; dy++) L.set(x0 - 1, y0 + dy, TL.GRASS); L.props[L.idx(x0 - 1, y0)] = 0;
+  p.items.bow = true; p.items.frostarrows = true; p.arrows = 10; p.a = 0; p.x = x0 - 0.5; p.y = y0 + 0.5;
+  sim.useItem(p, 'bow', {}); const pr = sim.ents.find(e => e.k === 'proj' && e.pid === 'p1'); for (let i = 0; i < 90 && !pr.dead; i++) sim.updateProj(pr, 1 / 60);
+  __ok(L.get(x0 + 1, y0) === TL.FROZEN && L.get(x0 + 1, y0 + 1) === TL.FROZEN, 'frost arrow should freeze the water it crosses');
+  __ok(L.get(x0 + 6, y0) === TL.OCEAN, 'salt water never freezes');
+  __ok(sim.snapshotFor('p1').fz.length > 3, 'snapshot carries the ice');
+  const W2 = genWorld(sim.W.seed, sim.W.mode); const L2 = W2.levels.ow; for (let dx = 0; dx < 5; dx++) L2.set(x0 + dx, y0, TL.WATER); freezeTile(L2, L2.idx(x0 + 1, y0)); __ok(L2.get(x0 + 1, y0) === TL.FROZEN, 'client copies can freeze too'); thawTile(L2, L2.idx(x0 + 1, y0)); __ok(L2.get(x0 + 1, y0) === TL.WATER, 'and thaw back');
+  sim.time += FREEZE_TIME + 1; sim.updateThaws(L); __ok(L.get(x0 + 1, y0) === TL.WATER, 'ice should melt back into water');
+  // the raft works on open water but not in dungeons
+  const D = sim.W.levels.d3; const rid = Object.keys(D.rigs)[0]; const c = D.rigs[rid].cells[0];
+  __ok(D.solidAt(c % D.w + 0.5, Math.floor(c / D.w) + 0.5, { raft: true }), 'no rafting in dungeons');
+  __ok(!L.solidAt(x0 + 1.5, y0 + 0.5, { raft: true }), 'raft still crosses lakes');
+  // tide water that's frozen keeps its ice and thaws into whatever the tide is by then
+  const t = c; freezeTile(D, t); applyRig(D, rid, 1); __ok(D.tiles[t] === TL.FROZEN && D.frozen[t] === TL.WET, 'frozen tide cells keep their ice'); thawTile(D, t); __ok(D.tiles[t] === TL.WET, 'and thaw into the drained floor'); applyRig(D, rid, 0);
+});
 attempt('tideglass opening', () => {
   for (const [seed, mode] of [[7319, 'adv'], [1234, 'rogue'], [99, 'rogue'], [4242, 'adv']]) {
     const W = genWorld(seed, mode); const D = W.levels.d6; const st = D.startRoom; const r2 = st.children[0]; const r3 = r2.children[0];
