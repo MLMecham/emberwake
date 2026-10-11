@@ -31,11 +31,12 @@ function readInput(dt) {
   if (k.ArrowLeft) o.turn -= 2.6 * dt; if (k.ArrowRight) o.turn += 2.6 * dt;
   o.turn += IN.mouseDX * 0.0028 * IN.sens; o.pitch -= IN.mouseDY * 0.25 * IN.sens * (IN.invertY ? -1 : 1);
   IN.mouseDX = 0; IN.mouseDY = 0;
-  o.atk = k.Space || k.KeyJ || IN.mouseL; o.atkP = p.Space || p.KeyJ || p.Mouse0;
+  // Space attacks for the sword hero and dashes for the martial artist (IN.spaceDash, set by ui/main.js each frame)
+  o.atk = (!IN.spaceDash && k.Space) || k.KeyJ || IN.mouseL; o.atkP = (!IN.spaceDash && p.Space) || p.KeyJ || p.Mouse0;
   o.item = p.KeyE || p.KeyK || p.Mouse2; o.itemHeld = k.KeyE || k.KeyK || IN.mouseR;
   o.cycle = (p.KeyQ ? -1 : 0) + (p.KeyR ? 1 : 0) + IN.wheel; IN.wheel = 0;
   o.interact = k.KeyF; o.interactP = p.KeyF;
-  o.map = p.KeyM || p.Tab; o.pause = p.Escape || p.KeyP; o.dash = p.ShiftLeft || p.ShiftRight;
+  o.map = p.KeyM || p.Tab; o.pause = p.Escape || p.KeyP; o.dash = !!(IN.spaceDash && p.Space); o.alt = !!(k.ShiftLeft || k.ShiftRight); o.inv = p.KeyI; // Shift + item = the item's technique
   o.confirm = p.Enter || p.Space || p.KeyF || p.Mouse0; o.enterP = !!p.Enter;
   for (let i = 1; i <= 7; i++) if (p['Digit' + i]) o.slot = i;
   // gamepad
@@ -44,7 +45,7 @@ function readInput(dt) {
     const dz = (v) => Math.abs(v) < 0.18 ? 0 : v; const b = (i) => gp.buttons[i] && gp.buttons[i].pressed; const bp = (i) => b(i) && !_padPrev[i];
     o.fwd -= dz(gp.axes[1] || 0); o.str += dz(gp.axes[0] || 0); o.turn += dz(gp.axes[2] || 0) * 2.8 * dt * IN.sens; o.pitch -= dz(gp.axes[3] || 0) * 120 * dt * (IN.invertY ? -1 : 1);
     if (b(0) || b(7)) o.atk = true; if (bp(0) || bp(7)) { o.atkP = true; o.confirm = true; }
-    if (bp(2) || bp(6)) o.item = true; if (b(2) || b(6)) o.itemHeld = true; if (bp(3)) o.cycle += 1; if (bp(4)) o.cycle -= 1; if (bp(5)) o.cycle += 1;
+    if (bp(2) || bp(6)) o.item = true; if (b(2) || b(6)) o.itemHeld = true; if (bp(3)) o.cycle += 1; if (b(4)) o.alt = true; if (bp(5)) o.cycle += 1; if (bp(14)) o.cycle -= 1; if (bp(15)) o.cycle += 1; // LB held = Shift
     if (b(1)) o.interact = true; if (bp(1)) { o.interactP = true; o.dash = true; } if (bp(9)) o.pause = true; if (bp(8)) o.map = true; if (bp(10)) o.dash = true;
     if (bp(12)) o.menuUp = true; if (bp(13)) o.menuDown = true;
     _padPrev = {}; gp.buttons.forEach((x, i) => _padPrev[i] = x.pressed);

@@ -5,6 +5,10 @@ Not built yet. Parked here so they don't get lost. Newest at the bottom.
 ## Next up
 - **Sunken Stair boss fight on four platforms** (drain water with eyes to get more ground). Waiting on Mitch's ideas before building.
 
+## Items to place
+- **Gale Cloak** (fly for 4 s over water, lava, pits and vents; walls still stop you). Built, but not in the world yet. Where should it come from? Maybe a late dungeon or a hard optional grotto.
+- **Skeleton Key** (every lock, no keys used). Built, but not in the world yet. A post-game reward, or the prize for finding every secret?
+
 ## Combat
 - **Armored enemies.** A bomb (or bomb arrow) cracks the armor; only then do sword hits land.
 - **Shield enemy rework.** Shield knights are fine early but too tough later, even in a group. Add a technique that knocks their shield down for 1–2 s. Armored versions can ignore it, for another layer.

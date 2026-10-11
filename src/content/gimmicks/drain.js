@@ -81,7 +81,7 @@ defineGimmick('drain', {
   },
   update(sim, L) { // floor switches drain their room for good
     for (const p of Object.values(sim.players)) {
-      if (!p.alive || p.lvl !== L.id) continue;
+      if (!p.alive || p.lvl !== L.id || sim.flying(p)) continue; // fliers don't press switches
       const tx = Math.floor(p.x), ty = Math.floor(p.y); const i = L.idx(tx, ty);
       if (L.tiles[i] !== TL.SWITCH) continue;
       sim.setTile(L.id, i, TL.SWITCH_DOWN);

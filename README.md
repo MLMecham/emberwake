@@ -18,7 +18,7 @@ You can add your own relay later by putting a Metered app name and TURN API key 
 Two mountain passes lead out of the Wilds. West is the **Frozen Reach**: slippery ice, frost imps and snow wolves, and **Rimefang Hollow**, home of the long-necked **Frost Matriarch** (treasure: Frost Arrows, which freeze what they hit). East is the **Cinder Wastes**: lava, vents that blow on a rhythm, and the **Cinder Caldera** with the **Fire Patriarch** (treasure: Magma Boots). Each dragon leaves a relic, the Frost Fang and the Ember Heart. With both, the sealed gate on the edge of the great wood opens to **the Hearth**, where the three-headed **Hearthwyrm** guards the **Dawnblade**.
 
 ## Controls
-WASD move · mouse look (click to lock, or hold a button and drag) · click/Space attack · right-click/E item · Q/R/wheel switch item · hold F next to a fallen friend to help them up · M map · Esc menu. Gamepads work too.
+WASD move · mouse look (click to lock, or hold a button and drag) · click/Space attack (Space dashes for the martial artist) · right-click/E item: hold for power (the bow fires on release; with the Loaded Shot scroll, holding nocks a second arrow), Shift + item for its technique · Q/R/wheel switch item · I inventory (pick any sword, tunic or arrow you've earned) · hold F next to a fallen friend to help them up · M map · Esc menu. Gamepads work too (LB held = Shift).
 
 ## Debug mode
 Only for heroes named **MITCH** or **LOGAN** (the list is `DEV_NAMES` in `src/core/util.js`). With one of those names:

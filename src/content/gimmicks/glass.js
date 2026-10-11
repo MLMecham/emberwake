@@ -37,7 +37,7 @@ defineGimmick('glass', {
     L.glassT = L.glassT || {}; L.pits = L.pits || {};
     const under = new Set();
     for (const p of Object.values(sim.players)) {
-      if (!p.alive || p.lvl !== L.id) continue;
+      if (!p.alive || p.lvl !== L.id || sim.flying(p)) continue; // fliers don't touch the glass
       const i = L.idx(Math.floor(p.x), Math.floor(p.y)); const t = L.tiles[i];
       if (!TINFO[t].glass) continue;
       if (under.has(i)) continue; under.add(i); // two heroes on one pane don't crack it twice as fast

@@ -26,6 +26,13 @@ button:active { transform:translateY(2px); box-shadow:0 1px 0 #000; }
 button.primary { background:#7a2c0c; border-color:var(--ember); }
 .row { display:flex; gap:8px; } .row > * { flex:1; }
 label { font-size:11px; color:var(--dim); display:block; margin:10px 0 4px; }
+.bag .counts { font-size:12px; color:var(--gold); margin:4px 0 6px; line-height:1.7; }
+.bag .row2 { display:flex; flex-wrap:wrap; gap:6px; }
+.bag .row2 button { width:auto; flex:1 1 140px; display:flex; align-items:center; gap:8px; text-align:left; padding:6px 8px; }
+.bag .row2 button.on { border-color:var(--gold); color:var(--gold); background:#3a2c14; }
+.bag .row2 button canvas { width:32px; height:32px; image-rendering:pixelated; flex:none; }
+.bag .row2 button small { display:block; color:var(--dim); font-size:10px; letter-spacing:0; text-transform:none; }
+.bag .row2 .tag { flex:1 1 140px; display:flex; align-items:center; gap:8px; font-size:12px; padding:4px 6px; border:1px dashed #57486e; }
 input[type=text], textarea { font:inherit; width:100%; background:#000; color:var(--gold); border:2px solid #57486e; padding:8px; font-size:13px; text-transform:uppercase; }
 textarea { font-size:10px; height:52px; text-transform:none; word-break:break-all; }
 #colors { display:flex; gap:6px; flex-wrap:wrap; }
@@ -138,6 +145,7 @@ summary:hover { color:var(--gold); }
     <button id="pResume" class="primary">RESUME</button>
     <button id="pDbgToggle" style="display:none">DEBUG: OFF</button>
     <div id="pDebug" style="display:none"><button id="pGodToggle">GOD MODE: OFF</button><label>DEBUG WARP</label><div class="warps" id="pWarps"></div></div>
+    <button id="pBag">INVENTORY (I)</button>
     <button id="pInvite">INVITE PLAYERS (CO-OP)</button>
     <button id="pSave">SAVE</button>
     <label>LOOK SENSITIVITY</label><input id="sens" type="range" min="0.3" max="2.5" step="0.1" value="1">
@@ -146,6 +154,14 @@ summary:hover { color:var(--gold); }
     <label><input id="invy" type="checkbox"> INVERT LOOK Y</label>
     <button id="pHelp">HOW TO PLAY</button>
     <button id="pQuit">SAVE &amp; QUIT TO TITLE</button>
+  </div>
+</div>
+
+<div id="bagScreen" class="screen">
+  <div class="panel bag">
+    <h2>INVENTORY</h2>
+    <div id="bagBody"></div>
+    <button id="bagClose" class="primary">CLOSE (I)</button>
   </div>
 </div>
 
@@ -174,10 +190,10 @@ summary:hover { color:var(--gold); }
     <h2>HOW TO PLAY</h2>
     <div class="keys">
       <b>WASD</b><span>MOVE / STRAFE</span><b>MOUSE / ARROWS</b><span>LOOK (CLICK TO LOCK MOUSE)</span>
-      <b>CLICK / SPACE</b><span>ATTACK (A)</span><b>RIGHT-CLICK / E</b><span>USE ITEM (B)</span>
+      <b>CLICK / SPACE</b><span>ATTACK (A) - SPACE DASHES FOR SOME HEROES...</span><b>RIGHT-CLICK / E</b><span>USE ITEM (B). HOLD FOR POWER (THE BOW FIRES WHEN YOU LET GO)</span><b>SHIFT + ITEM</b><span>THE ITEM'S TECHNIQUE, ONCE YOU LEARN ONE</span>
       <b>Q / R / WHEEL / 1-7</b><span>SWITCH ITEM</span><b>F (HOLD)</b><span>READ SIGNS / HELP UP A FALLEN FRIEND</span>
-      <b>M / TAB</b><span>MAP</span><b>SHIFT</b><span>DASH (SOME HEROES...)</span><b>ESC</b><span>MENU</span>
-      <b>GAMEPAD</b><span>STICKS MOVE/LOOK, A/RT ATTACK, X/LT ITEM, Y/RB SWITCH, B USE, START MENU, SELECT MAP</span>
+      <b>M / TAB</b><span>MAP</span><b>I</b><span>INVENTORY: GEAR, ITEMS, UPGRADES</span><b>ESC</b><span>MENU</span>
+      <b>GAMEPAD</b><span>STICKS MOVE/LOOK, A/RT ATTACK, X/LT ITEM, Y/RB SWITCH, B USE, START MENU, SELECT MAP, LB HELD = SHIFT, D-PAD SWITCH</span>
     </div>
     <p>FIND THE OLD MAN'S CAVE FOR A SWORD. NINE GATES HIDE NINE DUNGEONS - EIGHT HOLD EMBER SHARDS, THE NINTH HOLDS THE HOLLOW KING. AT FULL HEALTH YOUR SWORD FIRES A BEAM. YOUR SHIELD BLOCKS ROCKS AND SPEARS FROM THE FRONT. BOMB CRACKED WALLS. BURN SUSPICIOUS BUSHES. BUY A CHAIN TUNIC AND WATCH IT TURN TO STEEL.</p>
     <p class="dim">CO-OP: DUNGEON ITEMS, SWORDS AND HEART CONTAINERS ARE SHARED BY THE WHOLE PARTY. GEMS ARE YOURS.</p>

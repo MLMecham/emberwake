@@ -26,6 +26,13 @@ button:active { transform:translateY(2px); box-shadow:0 1px 0 #000; }
 button.primary { background:#7a2c0c; border-color:var(--ember); }
 .row { display:flex; gap:8px; } .row > * { flex:1; }
 label { font-size:11px; color:var(--dim); display:block; margin:10px 0 4px; }
+.bag .counts { font-size:12px; color:var(--gold); margin:4px 0 6px; line-height:1.7; }
+.bag .row2 { display:flex; flex-wrap:wrap; gap:6px; }
+.bag .row2 button { width:auto; flex:1 1 140px; display:flex; align-items:center; gap:8px; text-align:left; padding:6px 8px; }
+.bag .row2 button.on { border-color:var(--gold); color:var(--gold); background:#3a2c14; }
+.bag .row2 button canvas { width:32px; height:32px; image-rendering:pixelated; flex:none; }
+.bag .row2 button small { display:block; color:var(--dim); font-size:10px; letter-spacing:0; text-transform:none; }
+.bag .row2 .tag { flex:1 1 140px; display:flex; align-items:center; gap:8px; font-size:12px; padding:4px 6px; border:1px dashed #57486e; }
 input[type=text], textarea { font:inherit; width:100%; background:#000; color:var(--gold); border:2px solid #57486e; padding:8px; font-size:13px; text-transform:uppercase; }
 textarea { font-size:10px; height:52px; text-transform:none; word-break:break-all; }
 #colors { display:flex; gap:6px; flex-wrap:wrap; }
@@ -138,6 +145,7 @@ summary:hover { color:var(--gold); }
     <button id="pResume" class="primary">RESUME</button>
     <button id="pDbgToggle" style="display:none">DEBUG: OFF</button>
     <div id="pDebug" style="display:none"><button id="pGodToggle">GOD MODE: OFF</button><label>DEBUG WARP</label><div class="warps" id="pWarps"></div></div>
+    <button id="pBag">INVENTORY (I)</button>
     <button id="pInvite">INVITE PLAYERS (CO-OP)</button>
     <button id="pSave">SAVE</button>
     <label>LOOK SENSITIVITY</label><input id="sens" type="range" min="0.3" max="2.5" step="0.1" value="1">
@@ -146,6 +154,14 @@ summary:hover { color:var(--gold); }
     <label><input id="invy" type="checkbox"> INVERT LOOK Y</label>
     <button id="pHelp">HOW TO PLAY</button>
     <button id="pQuit">SAVE &amp; QUIT TO TITLE</button>
+  </div>
+</div>
+
+<div id="bagScreen" class="screen">
+  <div class="panel bag">
+    <h2>INVENTORY</h2>
+    <div id="bagBody"></div>
+    <button id="bagClose" class="primary">CLOSE (I)</button>
   </div>
 </div>
 
@@ -174,10 +190,10 @@ summary:hover { color:var(--gold); }
     <h2>HOW TO PLAY</h2>
     <div class="keys">
       <b>WASD</b><span>MOVE / STRAFE</span><b>MOUSE / ARROWS</b><span>LOOK (CLICK TO LOCK MOUSE)</span>
-      <b>CLICK / SPACE</b><span>ATTACK (A)</span><b>RIGHT-CLICK / E</b><span>USE ITEM (B)</span>
+      <b>CLICK / SPACE</b><span>ATTACK (A) - SPACE DASHES FOR SOME HEROES...</span><b>RIGHT-CLICK / E</b><span>USE ITEM (B). HOLD FOR POWER (THE BOW FIRES WHEN YOU LET GO)</span><b>SHIFT + ITEM</b><span>THE ITEM'S TECHNIQUE, ONCE YOU LEARN ONE</span>
       <b>Q / R / WHEEL / 1-7</b><span>SWITCH ITEM</span><b>F (HOLD)</b><span>READ SIGNS / HELP UP A FALLEN FRIEND</span>
-      <b>M / TAB</b><span>MAP</span><b>SHIFT</b><span>DASH (SOME HEROES...)</span><b>ESC</b><span>MENU</span>
-      <b>GAMEPAD</b><span>STICKS MOVE/LOOK, A/RT ATTACK, X/LT ITEM, Y/RB SWITCH, B USE, START MENU, SELECT MAP</span>
+      <b>M / TAB</b><span>MAP</span><b>I</b><span>INVENTORY: GEAR, ITEMS, UPGRADES</span><b>ESC</b><span>MENU</span>
+      <b>GAMEPAD</b><span>STICKS MOVE/LOOK, A/RT ATTACK, X/LT ITEM, Y/RB SWITCH, B USE, START MENU, SELECT MAP, LB HELD = SHIFT, D-PAD SWITCH</span>
     </div>
     <p>FIND THE OLD MAN'S CAVE FOR A SWORD. NINE GATES HIDE NINE DUNGEONS - EIGHT HOLD EMBER SHARDS, THE NINTH HOLDS THE HOLLOW KING. AT FULL HEALTH YOUR SWORD FIRES A BEAM. YOUR SHIELD BLOCKS ROCKS AND SPEARS FROM THE FRONT. BOMB CRACKED WALLS. BURN SUSPICIOUS BUSHES. BUY A CHAIN TUNIC AND WATCH IT TURN TO STEEL.</p>
     <p class="dim">CO-OP: DUNGEON ITEMS, SWORDS AND HEART CONTAINERS ARE SHARED BY THE WHOLE PARTY. GEMS ARE YOURS.</p>
@@ -259,7 +275,7 @@ const FONT = {};
     '9': '.###.#...##...#.####....#...#..##..', ' ': '...................................',
     '.': '..............................##...', ',': '.........................##....#...', '!': '..#....#....#....#....#.........#..',
     '?': '.###.#...#....#...#...#.........#..', ':': '......##...##.........##...##.....', '-': '...............###.................',
-    "'": '..#....#...#.......................', '/': '....#....#...#...#...#...#....#....', '+': '.......#....#..#####..#....#.......',
+    "'": '..#....#...#.......................', '/': '....#....#...#...#...#...#....#....', '+': '.......#....#..#####..#....#.......', '~': '......#.#.#.#.##.#.#.#.#...........', // '~' draws as an infinity sign (Skeleton Key)
     '*': '.......#.#.#.#.###..#.#.#.#........', '(': '...#...#...#....#....#.....#.....#.', ')': '.#.....#.....#....#....#...#...#...',
     '<': '...#...#...#...#.....#.....#.....#.', '>': '.#.....#.....#.....#...#...#...#...', '=': '..........#####.....#####..........',
     '#': '.#.#.#####.#.#..#.#.#####.#.#......', '%': '##...##..#...#...#...#...#..##...##', '"': '.#.#..#.#..........................',
@@ -1773,6 +1789,46 @@ defineSprite('pedestal', [
 ]);
 defineAnim('flame', 8, (s, kit) => [s, kit.shearRows(s, 2, 8, 1), kit.squash(s, 1.1)]);
 
+// ---- src/content/sprites/relics.js ----
+// ===== content/sprites/relics.js : the Gale Cloak and the Skeleton Key =====
+'use strict';
+defineSprite('galecloak', [
+  '................',
+  '.......ww.......',
+  '......wcw.......',
+  '.....wcccw......',
+  '....wcCcCcw.....',
+  '...wcCcwcCcw....',
+  '..wcCcw.wcCcw...',
+  '.wcCcw...wcCcw..',
+  '.wcCw.....wCcw..',
+  '..ww.......ww...',
+  '................',
+  '................',
+  '................',
+  '................',
+  '................',
+  '................',
+]);
+defineSprite('skelkey', [
+  '................',
+  '....uuuu........',
+  '...uwwwwu.......',
+  '...wkwwkw.......',
+  '...wwwwww.......',
+  '....wkkw........',
+  '.....uu.........',
+  '......w.........',
+  '......w.........',
+  '......w.........',
+  '......ww........',
+  '......w.........',
+  '......wwk.......',
+  '......w.........',
+  '......ww........',
+  '................',
+]);
+
 // ---- src/content/sprites/techniques.js ----
 // ===== content/sprites/techniques.js : technique scrolls, the quiver, and loaded arrows =====
 'use strict';
@@ -2449,7 +2505,7 @@ defineGimmick('drain', {
   },
   update(sim, L) { // floor switches drain their room for good
     for (const p of Object.values(sim.players)) {
-      if (!p.alive || p.lvl !== L.id) continue;
+      if (!p.alive || p.lvl !== L.id || sim.flying(p)) continue; // fliers don't press switches
       const tx = Math.floor(p.x), ty = Math.floor(p.y); const i = L.idx(tx, ty);
       if (L.tiles[i] !== TL.SWITCH) continue;
       sim.setTile(L.id, i, TL.SWITCH_DOWN);
@@ -2561,7 +2617,7 @@ defineGimmick('glass', {
     L.glassT = L.glassT || {}; L.pits = L.pits || {};
     const under = new Set();
     for (const p of Object.values(sim.players)) {
-      if (!p.alive || p.lvl !== L.id) continue;
+      if (!p.alive || p.lvl !== L.id || sim.flying(p)) continue; // fliers don't touch the glass
       const i = L.idx(Math.floor(p.x), Math.floor(p.y)); const t = L.tiles[i];
       if (!TINFO[t].glass) continue;
       if (under.has(i)) continue; under.add(i); // two heroes on one pane don't crack it twice as fast
@@ -3400,7 +3456,7 @@ defineItem({
     const monk = p.cls === 'monk';
     if (sim.ents.filter(e => e.k === 'proj' && e.pid === p.id && (e.type === 'arrow' || e.type === 'dart')).length >= (monk ? 3 : 1)) return;
     p.arrows -= loaded ? 2 : 1;
-    const silver = !!p.items.silver; const dmg = silver ? 4 : 2; const frost = !!p.items.frostarrows; // frost arrows (Rimefang Hollow) freeze
+    const silver = !!p.items.silver; const dmg = silver ? 4 : 2; const frost = !!p.items.frostarrows && !p.plainArrows; // frost arrows (Rimefang Hollow) freeze, unless the inventory says plain
     const extra = Object.assign(loaded ? { kbMul: 1.6, shieldBreak: true } : {}, frost ? { iceLeft: FREEZE_PATH } : {}); const mul = loaded ? 2 : 1; // frost arrows freeze water they fly over (sim.freezeAlong)
     if (monk) for (const s of [-0.12, 0, 0.12]) sim.fireProj('dart', p.lvl, p.x, p.y, p.a + s, 'p', p.id, Object.assign({ dmg: (dmg - 1) * mul, silver, life: 1.5, frost }, extra, frost ? { spr: 'icebolt' } : {}, loaded ? { sc: 0.75 } : {}));
     else sim.fireProj('arrow', p.lvl, p.x, p.y, p.a, 'p', p.id, Object.assign({ dmg: dmg * mul, silver, frost }, extra, { spr: (loaded ? 'arrow2' : 'arrow') + (frost ? '_ice' : '') }));
@@ -3616,6 +3672,26 @@ defineItem({ id: 'potion2', name: 'BLUE POTION', sprite: 'potion', full: (p) => 
 defineItem({ id: 'raft', name: 'RAFT', sprite: 'boulder', monk: { name: 'CLOUD WALK' }, team: true, debug: true, give(sim, p, ctx) { p.items.raft = true; ctx.banner(); } });
 
 })();
+// ---- src/content/items/relics.js ----
+(function () {
+// ===== content/items/relics.js : rare tools. Where to find them is still open (docs/IDEAS.md); debug mode hands them out. =====
+'use strict';
+// GALE CLOAK (B-item): fly for a few seconds. While airborne you pass over water, lava, spikes, pits and vents like a bat
+// (walls still stop you). Land somewhere bad and it's like any fall. game/sim.js flying(), ui/main.js movement.
+defineItem({ id: 'galecloak', name: 'GALE CLOAK', sprite: 'galecloak', monk: { name: 'WIND STEP' }, slot: 'b', order: 8, team: true, debug: true,
+  owned: (p) => !!p.items.galecloak,
+  give(sim, p, ctx) { p.items.galecloak = true; ctx.banner(); },
+  use(sim, p) {
+    if (sim.flying(p)) return;
+    if (sim.time < (p.flyReady || 0)) return sim.hint(p, 'THE CLOAK IS STILL CATCHING ITS BREATH.');
+    p.flyUntil = sim.time + FLY_TIME; p.flyReady = p.flyUntil + FLY_COOLDOWN; sim.sfx('gale', p.lvl, p.x, p.y);
+  },
+});
+// SKELETON KEY: opens every locked door, in every dungeon, without using up keys.
+defineItem({ id: 'skeletonkey', name: 'SKELETON KEY', sprite: 'skelkey', team: true, debug: true,
+  give(sim, p, ctx) { p.items.skeletonkey = true; ctx.banner('SKELETON KEY: EVERY LOCK IS YOURS'); } });
+
+})();
 // ---- src/content/items/rod.js ----
 (function () {
 // ===== content/items/rod.js : magic bolt that leaves fire where it lands =====
@@ -3660,7 +3736,7 @@ defineItem({ id: 'quiver', name: 'BIG QUIVER', sprite: 'quiver', team: true, deb
 (function () {
 // ===== content/items/tunics.js : armor. Your tunic visibly turns to chainmail, then plate. =====
 'use strict';
-defineItem({ id: 'chain', name: 'CHAIN TUNIC', sprite: 'armor', monk: { name: 'BLUE AURA' }, canTake: (p) => p.armor < 1, give(sim, p, ctx) { p.armor = Math.max(p.armor, 1); ctx.banner(); } });
+defineItem({ id: 'chain', name: 'CHAIN TUNIC', sprite: 'armor', monk: { name: 'BLUE AURA' }, canTake: (p) => Math.max(p.armor, p.armorMax || 0) < 1, give(sim, p, ctx) { p.armor = Math.max(p.armor, 1); ctx.banner(); } });
 defineItem({ id: 'plate', name: 'PLATE TUNIC', sprite: 'armor', monk: { name: 'GOLDEN AURA' }, team: true, give(sim, p, ctx) { p.armor = 2; ctx.banner(); } });
 
 })();
@@ -3704,6 +3780,7 @@ class Level {
     if (x < 0 || y < 0 || x >= this.w || y >= this.h) return true;
     const t = this.tiles[y * this.w + x]; const ti = TINFO[t];
     if (ti.water && !ti.ocean && opts && opts.raft && this.kind !== 'dungeon') return false; // the raft is for open water, not dungeon halls
+    if (ti.low && opts && opts.fly) return false; // flying (Gale Cloak) passes over water like a bat
     // sealed-room doors are one-way: teammates can come in, nobody leaves until the room is clear
     if (t === TL.SHUTTER && opts && opts.mx != null && this.kind === 'dungeon') {
       const rid = this.sealRoom && this.sealRoom[y * this.w + x];
@@ -4261,6 +4338,7 @@ function migrateSave(s) {
 const REVIVE_TIME = 1.5, REVIVE_R2 = 2.6 * 2.6; // seconds to help a teammate up, and how close you must stand
 const RESPAWN_WAIT = 30; // seconds a downed hero waits before they may give up and respawn at the start on their own
 const BUY_COOLDOWN = 0.8; // seconds between shop purchases for one player
+const FLY_TIME = 4, FLY_COOLDOWN = 2; // Gale Cloak: seconds aloft, and the rest after landing before it works again
 const SHIELD_STUN = 0.9; // seconds a knight reels after a loaded shot hits its shield
 const FREEZE_TIME = 6, FREEZE_PATH = 6; // seconds frost-arrow ice lasts; how many tiles of water one arrow freezes along its flight
 const HAZARD_TICK = 0.5, ICE_KB = 1.5, SHALLOW_SLOW = 0.75; // how often lava/spikes/vents burn a grounded enemy; how much harder hits shove enemies standing on ice
@@ -4292,7 +4370,7 @@ class Sim {
       p = saved ? Object.assign(newPlayer(id, name, color, cls), saved, { id, name }) : newPlayer(id, name, color, cls);
       if (!saved) { // late joiners get team progression
         const any = Object.values(this.players)[0];
-        if (any) { p.items = Object.assign({}, any.items); p.sword = any.sword; p.maxHp = any.maxHp; p.maxArrows = any.maxArrows || ARROWS_START; p.hp = p.maxHp; if (any.armor === 2) p.armor = 2; if (p.items.bombbag) p.bombs = 4; }
+        if (any) { p.items = Object.assign({}, any.items); p.sword = Math.max(any.sword, any.swordMax || 0); p.maxHp = any.maxHp; p.maxArrows = any.maxArrows || ARROWS_START; p.hp = p.maxHp; if (any.armor === 2) p.armor = 2; if (p.items.bombbag) p.bombs = 4; }
       }
       const host = Object.values(this.players)[0];
       const sp = host && host.alive ? host : null;
@@ -4305,7 +4383,7 @@ class Sim {
     return p;
   }
   removePlayer(id) { const p = this.players[id]; if (!p) return; this.savedPlayers = this.savedPlayers || {}; this.savedPlayers[p.color] = this.playerSaveData(p); delete this.players[id]; this.ev({ t: 'msg', text: p.name + ' LEFT.' }); }
-  playerSaveData(p) { const o = {}; for (const k of ['cls', 'lvl', 'x', 'y', 'a', 'hp', 'maxHp', 'gems', 'bombs', 'maxBombs', 'arrows', 'maxArrows', 'sword', 'armor', 'items', 'potions', 'sel']) o[k] = p[k]; o.alive = true; if (o.hp <= 0) o.hp = 12; return o; }
+  playerSaveData(p) { const o = {}; for (const k of ['cls', 'lvl', 'x', 'y', 'a', 'hp', 'maxHp', 'gems', 'bombs', 'maxBombs', 'arrows', 'maxArrows', 'swordMax', 'armorMax', 'plainArrows', 'sword', 'armor', 'items', 'potions', 'sel']) o[k] = p[k]; o.alive = true; if (o.hp <= 0) o.hp = 12; return o; }
   ev(e) { this.events.push(e); }
   sfx(s, lvl, x, y) { this.ev({ t: 'sfx', s, lvl, x, y }); }
   msg(text, pid) { this.ev({ t: 'msg', text, pid }); }
@@ -4372,6 +4450,7 @@ class Sim {
     switch (a.t) {
       case 'atk': this.playerAttack(p, a); break;
       case 'use': this.useItem(p, a.item, a); break;
+      case 'equip': this.equip(p, a); break;
       case 'enter': this.tryEnter(p, a.idx); break;
       case 'exit': this.tryExit(p); break;
       case 'unlock': this.tryUnlock(p, a.idx); break;
@@ -4436,6 +4515,7 @@ class Sim {
   }
   tryUnlock(p, idx) {
     const L = this.W.levels[p.lvl]; if (L.tiles[idx] !== TL.LOCKED) return;
+    if (Object.values(this.players).some(o => o.items.skeletonkey)) { this.setTile(L.id, idx, TL.OPENDOOR); this.sfx('door', L.id); return; } // the Skeleton Key opens anything, for free
     const k = this.team.keys[L.id] || 0;
     if (k <= 0) { this.ev({ t: 'hint', pid: p.id, text: 'LOCKED. FIND A SMALL KEY.' }); return; }
     this.team.keys[L.id] = k - 1; this.setTile(L.id, idx, TL.OPENDOOR); this.sfx('door', L.id);
@@ -4501,7 +4581,8 @@ class Sim {
       // hazard tiles
       if (p.chill > 0) p.chill -= dt;
       const t = L.get(Math.floor(p.x), Math.floor(p.y)); const ti = TINFO[t]; const boots = !!p.items.magmaboots;
-      if (p.inv <= 0 && ((ti.hurt && !(boots && ti.lava)) || (ti.vent && this.ventPhase() === 2 && !boots))) this.hurtPlayer(p, 1, null);
+      if (p.inv <= 0 && !this.flying(p) && ((ti.hurt && !(boots && ti.lava)) || (ti.vent && this.ventPhase() === 2 && !boots))) this.hurtPlayer(p, 1, null); // fliers are above it all
+      p.swordMax = Math.max(p.swordMax || 0, p.sword); p.armorMax = Math.max(p.armorMax || 0, p.armor); // best gear ever owned (the inventory lets you wear less)
       // pickups & shop
       for (const e of this.ents) {
         if (e.lvl !== p.lvl || e.dead) continue;
@@ -4820,7 +4901,15 @@ class Sim {
   }
   useItem(p, item, a) {
     const d = itemDef(item); if (!d || d.slot !== 'b' || !d.owned(p)) return;
+    if (a && a.alt && d.useAlt) return d.useAlt(this, p, a); // Shift + item: the item's technique, when it has one (otherwise the plain use)
     d.use(this, p, a || {});
+  }
+  flying(p) { return (p.flyUntil || 0) > this.time; }
+  // inventory choices: wear a lesser sword or tunic than your best, or fire plain arrows instead of frost ones
+  equip(p, a) {
+    if (a.slot === 'sword') { const lv = a.lv | 0; if (lv >= 1 && lv <= Math.max(p.swordMax || 0, p.sword)) p.sword = lv; }
+    else if (a.slot === 'armor') { const lv = a.lv | 0; if (lv >= 0 && lv <= Math.max(p.armorMax || 0, p.armor)) p.armor = lv; }
+    else if (a.slot === 'arrows') p.plainArrows = !!a.plain;
   }
   updateProj(e, dt) {
     const L = this.W.levels[e.lvl]; const def = Content.projectiles[e.type];
@@ -4957,7 +5046,7 @@ class Sim {
     const p = this.players[pid]; if (!p) return null;
     const en = []; for (const e of this.ents) if (e.lvl === p.lvl) en.push(this.entView(e));
     const pl = []; for (const o of Object.values(this.players)) pl.push([o.id, o.lvl, Math.round(o.x * 100) / 100, Math.round(o.y * 100) / 100, Math.round(o.a * 100) / 100, o.color, o.armor, o.cls, o.alive ? 1 : 0, o.atk, o.name, Math.round(o.revive / REVIVE_TIME * 100) / 100, o.hp, o.maxHp, o.reviver || 0]);
-    const me = {}; for (const k of ['lvl', 'hp', 'maxHp', 'gems', 'bombs', 'maxBombs', 'arrows', 'maxArrows', 'sword', 'armor', 'items', 'potions', 'alive', 'cls', 'sel', 'color', 'name', 'dbg', 'god']) me[k] = p[k]; me.chill = p.chill > 0 ? 1 : 0; me.respawnIn = p.alive ? 0 : Math.max(0, Math.ceil(RESPAWN_WAIT - (this.time - (p.downAt || 0))));
+    const me = {}; for (const k of ['lvl', 'hp', 'maxHp', 'gems', 'bombs', 'maxBombs', 'arrows', 'maxArrows', 'swordMax', 'armorMax', 'plainArrows', 'sword', 'armor', 'items', 'potions', 'alive', 'cls', 'sel', 'color', 'name', 'dbg', 'god']) me[k] = p[k]; me.chill = p.chill > 0 ? 1 : 0; me.fly = this.flying(p) ? Math.round((p.flyUntil - this.time) * 10) / 10 : 0; me.respawnIn = p.alive ? 0 : Math.max(0, Math.ceil(RESPAWN_WAIT - (this.time - (p.downAt || 0))));
     return { t: 's', paused: !!this.paused, pausedBy: this.pausedBy, me, pl, en, team: { keys: this.team.keys, maps: this.team.maps, comps: this.team.comps, shards: this.team.shards, done: this.team.done, relics: this.team.relics }, vp: this.ventPhase(), rg: this.rigCodes(p.lvl), fz: this.frozenList(p.lvl), mv: this.modVer, over: this.over > 0 };
   }
   // ---- save ----
@@ -5408,7 +5497,7 @@ function drawHUD(st) {
   let cy = 5 + Math.ceil(Math.ceil(me.maxHp / 4) / 10) * 8 + 2;
   const counter = (spr, v, c) => { blit(SPR[spr], hx - 4, cy - 5, 1); text('X' + v, hx + 10, cy, c || rgb(255, 255, 255)); cy += 9; };
   counter('gem_g', me.gems);
-  if (st.lvlKind === 'dungeon') counter('key', (st.team.keys && st.team.keys[me.lvl]) || 0);
+  if (st.lvlKind === 'dungeon') { if (me.items.skeletonkey) counter('skelkey', '~', rgb(255, 230, 140)); else counter('key', (st.team.keys && st.team.keys[me.lvl]) || 0); } // '~' is the infinity glyph (core/font.js)
   if (me.items.bombs || me.bombs) counter('bomb', me.bombs);
   if (me.items.bow) counter('arrow', me.arrows);
   if (me.potions) counter('potion', me.potions);
@@ -5612,6 +5701,7 @@ function sfx(name, vol) {
     case 'pitfall': tone(900, 0.7, 'sine', 0.13 * v, 70); noise(0.15, 0.1 * v, 500, AU.ctx.currentTime + 0.65); break; // an enemy drops into a pit
     case 'sizzle': noise(0.25, 0.14 * v, 7000); tone(1100, 0.12, 'sawtooth', 0.03 * v, 600); break; // an enemy burning on lava or a vent
     case 'icecrack': for (let i = 0; i < 4; i++) tone(2600 + Math.random() * 1600, 0.05, 'square', 0.05 * v, 1800, AU.ctx.currentTime + i * 0.07); noise(0.2, 0.06 * v, 6000); break; // frost-arrow ice about to melt
+    case 'gale': noise(0.9, 0.22 * v, 2400); seq([392, 523, 659, 784], 0.06, 'triangle', 0.1 * v); break; // the Gale Cloak lifts you
     case 'nock': tone(700, 0.06, 'square', 0.1 * v, 900); tone(1050, 0.08, 'triangle', 0.08 * v, 1300, AU.ctx.currentTime + 0.06); break; // a second arrow nocked
     case 'eyeshut': tone(320, 0.12, 'square', 0.14 * v, 140); noise(0.1, 0.12 * v, 900); break; // an arrow shuts an eye
     case 'eyecreak': tone(140, 0.7, 'sawtooth', 0.08 * v, 260); noise(0.6, 0.05 * v, 400); break; // the eye is opening again
@@ -5696,11 +5786,12 @@ function readInput(dt) {
   if (k.ArrowLeft) o.turn -= 2.6 * dt; if (k.ArrowRight) o.turn += 2.6 * dt;
   o.turn += IN.mouseDX * 0.0028 * IN.sens; o.pitch -= IN.mouseDY * 0.25 * IN.sens * (IN.invertY ? -1 : 1);
   IN.mouseDX = 0; IN.mouseDY = 0;
-  o.atk = k.Space || k.KeyJ || IN.mouseL; o.atkP = p.Space || p.KeyJ || p.Mouse0;
+  // Space attacks for the sword hero and dashes for the martial artist (IN.spaceDash, set by ui/main.js each frame)
+  o.atk = (!IN.spaceDash && k.Space) || k.KeyJ || IN.mouseL; o.atkP = (!IN.spaceDash && p.Space) || p.KeyJ || p.Mouse0;
   o.item = p.KeyE || p.KeyK || p.Mouse2; o.itemHeld = k.KeyE || k.KeyK || IN.mouseR;
   o.cycle = (p.KeyQ ? -1 : 0) + (p.KeyR ? 1 : 0) + IN.wheel; IN.wheel = 0;
   o.interact = k.KeyF; o.interactP = p.KeyF;
-  o.map = p.KeyM || p.Tab; o.pause = p.Escape || p.KeyP; o.dash = p.ShiftLeft || p.ShiftRight;
+  o.map = p.KeyM || p.Tab; o.pause = p.Escape || p.KeyP; o.dash = !!(IN.spaceDash && p.Space); o.alt = !!(k.ShiftLeft || k.ShiftRight); o.inv = p.KeyI; // Shift + item = the item's technique
   o.confirm = p.Enter || p.Space || p.KeyF || p.Mouse0; o.enterP = !!p.Enter;
   for (let i = 1; i <= 7; i++) if (p['Digit' + i]) o.slot = i;
   // gamepad
@@ -5709,7 +5800,7 @@ function readInput(dt) {
     const dz = (v) => Math.abs(v) < 0.18 ? 0 : v; const b = (i) => gp.buttons[i] && gp.buttons[i].pressed; const bp = (i) => b(i) && !_padPrev[i];
     o.fwd -= dz(gp.axes[1] || 0); o.str += dz(gp.axes[0] || 0); o.turn += dz(gp.axes[2] || 0) * 2.8 * dt * IN.sens; o.pitch -= dz(gp.axes[3] || 0) * 120 * dt * (IN.invertY ? -1 : 1);
     if (b(0) || b(7)) o.atk = true; if (bp(0) || bp(7)) { o.atkP = true; o.confirm = true; }
-    if (bp(2) || bp(6)) o.item = true; if (b(2) || b(6)) o.itemHeld = true; if (bp(3)) o.cycle += 1; if (bp(4)) o.cycle -= 1; if (bp(5)) o.cycle += 1;
+    if (bp(2) || bp(6)) o.item = true; if (b(2) || b(6)) o.itemHeld = true; if (bp(3)) o.cycle += 1; if (b(4)) o.alt = true; if (bp(5)) o.cycle += 1; if (bp(14)) o.cycle -= 1; if (bp(15)) o.cycle += 1; // LB held = Shift
     if (b(1)) o.interact = true; if (bp(1)) { o.interactP = true; o.dash = true; } if (bp(9)) o.pause = true; if (bp(8)) o.map = true; if (bp(10)) o.dash = true;
     if (bp(12)) o.menuUp = true; if (bp(13)) o.menuDown = true;
     _padPrev = {}; gp.buttons.forEach((x, i) => _padPrev[i] = x.pressed);
@@ -6019,16 +6110,17 @@ function updateLocal(dt, inp) {
   // turning
   Lc.a += inp.turn; Lc.pitch = clamp(Lc.pitch + inp.pitch, -50, 50); if (!IN.locked && !IN.mouseL && !IN.mouseR) Lc.pitch *= 0.95;
   // movement
-  const monk = me.cls === 'monk'; let spd = monk ? 4.0 : 3.6;
+  const monk = me.cls === 'monk'; let spd = monk ? 4.0 : 3.6; IN.spaceDash = monk; // Space is the martial artist's dash
+  const flying = me.fly > 0; // Gale Cloak: over water, lava, pits and vents like a bat
   if (Lc.charge > 0.3) spd *= 0.5;
   if (me.chill) spd *= 0.55; // frozen by ice breath
-  if (TINFO[L.get(Math.floor(Lc.x), Math.floor(Lc.y))].shallow) spd *= 0.75; // wading
+  if (TINFO[L.get(Math.floor(Lc.x), Math.floor(Lc.y))].shallow && !(me.fly > 0)) spd *= 0.75; // wading
   if (Lc.dashCd > 0) Lc.dashCd -= dt;
   if (inp.dash && monk && Lc.dashCd <= 0) { Lc.dashT = 0.16; Lc.dashCd = 0.7; sfx('dash'); Lc.dashDir = Math.atan2(inp.str, inp.fwd || (inp.str ? 0 : 1)); }
   let mvx = (Math.cos(Lc.a) * inp.fwd + Math.cos(Lc.a + Math.PI / 2) * inp.str) * spd, mvy = (Math.sin(Lc.a) * inp.fwd + Math.sin(Lc.a + Math.PI / 2) * inp.str) * spd;
   if (Lc.dashT > 0) { Lc.dashT -= dt; const da = Lc.a + (Lc.dashDir || 0); mvx = Math.cos(da) * 15; mvy = Math.sin(da) * 15; }
   // ice: you keep your momentum and steer slowly, so it's easy to slide into whatever is at the edge
-  { const ti0 = TINFO[L.get(Math.floor(Lc.x), Math.floor(Lc.y))]; if (ti0.slippery && Lc.dashT <= 0) { const k = Math.min(1, dt * 1.3); Lc.svx = lerp(Lc.svx || 0, mvx * 1.15, k); Lc.svy = lerp(Lc.svy || 0, mvy * 1.15, k); mvx = Lc.svx; mvy = Lc.svy; } else { Lc.svx = mvx; Lc.svy = mvy; } }
+  { const ti0 = TINFO[L.get(Math.floor(Lc.x), Math.floor(Lc.y))]; if (ti0.slippery && Lc.dashT <= 0 && !flying) { const k = Math.min(1, dt * 1.3); Lc.svx = lerp(Lc.svx || 0, mvx * 1.15, k); Lc.svy = lerp(Lc.svy || 0, mvy * 1.15, k); mvx = Lc.svx; mvy = Lc.svy; } else { Lc.svx = mvx; Lc.svy = mvy; } }
   // sounds of the frontier: skates on ice, vents near you building up and blowing, and the bite of being frozen
   { const ti1 = TINFO[L.get(Math.floor(Lc.x), Math.floor(Lc.y))]; if (ti1.slippery && Math.hypot(Lc.svx || 0, Lc.svy || 0) > 1.5) { Lc.slideT = (Lc.slideT || 0) - dt; if (Lc.slideT <= 0) { Lc.slideT = 0.24; sfx('iceslide', 0.8); } } }
   if (snap.vp !== Lc.lastVp) { Lc.lastVp = snap.vp; if (snap.vp) { const v = ventNear(L, Lc.x, Lc.y); if (v > 0) sfx(snap.vp === 2 ? 'vent_blow' : 'vent_warn', v); } }
@@ -6037,7 +6129,7 @@ function updateLocal(dt, inp) {
   const moving = Math.abs(inp.fwd) + Math.abs(inp.str) > 0.1; if (moving) Lc.bob += dt * spd * 2.6;
   Lc.moveK = lerp(Lc.moveK || 0, moving ? 1 : 0, Math.min(1, dt * 8)); if (Lc.blockT > 0) Lc.blockT -= dt;
   Lc.stillT = moving || Lc.swing != null ? 0 : (Lc.stillT || 0) + dt; Lc.readyK = lerp(Lc.readyK || 0, Lc.stillT > 0.3 ? 1 : 0, Math.min(1, dt * (Lc.stillT > 0.3 ? 5 : 10))); // shield comes up after standing still
-  const raft = !!me.items.raft && L.kind !== 'dungeon'; const rad = 0.22; // the raft only works on open water const sop = { raft, mx: Lc.x, my: Lc.y };
+  const raft = !!me.items.raft && L.kind !== 'dungeon'; const rad = 0.22; const sop = { raft, fly: flying, mx: Lc.x, my: Lc.y }; // the raft only works on open water
   // tide water that rose under the edge of you doesn't pin you in place: you can step off it (into it, you sink)
   const wetEdge = new Set(); for (const [ox, oy] of [[-rad, -rad], [rad, -rad], [-rad, rad], [rad, rad]]) { const tx = Math.floor(Lc.x + ox), ty = Math.floor(Lc.y + oy); if (TINFO[L.get(tx, ty)].water && L.solidAt(tx, ty, sop)) wetEdge.add(ty * L.w + tx); }
   const solid = (x, y) => { for (const [ox, oy] of [[-rad, -rad], [rad, -rad], [-rad, rad], [rad, rad]]) { const tx = Math.floor(x + ox), ty = Math.floor(y + oy); if (wetEdge.has(ty * L.w + tx)) continue; if (L.solidAt(x + ox, y + oy, sop)) return true; } return false; };
@@ -6063,10 +6155,11 @@ function updateLocal(dt, inp) {
   if ((cti.exit) && Lc.bumpT <= 0) { sendAction({ t: 'exit' }); Lc.bumpT = 0.8; }
   if (cti.stairs && L.portals[L.idx(Math.floor(Lc.x), Math.floor(Lc.y))] && Lc.bumpT <= 0) { sendAction({ t: 'enter', idx: L.idx(Math.floor(Lc.x), Math.floor(Lc.y)) }); Lc.bumpT = 0.8; }
   // conveyor floors push you
-  if (cti.conveyor) { const cx = Lc.x + cti.conveyor[0] * dt, cy = Lc.y + cti.conveyor[1] * dt; if (!solid(cx, Lc.y)) Lc.x = cx; if (!solid(Lc.x, cy)) Lc.y = cy; }
+  if (cti.conveyor && !flying) { const cx = Lc.x + cti.conveyor[0] * dt, cy = Lc.y + cti.conveyor[1] * dt; if (!solid(cx, Lc.y)) Lc.x = cx; if (!solid(Lc.x, cy)) Lc.y = cy; }
   // pits: fall in once your center is over one, and come back where you last stood safely
-  if (cti.pit) { const fx = Lc.x - Math.floor(Lc.x), fy = Lc.y - Math.floor(Lc.y); if (fx > 0.25 && fx < 0.75 && fy > 0.25 && fy < 0.75 && performance.now() - (Lc.fellAt || 0) > 900) { Lc.fellAt = performance.now(); sendAction({ t: 'fall', x: Lc.safeX, y: Lc.safeY }); Lc.flash = 0.4; Lc.flashC = rgb(0, 0, 0); } }
-  else if (cti.water && !cti.ocean && !raft && performance.now() - (Lc.fellAt || 0) > 900) { Lc.fellAt = performance.now(); sendAction({ t: 'fall', x: Lc.safeX, y: Lc.safeY }); Lc.flash = 0.4; Lc.flashC = rgb(40, 90, 200); sfx('splash'); } // the tide came back over you
+  if (flying) { /* nothing below can reach you */ }
+  else if (cti.pit) { const fx = Lc.x - Math.floor(Lc.x), fy = Lc.y - Math.floor(Lc.y); if (fx > 0.25 && fx < 0.75 && fy > 0.25 && fy < 0.75 && performance.now() - (Lc.fellAt || 0) > 900) { Lc.fellAt = performance.now(); sendAction({ t: 'fall', x: Lc.safeX, y: Lc.safeY }); Lc.flash = 0.4; Lc.flashC = rgb(0, 0, 0); } }
+  else if (cti.water && !(raft && !cti.ocean) && performance.now() - (Lc.fellAt || 0) > 900) { Lc.fellAt = performance.now(); sendAction({ t: 'fall', x: Lc.safeX, y: Lc.safeY }); Lc.flash = 0.4; Lc.flashC = rgb(40, 90, 200); sfx('splash'); } // the tide came back over you
   else if (!cti.hurt && !cti.glass && !cti.conveyor && !cti.water && !cti.wet && !cti.shallow && !cti.frozen) { Lc.safeX = Lc.x; Lc.safeY = Lc.y; }
   // walls you can walk through whisper when you're close
   if (L.kind === 'dungeon' && R.time - (Lc.whisperAt || 0) > 2.5) {
@@ -6104,16 +6197,16 @@ function updateLocal(dt, inp) {
   } else if (inp.atkP && Lc.atkCd <= 0 && me.sword > 0) {
     Lc.swing = 0; Lc.atkCd = 0.3; sfx('swing'); Lc.atkVis = 0.25; sendAction({ t: 'atk', kind: 'sword' });
   }
-  // Loaded Shot (items/techniques.js): with the bow, hold the item button to nock a second arrow; a quick tap still fires one
-  const canLoad = Lc.sel === 'bow' && me.items.loaded && me.arrows >= 2;
-  if (!canLoad) Lc.loadT = 0;
-  if (canLoad) {
+  // Item button. Shift (or LB) held = the item's technique. The bow draws while held and fires on release; with the
+  // Loaded Shot scroll, holding past LOAD_TIME nocks a second arrow ("hold = power").
+  if (Lc.sel === 'bow') {
+    const canLoad = me.items.loaded && me.arrows >= 2;
     if (inp.item) Lc.loadT = 0.001;
     if (Lc.loadT > 0) {
-      if (inp.itemHeld) { const before = Lc.loadT; Lc.loadT += dt; if (before < LOAD_TIME && Lc.loadT >= LOAD_TIME) sfx('nock'); Lc.useFlash = 0.3; Lc.useSpr = Lc.loadT >= LOAD_TIME ? (me.cls === 'monk' ? 'beam' : 'arrow2') : itemSprite('bow', me.cls); }
-      else { sendAction({ t: 'use', item: 'bow', loaded: Lc.loadT >= LOAD_TIME }); Lc.useFlash = 0.3; Lc.useSpr = itemSprite('bow', me.cls); Lc.loadT = 0; }
+      if (inp.itemHeld) { const before = Lc.loadT; Lc.loadT += dt; if (canLoad && before < LOAD_TIME && Lc.loadT >= LOAD_TIME) sfx('nock'); Lc.useFlash = 0.3; Lc.useSpr = canLoad && Lc.loadT >= LOAD_TIME ? (me.cls === 'monk' ? 'beam' : 'arrow2') : itemSprite('bow', me.cls); }
+      else { sendAction({ t: 'use', item: 'bow', loaded: canLoad && Lc.loadT >= LOAD_TIME, alt: !!inp.alt }); Lc.useFlash = 0.3; Lc.useSpr = itemSprite('bow', me.cls); Lc.loadT = 0; }
     }
-  } else if (inp.item && Lc.sel) { sendAction({ t: 'use', item: Lc.sel }); Lc.useFlash = 0.3; Lc.useSpr = itemSprite(Lc.sel, me.cls); }
+  } else { Lc.loadT = 0; if (inp.item && Lc.sel) { sendAction({ t: 'use', item: Lc.sel, alt: !!inp.alt }); Lc.useFlash = 0.3; Lc.useSpr = itemSprite(Lc.sel, me.cls); } }
   if (Lc.useFlash > 0) Lc.useFlash -= dt;
   // low hp beep
   if (me.hp <= 4 && me.hp > 0) { Lc.lowT -= dt; if (Lc.lowT <= 0) { Lc.lowT = 0.5; sfx('lowhp'); } }
@@ -6147,8 +6240,10 @@ function loop(now) {
   if (G.state === 'play') {
     if (inp.pause) { openPause(); }
     else if (inp.map) { G.state = 'map'; }
+    else if (inp.inv) { openBag(); }
   } else if (G.state === 'map') { if (inp.map || inp.pause || inp.confirm) G.state = 'play'; }
   else if (G.state === 'pause' && inp.pause && performance.now() - (G.pauseAt || 0) > 400 && $('pauseScreen').classList.contains('on')) resume();
+  else if (G.state === 'pause' && (inp.pause || inp.inv) && performance.now() - (G.pauseAt || 0) > 250 && $('bagScreen').classList.contains('on')) resume();
   if (NET.role === 'host' && G.sim) hostStep(rdt, now);
   else if (NET.role === 'client' && NET.hostConn && now - G.lastSend > 50) {
     G.lastSend = now; const Lc = G.local; NET.hostConn.send({ t: 'ps', lvl: Lc.lvl, x: Math.round(Lc.x * 100) / 100, y: Math.round(Lc.y * 100) / 100, a: Math.round(Lc.a * 100) / 100, atk: Lc.atkVis > 0 ? 1 : 0, sel: Lc.sel });
@@ -6200,7 +6295,7 @@ function draw(dt) {
   }
   const down = me && !me.alive;
   const shake = Lc.shake > 0 ? (Math.random() - 0.5) * 6 * Lc.shake : 0;
-  const cam = { x: Lc.x, y: Lc.y, a: Lc.a + shake * 0.01, pitch: Lc.pitch + shake * 4, eye: down ? 0.12 : 0.5 + Math.sin(Lc.bob * 2) * 0.012 };
+  const cam = { x: Lc.x, y: Lc.y, a: Lc.a + shake * 0.01, pitch: Lc.pitch + shake * 4, eye: down ? 0.12 : (me && me.fly > 0 ? 0.68 + Math.sin(R.time * 5) * 0.02 : 0.5) + Math.sin(Lc.bob * 2) * 0.012 };
   R.ventPhase = snap ? snap.vp || 0 : 0;
   renderWorld(cam, L, ents, snap ? snap.pl : [], G.myId);
   // pow words
@@ -6210,6 +6305,10 @@ function draw(dt) {
   if (me && !down) drawViewmodel(st);
   if (me && me.cls === 'monk' && me.armor > 0 && !down) { const ac = me.armor === 2 ? rgb(255, 248, 200) : rgb(100, 190, 255); for (let i = 0; i < 18; i++) { const side = Math.random() < 0.5; const x = side ? (Math.random() < 0.5 ? Math.random() * 10 : R.W - Math.random() * 10) : Math.random() * R.W; const y = side ? Math.random() * R.H : R.H - Math.random() * 8; px(x, y, ac); } }
   if (Lc.dashT > 0) rectA(0, 0, R.W, R.H, rgb(200, 240, 255), 0.15);
+  if (me && me.fly > 0 && !down) { // aloft: wind streaks at the edges and a bar for the time left (it blinks near the end)
+    for (let i = 0; i < 26; i++) { const y = (i * 37 + R.time * 260) % R.H, x = i % 2 ? (i * 13) % 40 : R.W - 1 - (i * 13) % 40; rectA(x, y, 1, 8, rgb(230, 245, 255), 0.5); }
+    const k = Math.min(1, me.fly / FLY_TIME); if (me.fly > 1 || Math.floor(R.time * 8) & 1) { rect(R.W / 2 - 30, R.H - 34, 60, 3, rgb(40, 50, 70)); rect(R.W / 2 - 30, R.H - 34, Math.round(60 * k), 3, rgb(220, 240, 255)); }
+  }
   if (me && me.chill && !down) { rectA(0, 0, R.W, R.H, rgb(150, 210, 255), 0.14); for (let i = 0; i < 40; i++) { const e = Math.random() < 0.5; px(e ? (Math.random() < 0.5 ? Math.random() * 14 : R.W - Math.random() * 14) : Math.random() * R.W, e ? Math.random() * R.H : (Math.random() < 0.5 ? Math.random() * 10 : R.H - Math.random() * 10), rgb(235, 250, 255)); } }
   if (down) { rectA(0, 0, R.W, R.H, rgb(40, 40, 60), 0.5); const multi = snap.pl.length > 1; textC(multi ? 'YOU ARE DOWN!' : 'YOU HAVE FALLEN...', R.W / 2, R.H / 2 - 20, rgb(255, 80, 80)); textC(multi ? 'A TEAMMATE CAN HOLD F NEXT TO YOU TO HELP YOU UP' : 'RISING AGAIN...', R.W / 2, R.H / 2 - 8, rgb(230, 230, 230)); if (multi) { const rl = me.respawnIn; textC(rl > 0 ? 'OR RESPAWN AT THE START IN ' + rl : 'PRESS ENTER TO RESPAWN AT THE START', R.W / 2, R.H / 2 + 16, rl > 0 ? rgb(170, 170, 190) : rgb(255, 220, 120)); textC('(GETTING UP ALONE DROPS HALF YOUR GEMS)', R.W / 2, R.H / 2 + 26, rgb(170, 150, 150)); } const myP = snap.pl.find(p => p[0] === G.myId); if (myP && myP[11] > 0) { rect(R.W / 2 - 40, R.H / 2 + 6, 80, 5, rgb(30, 30, 30)); rect(R.W / 2 - 40, R.H / 2 + 6, 80 * clamp(myP[11], 0, 1), 5, rgb(80, 255, 120)); } }
   if (snap && me) drawDownMarkers(cam, L, snap);
@@ -6280,6 +6379,35 @@ function showScreen(id) {
 }
 function showToast(t) { const el = $('toast'); el.textContent = t; el.classList.add('on'); clearTimeout(showToast.tm); showToast.tm = setTimeout(() => el.classList.remove('on'), 3500); }
 function openPause() { if (G.state !== 'pause') G.pauseAt = performance.now(); G.state = 'pause'; showScreen('pauseScreen'); $('pSave').style.display = NET.role === 'host' ? '' : 'none'; $('pInvite').style.display = NET.role === 'host' ? '' : 'none'; updatePauseInfo(); }
+// ---- inventory (I) ----
+// Gear you can step down from (sword, tunic, arrow kind), every item-button item, and the upgrades and techniques you carry.
+const SWORD_NAMES = ['', 'WOODEN SWORD', 'SILVER SWORD', 'MYTHRIL SWORD', 'DAWNBLADE'], FIST_NAMES = ['', 'FISTS', 'IRON FISTS', 'MYTHRIL FISTS', 'DAWN FISTS'];
+const TUNIC_NAMES = ['GREEN TUNIC', 'CHAIN TUNIC', 'PLATE TUNIC'], AURA_NAMES = ['NO AURA', 'BLUE AURA', 'GOLDEN AURA'];
+function spriteCanvas(id) { // a sprite as a small canvas for the menus
+  const c = document.createElement('canvas'); const s = SPR[id]; if (!s) return c; c.width = s.w; c.height = s.h;
+  const x = c.getContext('2d'); const im = x.createImageData(s.w, s.h); new Uint32Array(im.data.buffer).set(s.px); x.putImageData(im, 0, 0); return c;
+}
+function openBag() { if (G.state !== 'pause') G.pauseAt = performance.now(); G.state = 'pause'; showScreen('bagScreen'); renderBag(); }
+function renderBag() {
+  const me = G.snap && G.snap.me; const body = $('bagBody'); body.innerHTML = ''; if (!me) return; const monk = me.cls === 'monk';
+  const sec = (title) => { const l = document.createElement('label'); l.textContent = title; body.appendChild(l); const r = document.createElement('div'); r.className = 'row2'; body.appendChild(r); return r; };
+  const btn = (row, spr, name, sub, on, click) => { const b = document.createElement('button'); if (on) b.classList.add('on'); if (spr) b.appendChild(spriteCanvas(spr)); const t = document.createElement('span'); t.textContent = name; if (sub) { const s = document.createElement('small'); s.textContent = sub; t.appendChild(s); } b.appendChild(t); if (click) b.onclick = () => { click(); sfx('menu'); setTimeout(renderBag, 160); }; row.appendChild(b); };
+  const tag = (row, spr, name, sub) => { const d = document.createElement('div'); d.className = 'tag'; if (spr) d.appendChild(spriteCanvas(spr)); const t = document.createElement('span'); t.textContent = name; if (sub) { const s = document.createElement('small'); s.style.display = 'block'; s.style.color = 'var(--dim)'; s.textContent = sub; t.appendChild(s); } d.appendChild(t); row.appendChild(d); };
+  const c = document.createElement('div'); c.className = 'counts';
+  c.textContent = 'GEMS ' + me.gems + '   ARROWS ' + me.arrows + '/' + (me.maxArrows || ARROWS_START) + '   BOMBS ' + me.bombs + '/' + me.maxBombs + '   POTIONS ' + (me.potions || 0) + '   HEARTS ' + (me.maxHp / 4);
+  body.appendChild(c);
+  const smax = Math.max(me.swordMax || 0, me.sword), amax = Math.max(me.armorMax || 0, me.armor);
+  if (smax > 0) { const r = sec(monk ? 'FISTS - PICK ANY YOU HAVE EARNED' : 'SWORD - PICK ANY YOU HAVE EARNED'); for (let lv = 1; lv <= smax; lv++) btn(r, monk ? 'ki' : 'sword', (monk ? FIST_NAMES : SWORD_NAMES)[lv], null, me.sword === lv, () => sendAction({ t: 'equip', slot: 'sword', lv })); }
+  { const r = sec(monk ? 'AURA' : 'TUNIC'); for (let lv = 0; lv <= amax; lv++) btn(r, 'armor', (monk ? AURA_NAMES : TUNIC_NAMES)[lv], null, me.armor === lv, () => sendAction({ t: 'equip', slot: 'armor', lv })); }
+  if (me.items.frostarrows) { const r = sec(monk ? 'DARTS' : 'ARROWS'); btn(r, 'arrow', monk ? 'PLAIN DARTS' : 'PLAIN ARROWS', null, !!me.plainArrows, () => sendAction({ t: 'equip', slot: 'arrows', plain: true })); btn(r, 'arrow_ice', monk ? 'FROST DARTS' : 'FROST ARROWS', 'FREEZE FOES AND FRESH WATER', !me.plainArrows, () => sendAction({ t: 'equip', slot: 'arrows', plain: false })); }
+  const owned = ownedBItems(me);
+  if (owned.length) { const r = sec('ITEM BUTTON (RIGHT-CLICK / E) - HOLD FOR POWER, SHIFT FOR TECHNIQUE'); for (const id of owned) { const d = itemDef(id); const sub = id === 'bow' ? (me.items.loaded ? 'HOLD: LOADED SHOT' : 'FIRES WHEN YOU LET GO') : id === 'galecloak' ? 'FLY OVER ANYTHING FOR ' + FLY_TIME + 's' : d.useAlt ? 'SHIFT: TECHNIQUE' : null; btn(r, itemSprite(id, me.cls), itemName(id, me.cls), sub, Lc_sel() === id, () => { G.local.sel = id; sendAction({ t: 'sel', item: id }); }); } }
+  const ups = []; if ((me.maxArrows || ARROWS_START) > ARROWS_START) ups.push(['quiver', itemName('quiver', me.cls), 'HOLDS ' + me.maxArrows]);
+  if (me.items.loaded) ups.push(['scroll', itemName('loadedshot', me.cls), 'HOLD THE ITEM BUTTON WITH THE BOW']);
+  for (const k of Object.keys(me.items)) { if (!me.items[k] || owned.includes(k) || ['loaded', 'frostarrows', 'potion'].includes(k)) continue; const d = Content.items[k]; if (!d || d.slot === 'b') continue; ups.push([itemSprite(k, me.cls), itemName(k, me.cls), k === 'skeletonkey' ? 'OPENS EVERY LOCK' : k === 'silver' ? 'ONLY THEY CAN FINISH THE HOLLOW KING' : k === 'magmaboots' ? 'WALK ON LAVA AND VENTS' : k === 'raft' ? 'OPEN WATER ONLY' : null]); }
+  if (ups.length) { const r = sec('UPGRADES & TECHNIQUES'); for (const [spr, name, sub] of ups) tag(r, spr, name, sub); }
+}
+function Lc_sel() { return G.local && G.local.sel; }
 function resume() { G.state = 'play'; showScreen(null); try { const r = $('game').requestPointerLock(); if (r && r.catch) r.catch(() => { }); } catch (e) { } }
 function updatePauseInfo() {
   const n = G.snap ? G.snap.pl.length : 1; const me = G.snap && G.snap.me;
@@ -6386,7 +6514,7 @@ function bindUI() {
   on('helpBack', () => showScreen(G.state === 'title' ? 'titleScreen' : 'pauseScreen'));
   on('joinBack', () => showScreen('titleScreen'));
   on('joinOnlineBtn', joinOnline);
-  on('pResume', resume);
+  on('pResume', resume); on('bagClose', resume); on('pBag', openBag);
   on('pInvite', () => { showScreen('inviteScreen'); hostOnline(); });
   on('roomCopy', () => { const v = $('roomLink').value; try { navigator.clipboard.writeText(v).then(() => showToast('INVITE LINK COPIED'), () => { $('roomLink').select(); }); } catch (e) { $('roomLink').select(); } });
   $('joinWord').onkeydown = (e) => { if (e.key === 'Enter') { audioInit(); joinOnline(); } };

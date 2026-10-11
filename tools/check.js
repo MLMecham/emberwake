@@ -327,6 +327,28 @@ attempt('frost arrows freeze fresh water, not salt', () => {
   // tide water that's frozen keeps its ice and thaws into whatever the tide is by then
   const t = c; freezeTile(D, t); applyRig(D, rid, 1); __ok(D.tiles[t] === TL.FROZEN && D.frozen[t] === TL.WET, 'frozen tide cells keep their ice'); thawTile(D, t); __ok(D.tiles[t] === TL.WET, 'and thaw into the drained floor'); applyRig(D, rid, 0);
 });
+attempt('gale cloak, skeleton key, inventory choices', () => {
+  const sim = freshSim(); const p = sim.players.p1; p.god = false; const L = sim.W.levels.ow; const x0 = Math.floor(p.x), y0 = Math.floor(p.y);
+  // flying passes over water and isn't hurt by lava
+  sim.giveItem(p, 'galecloak', false); __ok(p.items.galecloak && sim.players.p2.items.galecloak, 'cloak for the party');
+  L.set(x0 + 2, y0, TL.WATER); __ok(L.solidAt(x0 + 2.5, y0 + 0.5) && !L.solidAt(x0 + 2.5, y0 + 0.5, { fly: true }), 'fliers cross water');
+  L.set(x0, y0, TL.LAVA); p.x = x0 + 0.5; p.y = y0 + 0.5; p.hp = p.maxHp; p.inv = 0;
+  sim.useItem(p, 'galecloak', {}); __ok(sim.flying(p) && sim.snapshotFor('p1').me.fly > 3, 'cloak should lift you');
+  for (let i = 0; i < 60; i++) sim.tick(1 / 60); __ok(p.hp === p.maxHp, 'lava below a flier does nothing');
+  sim.useItem(p, 'galecloak', {}); for (let i = 0; i < 60 * 4; i++) sim.tick(1 / 60); __ok(!sim.flying(p) && p.hp < p.maxHp, 'after landing in lava it burns again');
+  L.set(x0, y0, TL.GRASS);
+  // skeleton key: locks open with no keys spent
+  const D = sim.W.levels.d1; let lock = -1; for (let i = 0; i < D.tiles.length; i++) if (D.tiles[i] === TL.LOCKED) { lock = i; break; }
+  sim.teleport(p, 'd1', D.spawn.x, D.spawn.y, 0); sim.team.keys.d1 = 0;
+  if (lock >= 0) { sim.tryUnlock(p, lock); __ok(D.tiles[lock] === TL.LOCKED, 'no key, no entry'); sim.giveItem(p, 'skeletonkey', false); sim.tryUnlock(p, lock); __ok(D.tiles[lock] === TL.OPENDOOR && (sim.team.keys.d1 || 0) === 0, 'skeleton key opens it for free'); }
+  // wear a lesser sword or tunic; never more than you've earned
+  p.sword = 3; p.armor = 2; sim.tick(1 / 60); sim.onAction('p1', { t: 'equip', slot: 'sword', lv: 1 }); sim.onAction('p1', { t: 'equip', slot: 'armor', lv: 0 }); __ok(p.sword === 1 && p.armor === 0, 'can step down');
+  sim.onAction('p1', { t: 'equip', slot: 'sword', lv: 4 }); __ok(p.sword === 1, "can't wear what you haven't earned"); sim.onAction('p1', { t: 'equip', slot: 'sword', lv: 3 }); __ok(p.sword === 3, 'and back up');
+  __ok(sim.playerSaveData(p).swordMax === 3, 'best sword is saved');
+  // plain arrows instead of frost; Shift with an item that has no technique still uses it
+  p.items.bow = true; p.items.frostarrows = true; p.arrows = 9; sim.onAction('p1', { t: 'equip', slot: 'arrows', plain: true }); sim.ents = sim.ents.filter(e => e.k !== 'proj');
+  sim.useItem(p, 'bow', { alt: true }); const pr = sim.ents.find(e => e.k === 'proj' && e.pid === 'p1'); __ok(pr && !pr.frost && p.arrows === 8, 'plain arrows when chosen, and Shift falls back to a normal shot');
+});
 attempt('tideglass opening', () => {
   for (const [seed, mode] of [[7319, 'adv'], [1234, 'rogue'], [99, 'rogue'], [4242, 'adv']]) {
     const W = genWorld(seed, mode); const D = W.levels.d6; const st = D.startRoom; const r2 = st.children[0]; const r3 = r2.children[0];

@@ -30,6 +30,7 @@ function migrateSave(s) {
 const REVIVE_TIME = 1.5, REVIVE_R2 = 2.6 * 2.6; // seconds to help a teammate up, and how close you must stand
 const RESPAWN_WAIT = 30; // seconds a downed hero waits before they may give up and respawn at the start on their own
 const BUY_COOLDOWN = 0.8; // seconds between shop purchases for one player
+const FLY_TIME = 4, FLY_COOLDOWN = 2; // Gale Cloak: seconds aloft, and the rest after landing before it works again
 const SHIELD_STUN = 0.9; // seconds a knight reels after a loaded shot hits its shield
 const FREEZE_TIME = 6, FREEZE_PATH = 6; // seconds frost-arrow ice lasts; how many tiles of water one arrow freezes along its flight
 const HAZARD_TICK = 0.5, ICE_KB = 1.5, SHALLOW_SLOW = 0.75; // how often lava/spikes/vents burn a grounded enemy; how much harder hits shove enemies standing on ice
@@ -61,7 +62,7 @@ class Sim {
       p = saved ? Object.assign(newPlayer(id, name, color, cls), saved, { id, name }) : newPlayer(id, name, color, cls);
       if (!saved) { // late joiners get team progression
         const any = Object.values(this.players)[0];
-        if (any) { p.items = Object.assign({}, any.items); p.sword = any.sword; p.maxHp = any.maxHp; p.maxArrows = any.maxArrows || ARROWS_START; p.hp = p.maxHp; if (any.armor === 2) p.armor = 2; if (p.items.bombbag) p.bombs = 4; }
+        if (any) { p.items = Object.assign({}, any.items); p.sword = Math.max(any.sword, any.swordMax || 0); p.maxHp = any.maxHp; p.maxArrows = any.maxArrows || ARROWS_START; p.hp = p.maxHp; if (any.armor === 2) p.armor = 2; if (p.items.bombbag) p.bombs = 4; }
       }
       const host = Object.values(this.players)[0];
       const sp = host && host.alive ? host : null;
@@ -74,7 +75,7 @@ class Sim {
     return p;
   }
   removePlayer(id) { const p = this.players[id]; if (!p) return; this.savedPlayers = this.savedPlayers || {}; this.savedPlayers[p.color] = this.playerSaveData(p); delete this.players[id]; this.ev({ t: 'msg', text: p.name + ' LEFT.' }); }
-  playerSaveData(p) { const o = {}; for (const k of ['cls', 'lvl', 'x', 'y', 'a', 'hp', 'maxHp', 'gems', 'bombs', 'maxBombs', 'arrows', 'maxArrows', 'sword', 'armor', 'items', 'potions', 'sel']) o[k] = p[k]; o.alive = true; if (o.hp <= 0) o.hp = 12; return o; }
+  playerSaveData(p) { const o = {}; for (const k of ['cls', 'lvl', 'x', 'y', 'a', 'hp', 'maxHp', 'gems', 'bombs', 'maxBombs', 'arrows', 'maxArrows', 'swordMax', 'armorMax', 'plainArrows', 'sword', 'armor', 'items', 'potions', 'sel']) o[k] = p[k]; o.alive = true; if (o.hp <= 0) o.hp = 12; return o; }
   ev(e) { this.events.push(e); }
   sfx(s, lvl, x, y) { this.ev({ t: 'sfx', s, lvl, x, y }); }
   msg(text, pid) { this.ev({ t: 'msg', text, pid }); }
@@ -141,6 +142,7 @@ class Sim {
     switch (a.t) {
       case 'atk': this.playerAttack(p, a); break;
       case 'use': this.useItem(p, a.item, a); break;
+      case 'equip': this.equip(p, a); break;
       case 'enter': this.tryEnter(p, a.idx); break;
       case 'exit': this.tryExit(p); break;
       case 'unlock': this.tryUnlock(p, a.idx); break;
@@ -205,6 +207,7 @@ class Sim {
   }
   tryUnlock(p, idx) {
     const L = this.W.levels[p.lvl]; if (L.tiles[idx] !== TL.LOCKED) return;
+    if (Object.values(this.players).some(o => o.items.skeletonkey)) { this.setTile(L.id, idx, TL.OPENDOOR); this.sfx('door', L.id); return; } // the Skeleton Key opens anything, for free
     const k = this.team.keys[L.id] || 0;
     if (k <= 0) { this.ev({ t: 'hint', pid: p.id, text: 'LOCKED. FIND A SMALL KEY.' }); return; }
     this.team.keys[L.id] = k - 1; this.setTile(L.id, idx, TL.OPENDOOR); this.sfx('door', L.id);
@@ -270,7 +273,8 @@ class Sim {
       // hazard tiles
       if (p.chill > 0) p.chill -= dt;
       const t = L.get(Math.floor(p.x), Math.floor(p.y)); const ti = TINFO[t]; const boots = !!p.items.magmaboots;
-      if (p.inv <= 0 && ((ti.hurt && !(boots && ti.lava)) || (ti.vent && this.ventPhase() === 2 && !boots))) this.hurtPlayer(p, 1, null);
+      if (p.inv <= 0 && !this.flying(p) && ((ti.hurt && !(boots && ti.lava)) || (ti.vent && this.ventPhase() === 2 && !boots))) this.hurtPlayer(p, 1, null); // fliers are above it all
+      p.swordMax = Math.max(p.swordMax || 0, p.sword); p.armorMax = Math.max(p.armorMax || 0, p.armor); // best gear ever owned (the inventory lets you wear less)
       // pickups & shop
       for (const e of this.ents) {
         if (e.lvl !== p.lvl || e.dead) continue;
@@ -589,7 +593,15 @@ class Sim {
   }
   useItem(p, item, a) {
     const d = itemDef(item); if (!d || d.slot !== 'b' || !d.owned(p)) return;
+    if (a && a.alt && d.useAlt) return d.useAlt(this, p, a); // Shift + item: the item's technique, when it has one (otherwise the plain use)
     d.use(this, p, a || {});
+  }
+  flying(p) { return (p.flyUntil || 0) > this.time; }
+  // inventory choices: wear a lesser sword or tunic than your best, or fire plain arrows instead of frost ones
+  equip(p, a) {
+    if (a.slot === 'sword') { const lv = a.lv | 0; if (lv >= 1 && lv <= Math.max(p.swordMax || 0, p.sword)) p.sword = lv; }
+    else if (a.slot === 'armor') { const lv = a.lv | 0; if (lv >= 0 && lv <= Math.max(p.armorMax || 0, p.armor)) p.armor = lv; }
+    else if (a.slot === 'arrows') p.plainArrows = !!a.plain;
   }
   updateProj(e, dt) {
     const L = this.W.levels[e.lvl]; const def = Content.projectiles[e.type];
@@ -726,7 +738,7 @@ class Sim {
     const p = this.players[pid]; if (!p) return null;
     const en = []; for (const e of this.ents) if (e.lvl === p.lvl) en.push(this.entView(e));
     const pl = []; for (const o of Object.values(this.players)) pl.push([o.id, o.lvl, Math.round(o.x * 100) / 100, Math.round(o.y * 100) / 100, Math.round(o.a * 100) / 100, o.color, o.armor, o.cls, o.alive ? 1 : 0, o.atk, o.name, Math.round(o.revive / REVIVE_TIME * 100) / 100, o.hp, o.maxHp, o.reviver || 0]);
-    const me = {}; for (const k of ['lvl', 'hp', 'maxHp', 'gems', 'bombs', 'maxBombs', 'arrows', 'maxArrows', 'sword', 'armor', 'items', 'potions', 'alive', 'cls', 'sel', 'color', 'name', 'dbg', 'god']) me[k] = p[k]; me.chill = p.chill > 0 ? 1 : 0; me.respawnIn = p.alive ? 0 : Math.max(0, Math.ceil(RESPAWN_WAIT - (this.time - (p.downAt || 0))));
+    const me = {}; for (const k of ['lvl', 'hp', 'maxHp', 'gems', 'bombs', 'maxBombs', 'arrows', 'maxArrows', 'swordMax', 'armorMax', 'plainArrows', 'sword', 'armor', 'items', 'potions', 'alive', 'cls', 'sel', 'color', 'name', 'dbg', 'god']) me[k] = p[k]; me.chill = p.chill > 0 ? 1 : 0; me.fly = this.flying(p) ? Math.round((p.flyUntil - this.time) * 10) / 10 : 0; me.respawnIn = p.alive ? 0 : Math.max(0, Math.ceil(RESPAWN_WAIT - (this.time - (p.downAt || 0))));
     return { t: 's', paused: !!this.paused, pausedBy: this.pausedBy, me, pl, en, team: { keys: this.team.keys, maps: this.team.maps, comps: this.team.comps, shards: this.team.shards, done: this.team.done, relics: this.team.relics }, vp: this.ventPhase(), rg: this.rigCodes(p.lvl), fz: this.frozenList(p.lvl), mv: this.modVer, over: this.over > 0 };
   }
   // ---- save ----

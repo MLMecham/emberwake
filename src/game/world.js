@@ -20,6 +20,7 @@ class Level {
     if (x < 0 || y < 0 || x >= this.w || y >= this.h) return true;
     const t = this.tiles[y * this.w + x]; const ti = TINFO[t];
     if (ti.water && !ti.ocean && opts && opts.raft && this.kind !== 'dungeon') return false; // the raft is for open water, not dungeon halls
+    if (ti.low && opts && opts.fly) return false; // flying (Gale Cloak) passes over water like a bat
     // sealed-room doors are one-way: teammates can come in, nobody leaves until the room is clear
     if (t === TL.SHUTTER && opts && opts.mx != null && this.kind === 'dungeon') {
       const rid = this.sealRoom && this.sealRoom[y * this.w + x];

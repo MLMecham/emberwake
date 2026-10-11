@@ -427,7 +427,7 @@ function drawHUD(st) {
   let cy = 5 + Math.ceil(Math.ceil(me.maxHp / 4) / 10) * 8 + 2;
   const counter = (spr, v, c) => { blit(SPR[spr], hx - 4, cy - 5, 1); text('X' + v, hx + 10, cy, c || rgb(255, 255, 255)); cy += 9; };
   counter('gem_g', me.gems);
-  if (st.lvlKind === 'dungeon') counter('key', (st.team.keys && st.team.keys[me.lvl]) || 0);
+  if (st.lvlKind === 'dungeon') { if (me.items.skeletonkey) counter('skelkey', '~', rgb(255, 230, 140)); else counter('key', (st.team.keys && st.team.keys[me.lvl]) || 0); } // '~' is the infinity glyph (core/font.js)
   if (me.items.bombs || me.bombs) counter('bomb', me.bombs);
   if (me.items.bow) counter('arrow', me.arrows);
   if (me.potions) counter('potion', me.potions);
