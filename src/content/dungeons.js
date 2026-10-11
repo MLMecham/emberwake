@@ -6,6 +6,7 @@
 // gimmicks: ids from content/gimmicks/. Enemies and bosses come from each enemy's spawns / bossOf.
 // Optional dungeons (10+) can also set: mapLabel (letter on the maps), bossDrop (item the boss leaves),
 // bossParty (several bosses at once, instead of the single bossOf one).
+// Any dungeon can set intro: '<gimmick id>' to use that gimmick's hand-built first two rooms (the second holds the key onward).
 'use strict';
 defineDungeon(1, {
   name: 'THE MOSSY HOLLOW', item: 'boomerang', gimmicks: ['brambles'], secret: 'BRAMBLE',
@@ -80,7 +81,7 @@ defineDungeon(5, {
   lore: ['SOME WALLS ARE ONLY HABITS. LISTEN FOR THE ONES THAT WHISPER.'],
 });
 defineDungeon(6, {
-  name: 'TIDEGLASS HALLS', item: 'raft', gimmicks: ['glass'],
+  name: 'TIDEGLASS HALLS', item: 'raft', gimmicks: ['glass'], intro: 'glass', // the first two rooms teach the glass (content/gimmicks/glass.js)
   theme: { wall: [70, 150, 170], mortar: [30, 70, 84], hi: [140, 210, 224], floor: [200, 230, 236], edge: [120, 170, 184], fhi: [236, 250, 252], trim: [60, 120, 140] },
   shape: [ // a fish
     '.......#',

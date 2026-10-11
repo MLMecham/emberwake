@@ -37,7 +37,7 @@ const AI = {
       if (e.tm > 0) return;
       if (e.st === 0 && p) {
         const L = sim.W.levels[e.lvl];
-        for (let i = 0; i < 20; i++) { const a = Math.random() * TAU, r = 2.5 + Math.random() * 2; const x = p.x + Math.cos(a) * r, y = p.y + Math.sin(a) * r; if (!L.solidAt(x, y) && (!e.b || (x > e.b.x0 && x < e.b.x1 && y > e.b.y0 && y < e.b.y1))) { sim.puff(e, 0.8); e.x = x; e.y = y; break; } }
+        for (let i = 0; i < 20; i++) { const a = Math.random() * TAU, r = 2.5 + Math.random() * 2; const x = p.x + Math.cos(a) * r, y = p.y + Math.sin(a) * r; if (AI.safeAt(L, x, y) && (!e.b || (x > e.b.x0 && x < e.b.x1 && y > e.b.y0 && y < e.b.y1))) { sim.puff(e, 0.8); e.x = x; e.y = y; break; } }
         e.st = 1; e.tm = 0.7;
       } else if (e.st === 1 && p) { sim.fireProj(proj, e.lvl, e.x, e.y, Math.atan2(p.y - e.y, p.x - e.x), 'e', null, { dmg: dmg * e.dmgMul }); sim.sfx('magic', e.lvl, e.x, e.y); e.st = 0; e.tm = 1.6 + Math.random(); }
       else e.tm = 1;
@@ -55,9 +55,11 @@ const AI = {
   // fire `count` projectiles in a full ring
   ring(sim, e, proj, count, offset, extra) { for (let i = 0; i < count; i++) sim.fireProj(proj, e.lvl, e.x, e.y, i * TAU / count + (offset || 0), 'e', null, extra); },
   // teleport to a random open spot in the room, away from heroes
+  // somewhere a teleporting enemy can land: not a wall, and not lava, spikes or a pit (those would hurt or swallow it)
+  safeAt(L, x, y) { if (L.solidAt(x, y)) return false; const ti = TINFO[L.get(Math.floor(x), Math.floor(y))]; return !ti.hurt && !ti.pit; },
   teleportInRoom(sim, e, p, minD2) {
     const L = sim.W.levels[e.lvl];
-    for (let i = 0; i < 30; i++) { const x = e.b.x0 + 1 + Math.random() * (e.b.x1 - e.b.x0 - 2), y = e.b.y0 + 1 + Math.random() * (e.b.y1 - e.b.y0 - 2); if (!L.solidAt(x, y) && (!p || dist2(x, y, p.x, p.y) > minD2)) { sim.puff(e, 1.2); e.x = x; e.y = y; return true; } }
+    for (let i = 0; i < 30; i++) { const x = e.b.x0 + 1 + Math.random() * (e.b.x1 - e.b.x0 - 2), y = e.b.y0 + 1 + Math.random() * (e.b.y1 - e.b.y0 - 2); if (AI.safeAt(L, x, y) && (!p || dist2(x, y, p.x, p.y) > minD2)) { sim.puff(e, 1.2); e.x = x; e.y = y; return true; } }
     return false;
   },
 };

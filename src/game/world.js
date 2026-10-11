@@ -395,6 +395,14 @@ function genDungeon(W, d, rnd) {
     const o = nb[0]; o.parent = cur; o.depth = cur.depth + 1; cur.children.push(o); inTree.add(o.id); order.push(o); stack.push(o);
   }
   L.rooms = rooms; L.startRoom = start;
+  // ---- optional hand-built opening (def.intro names a gimmick with an intro): the entrance and the one room after it,
+  // which holds a key for a locked door onward. Only when the shape makes that a straight corridor (no way around the lock).
+  let intro = null; const ig = def.intro && Content.gimmicks[def.intro];
+  if (ig && ig.intro) {
+    const nbs = (r) => [[1, 0], [-1, 0], [0, 1], [0, -1]].map(([dx, dy]) => normal(r.rx + dx, r.ry + dy)).filter(Boolean);
+    const r2 = start.children.length === 1 ? start.children[0] : null, r3 = r2 && r2.children.length === 1 ? r2.children[0] : null;
+    if (r3 && order.length > 4 && nbs(start).length === 1 && nbs(r2).length === 2) { intro = { g: ig, r2, r3 }; r2.intro = true; }
+  }
   for (const r of Object.values(rooms)) for (let y = r.ry * DSY + 1; y < r.ry * DSY + DSY; y++) for (let x = r.rx * DSX + 1; x < r.rx * DSX + DSX; x++) L.set(x, y, TL.DFLOOR);
   const doorPos = (a, b) => a.ry === b.ry ? [Math.max(a.rx, b.rx) * DSX, a.ry * DSY + 4] : [a.rx * DSX + 6, Math.max(a.ry, b.ry) * DSY];
   const doors = [];
@@ -413,16 +421,17 @@ function genDungeon(W, d, rnd) {
   const itemRoom = leaves[0] || sorted[1]; if (def.item && itemRoom) itemRoom.item = def.item;
   const locked = new Set([boss.id]);
   const lockN = Math.min(1 + Math.floor(d / 2), 5);
-  const lockCand = rnd.shuffle(order.filter(r => r.depth >= 2 && r !== boss && r !== itemRoom));
+  const lockCand = rnd.shuffle(order.filter(r => r.depth >= 2 && r !== boss && r !== itemRoom && !(intro && (r === intro.r2 || r === intro.r3))));
   for (let i = 0; i < lockN - 1 && i < lockCand.length; i++) locked.add(lockCand[i].id);
-  if (itemRoom && rnd() < 0.6) locked.add(itemRoom.id);
+  if (itemRoom && rnd() < 0.6 && !(intro && itemRoom === intro.r3)) locked.add(itemRoom.id);
   const reach = new Set(); { const st = [start]; while (st.length) { const r = st.pop(); if (reach.has(r.id)) continue; reach.add(r.id); for (const oid in r.links) { const o = rooms[oid]; if (locked.has(o.id) && o.parent === r) continue; if (locked.has(r.id) && r.parent === o) continue; st.push(o); } } }
   let lockList = [...locked].filter(id => !reach.has(id));
-  const keySpots = rnd.shuffle(order.filter(r => reach.has(r.id) && r !== start && !r.item && !r.boss));
+  const keySpots = rnd.shuffle(order.filter(r => reach.has(r.id) && r !== start && !r.item && !r.boss && !r.intro));
   while (lockList.length > keySpots.length) { const drop = lockList.find(id => id !== boss.id) || lockList[0]; lockList = lockList.filter(id => id !== drop); }
   for (let i = 0; i < lockList.length; i++) keySpots[i].key = true;
   for (const id of lockList) { const r = rooms[id]; if (r.parent) setDoor(r.parent, r, TL.LOCKED, true); }
-  const mc = rnd.shuffle(order.filter(r => r !== start && !r.boss && !r.item));
+  if (intro) setDoor(intro.r2, intro.r3, TL.LOCKED, true); // its key waits in the intro room itself, so the usual key rules still hold beyond it
+  const mc = rnd.shuffle(order.filter(r => r !== start && !r.boss && !r.item && !r.intro));
   if (mc[0]) mc[0].map = true; if (mc[1]) mc[1].compass = true;
   // ---- hidden rooms: joined to one neighbor through a secret wall; each holds a heart piece and a lore tablet ----
   const secretT = TL[def.secret || 'BRICK_BOMB'] != null ? TL[def.secret || 'BRICK_BOMB'] : TL.BRICK_BOMB;
@@ -441,7 +450,10 @@ function genDungeon(W, d, rnd) {
   const pool = enemiesFor('dungeons', d);
   for (const r of order) {
     const ix = r.rx * DSX, iy = r.ry * DSY;
-    if (r === start) { L.set(ix + 6, iy + DSY, TL.DEXIT); continue; }
+    const sign = (x, y, text) => { L.signText = L.signText || {}; L.signText[L.idx(ix + x, iy + y)] = text; };
+    const ictx = Object.assign({}, gctx, { ix, iy, set: (x, y, t) => L.set(ix + x, iy + y, typeof t === 'string' ? TL[t] : t), prop: (x, y, pr) => { L.props[L.idx(ix + x, iy + y)] = pr; }, sign });
+    if (r === start) { if (intro) intro.g.intro.start(L, r, ictx); L.set(ix + 6, iy + DSY, TL.DEXIT); continue; }
+    if (r.intro) { intro.g.intro.room(L, r, ictx); continue; }
     if (r.boss) { r.enemies = def.bossParty ? def.bossParty.slice() : [r.boss]; if (d >= 4 && !def.bossParty && pool.length) r.enemies.push(rnd.pick(pool)); r.shutter = true; continue; }
     const lane = (x, y) => x === 6 || y === 4; // keep the cross through each room's doors clear
     const rc = Object.assign({}, gctx, { ix, iy, lane, set: (x, y, t) => L.set(ix + x, iy + y, typeof t === 'string' ? TL[t] : t), prop: (x, y, pr) => { L.props[L.idx(ix + x, iy + y)] = pr; } });

@@ -36,7 +36,7 @@ function readInput(dt) {
   o.cycle = (p.KeyQ ? -1 : 0) + (p.KeyR ? 1 : 0) + IN.wheel; IN.wheel = 0;
   o.interact = k.KeyF; o.interactP = p.KeyF;
   o.map = p.KeyM || p.Tab; o.pause = p.Escape || p.KeyP; o.dash = p.ShiftLeft || p.ShiftRight;
-  o.confirm = p.Enter || p.Space || p.KeyF || p.Mouse0;
+  o.confirm = p.Enter || p.Space || p.KeyF || p.Mouse0; o.enterP = !!p.Enter;
   for (let i = 1; i <= 7; i++) if (p['Digit' + i]) o.slot = i;
   // gamepad
   const pads = navigator.getGamepads ? navigator.getGamepads() : []; const gp = pads && Array.from(pads).find(x => x && x.connected);

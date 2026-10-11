@@ -3,6 +3,7 @@
 defineItem({
   id: 'candle', name: 'CANDLE', sprite: 'candle', monk: { name: 'FLAME PALM' }, slot: 'b', order: 4, debug: true,
   owned: (p) => !!p.items.candle,
+  full: (p) => !!p.items.candle,
   give(sim, p, ctx) { p.items.candle = true; p.sel = 'candle'; ctx.banner(); },
   use(sim, p) {
     if (sim.ents.some(e => e.k === 'proj' && e.pid === p.id && (e.type === 'candle' || e.type === 'palm'))) return;

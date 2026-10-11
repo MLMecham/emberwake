@@ -24,6 +24,9 @@ function migrateSave(s) {
   return s;
 }
 const REVIVE_TIME = 1.5, REVIVE_R2 = 2.6 * 2.6; // seconds to help a teammate up, and how close you must stand
+const RESPAWN_WAIT = 30; // seconds a downed hero waits before they may give up and respawn at the start on their own
+const BUY_COOLDOWN = 0.8; // seconds between shop purchases for one player
+const HAZARD_TICK = 0.5, ICE_KB = 1.5; // how often lava/spikes/vents burn a grounded enemy; how much harder hits shove enemies standing on ice
 const SWORD_DMG = [1, 1, 2, 3, 4];             // damage per sword level (0 = no sword, punches still do 1)
 // Enemy health multiplier by how many heroes are in the room (1, 2, 3, 4+). Adjusts live as people come and go.
 const PARTY_HP = [1, 1, 1.5, 2, 2.5];
@@ -85,7 +88,7 @@ class Sim {
   onAction(id, a) {
     const p = this.players[id]; if (!p) return;
     const L = this.W.levels[p.lvl];
-    if (!p.alive) { if (a.t === 'respawnreq') { } return; }
+    if (!p.alive) { if (a.t === 'respawn') this.tryRespawn(p); return; }
     switch (a.t) {
       case 'atk': this.playerAttack(p, a); break;
       case 'use': this.useItem(p, a.item, a); break;
@@ -229,6 +232,21 @@ class Sim {
       if (this.over > 3.5) { this.over = 0; this.respawnAll(); }
     } else this.over = 0;
   }
+  // a downed hero who has waited RESPAWN_WAIT seconds can get up at the start: the dungeon's entrance if they fell in
+  // a dungeon, otherwise where the adventure began (same places a party wipe sends everyone)
+  tryRespawn(p) {
+    if (p.alive || this.time - (p.downAt || 0) < RESPAWN_WAIT) return;
+    const L = this.W.levels[p.lvl]; const target = L.kind === 'dungeon' ? L : this.W.levels.ow;
+    // the price of getting up alone: half your gems stay behind in a bag where you fell. Only you can pick it up,
+    // and if you go down and respawn alone again before getting it back, that bag is lost.
+    const lost = Math.floor(p.gems / 2);
+    for (const e of this.ents) if (e.item === 'gembag' && e.owner === p.id) e.dead = true;
+    if (lost > 0) { p.gems -= lost; this.spawn({ k: 'pick', lvl: p.lvl, x: p.x, y: p.y, item: 'gembag', amount: lost, owner: p.id, perm: true, spr: 'gembag', sc: 0.6, z: 0.05 }); }
+    p.alive = true; p.hp = Math.min(p.maxHp, 12); p.inv = 2; p.revive = 0; p.reviver = null;
+    this.teleport(p, target.id, target.spawn.x, target.spawn.y, target.spawn.a);
+    this.msg(p.name + ' GOT BACK UP AT THE ' + (target.kind === 'dungeon' ? 'DUNGEON ENTRANCE.' : 'START.'));
+    if (lost > 0) this.ev({ t: 'dialog', pid: p.id, text: 'YOU LEFT ' + lost + ' GEMS IN A BAG WHERE YOU FELL. GO BACK FOR THEM BEFORE YOU FALL AGAIN.' });
+  }
   respawnAll() {
     if (this.mode === 'rogue') { this.ev({ t: 'runover' }); return; }
     for (const p of Object.values(this.players)) {
@@ -257,19 +275,20 @@ class Sim {
     const b = roomBounds(L, room);
     const rnd = mulberry32(hashStr(key) + Math.floor(this.time * 1000));
     const tierMul = L.kind === 'dungeon' ? 1 + (Math.min(10, L.dnum) - 1) * 0.25 : 1 + room.tier * 0.4;
-    for (const type of room.enemies) {
-      const def = enemyDef(type); if (!def) continue;
+    room.enemies.forEach((type, ei) => {
+      const def = enemyDef(type); if (!def) return;
       let x, y, tries = 0;
-      do {
+      const at = room.at && room.at[ei]; // a hand-built room can pin where each enemy appears
+      if (at) { x = room.rx * DSX + at[0]; y = room.ry * DSY + at[1]; } else do {
         x = rnd.range(b.x0, b.x1 - 1) + 0.5; y = rnd.range(b.y0, b.y1 - 1) + 0.5; tries++;
         if (def.boss && L.kind === 'dungeon') { x = room.rx * DSX + 6.5; y = room.ry * DSY + 2.5; break; }
-      } while (tries < 40 && (L.solidAt(x, y) || TINFO[L.get(Math.floor(x), Math.floor(y))].hurt || dist2(x, y, p.x, p.y) < 9));
+      } while (tries < 40 && (L.solidAt(x, y) || TINFO[L.get(Math.floor(x), Math.floor(y))].hurt || TINFO[L.get(Math.floor(x), Math.floor(y))].pit || dist2(x, y, p.x, p.y) < 9));
       let hp = Math.ceil(def.hp * (def.boss ? 1 + (L.dnum || 1) * 0.35 : tierMul));
       if (def.fixedHp) hp = def.hp;
       const e = this.spawn({ k: 'en', type, lvl: L.id, x, y, hp, maxHp: hp, f: rnd() * TAU, b, g: key, st: 0, tm: rnd() * 2, stun: 0, hurt: 0, spawnFx: 0.5, dmgMul: L.kind === 'dungeon' ? Math.ceil(Math.min(9, L.dnum) / 3) : 1 + Math.floor(room.tier / 2) });
       if (!def.boss) { const ch = L.kind === 'dungeon' ? 0.05 + Math.min(9, L.dnum) * 0.015 : 0.06 + room.tier * 0.03; if (rnd() < ch) this.makeElite(e, rnd); }
       g.ents.push(e);
-    }
+    });
     for (const s of room.dormant || []) { // statues that wake up when a hero walks close (gimmicks/statues.js)
       const e = this.spawn({ k: 'en', type: s.type, lvl: L.id, x: s.x, y: s.y, hp: Math.ceil(enemyDef(s.type).hp * tierMul), f: Math.PI / 2, b, g: key, st: 0, tm: 0.5, stun: 0, hurt: 0, spawnFx: 0, dmgMul: L.kind === 'dungeon' ? Math.ceil(Math.min(9, L.dnum) / 3) : 1, dormant: true });
       e.maxHp = e.hp; g.ents.push(e);
@@ -281,6 +300,9 @@ class Sim {
     // item on pedestal (visible immediately)
     if (room.item && !this.team.taken[key + ':item']) {
       if (!this.ents.find(e => e.tk === key + ':item')) this.spawn({ k: 'pick', lvl: L.id, x: room.rx * DSX + 6.5, y: room.ry * DSY + 3.5, item: room.item, tk: key + ':item', perm: true, spr: itemSprite(room.item), sc: 0.6, z: 0.35, team: true });
+    }
+    if (room.looseKey && !this.team.taken[key + ':lkey'] && !this.ents.find(e => e.tk === key + ':lkey')) { // a key waiting somewhere awkward (gimmick intro rooms)
+      this.spawn({ k: 'pick', lvl: L.id, x: room.rx * DSX + room.looseKey[0], y: room.ry * DSY + room.looseKey[1], item: 'key', tk: key + ':lkey', perm: true, spr: itemSprite('key'), sc: 0.55, z: 0.1, team: true });
     }
     if (cleared) this.roomRewards(L, room, key);
   }
@@ -344,14 +366,17 @@ class Sim {
     for (const p of Object.values(this.players)) { if (!p.alive || p.lvl !== e.lvl) continue; const d = dist2(p.x, p.y, e.x, e.y); if (d < bd) { bd = d; best = p; } }
     return best;
   }
-  moveEnt(e, dx, dy, def) {
+  // push: knockback, which can shove grounded enemies onto lava, spikes and pits (walking never does)
+  moveEnt(e, dx, dy, def, push) {
     const L = this.W.levels[e.lvl]; const r = def ? def.r * 0.8 : 0.25;
+    const onHazard = (() => { const ti = TINFO[L.get(Math.floor(e.x), Math.floor(e.y))]; return !!(ti.hurt || ti.pit); })();
+    const avoid = !push && !onHazard; // an enemy already standing in lava may walk out of it
     const blocked = (x, y) => {
       if (def && def.phase) return x < 1 || y < 1 || x > L.w - 1 || y > L.h - 1;
       if (e.b && (x < e.b.x0 + 0.2 || y < e.b.y0 + 0.2 || x > e.b.x1 - 0.2 || y > e.b.y1 - 0.2)) return true;
       for (const [ox, oy] of [[-r, -r], [r, -r], [-r, r], [r, r]]) {
         const tx = Math.floor(x + ox), ty = Math.floor(y + oy); const t = L.get(tx, ty); const ti = TINFO[t];
-        if (def && def.fly) { if (ti.solid && !ti.low) return true; } else { if (ti.solid || ti.hurt || ti.pit) return true; }
+        if (def && def.fly) { if (ti.solid && !ti.low) return true; } else { if (ti.solid || (avoid && (ti.hurt || ti.pit))) return true; }
         const pr = L.props[ty * L.w + tx]; if (pr && PROP_INFO[pr].solid) return true;
       }
       return false;
@@ -378,9 +403,10 @@ class Sim {
       return;
     }
     if (e.spawnFx > 0) { e.spawnFx -= dt; return; }
+    this.groundHazards(e, def, dt); if (e.dead) return;
     if (e.hurt > 0) e.hurt -= dt;
+    if (e.kb) { this.moveEnt(e, e.kb[0] * dt, e.kb[1] * dt, def, true); e.kbT -= dt; if (e.kbT <= 0) e.kb = null; } // a stunned enemy still gets shoved
     if (e.stun > 0) { e.stun -= dt; return; }
-    if (e.kb) { this.moveEnt(e, e.kb[0] * dt, e.kb[1] * dt, def); e.kbT -= dt; if (e.kbT <= 0) e.kb = null; }
     const p = this.nearestPlayer(e, 30);
     e.tm -= dt;
     const ctx = { p, spd: def.spd * (e.rage ? 1.5 : 1) * (e.spdMul || 1), def };
@@ -395,6 +421,24 @@ class Sim {
       const rr = this.enemyRadius(e) + 0.28; if (dist2(pl.x, pl.y, e.x, e.y) < rr * rr) this.hurtPlayer(pl, def.dmg * (def.boss ? 1 : e.dmgMul), e);
     }
   }
+  // Tiles hurt grounded enemies too: pits swallow them, lava, spikes and blowing vents burn them.
+  // Flyers, ghosts and bosses don't care; fire creatures shrug off lava and vents.
+  groundHazards(e, def, dt) {
+    if (def.fly || def.phase || def.boss || e.dormant) return;
+    const L = this.W.levels[e.lvl]; const ti = TINFO[L.get(Math.floor(e.x), Math.floor(e.y))];
+    if (ti.pit) { this.enemyFalls(e); return; }
+    const burn = (ti.hurt && !(def.hot && ti.lava)) || (ti.vent && this.ventPhase() === 2 && !def.hot);
+    if (!burn) { e.hazT = 0; return; }
+    e.hazT = (e.hazT || 0) - dt; if (e.hazT > 0) return; e.hazT = HAZARD_TICK;
+    if (ti.lava || ti.vent) this.sfx('sizzle', e.lvl, e.x, e.y);
+    this.damageEnemy(e, 1, null, { ignoreIframes: true, pid: e.lastPid });
+  }
+  enemyFalls(e) { // gone, with no loot (it fell with it)
+    e.dead = true; const p = e.lastPid && this.players[e.lastPid]; if (p) p.kills++;
+    this.spawn({ k: 'fx', lvl: e.lvl, x: e.x, y: e.y, spr: 'puff', life: 0.35, sc: 0.6, z: -0.3 }); this.sfx('pitfall', e.lvl, e.x, e.y);
+  }
+  // Knockback speed for a hit. Grounded enemies on ice slide much further.
+  knockFor(e, def, speed) { const L = this.W.levels[e.lvl]; return !def.fly && TINFO[L.get(Math.floor(e.x), Math.floor(e.y))].slippery ? [speed * ICE_KB, 0.3] : [speed, null]; }
   wake(e) { e.dormant = false; e.spawnFx = 0.35; this.sfx('roar', e.lvl, e.x, e.y); this.puff(e, 1); }
   // ---- elites (content/elites.js) ----
   makeElite(e, rnd) {
@@ -414,7 +458,7 @@ class Sim {
     this.ev({ t: 'hurt', pid: p.id, kx, ky });
     if (p.hp <= 0) {
       if (p.potions > 0) { p.potions--; p.hp = p.maxHp; this.msg(p.name + "'S POTION SAVED THEM!"); this.sfx('heal', p.lvl); return; }
-      p.hp = 0; p.alive = false; p.revive = 0; p.reviver = null; this.clearBeam(p); this.ev({ t: 'down', pid: p.id }); this.msg(p.name + ' IS DOWN!' + (Object.keys(this.players).length > 1 ? ' GET CLOSE AND HOLD F TO HELP THEM UP.' : ''));
+      p.hp = 0; p.alive = false; p.downAt = this.time; p.revive = 0; p.reviver = null; this.clearBeam(p); this.ev({ t: 'down', pid: p.id }); this.msg(p.name + ' IS DOWN!' + (Object.keys(this.players).length > 1 ? ' GET CLOSE AND HOLD F TO HELP THEM UP.' : ''));
     }
   }
   clearBeam(p) { for (const e of this.ents) if (e.k === 'proj' && e.pid === p.id && Content.projectiles[e.type].beam) e.dead = true; }
@@ -430,8 +474,8 @@ class Sim {
     }
     if (opt.stunOnly && !def.boss) { e.stun = 3; this.sfx('clink', e.lvl, e.x, e.y); if (!def.boomerangKills) return true; }
     if (def.onDamage && def.onDamage(this, e, dmg, opt) === false) return true;
-    e.hp -= dmg; e.hurt = 0.35; this.sfx('hit', e.lvl, e.x, e.y);
-    if (src && !def.boss) { const a = Math.atan2(e.y - src.y, e.x - src.x); e.kb = [Math.cos(a) * 9, Math.sin(a) * 9]; e.kbT = 0.12; }
+    e.hp -= dmg; e.hurt = 0.35; this.sfx('hit', e.lvl, e.x, e.y); if (opt.pid) e.lastPid = opt.pid;
+    if (src && !def.boss) { const a = Math.atan2(e.y - src.y, e.x - src.x); const [v, t] = this.knockFor(e, def, 9); e.kb = [Math.cos(a) * v, Math.sin(a) * v]; e.kbT = t || 0.12; }
     if (e.hp <= 0) this.killEnemy(e, opt.pid);
     return true;
   }
@@ -470,7 +514,7 @@ class Sim {
         if (d > range + this.enemyRadius(e)) continue;
         const ang = Math.atan2(e.y - p.y, e.x - p.x); if (d > 0.5 && Math.abs(angDiff(p.a, ang)) > cone) continue;
         if (this.damageEnemy(e, dmg, p, { pid: p.id })) hitAny = true;
-        if (p.cls === 'monk' && a.kind === 'punch3' && !def.boss) { e.kb = [Math.cos(p.a) * 14, Math.sin(p.a) * 14]; e.kbT = 0.2; e.stun = 0.5; }
+        if (p.cls === 'monk' && a.kind === 'punch3' && !def.boss) { const [v, t] = this.knockFor(e, def, 14); e.kb = [Math.cos(p.a) * v, Math.sin(p.a) * v]; e.kbT = t || 0.2; e.stun = 0.5; }
       }
     }
     this.cutAt(L, p.x + Math.cos(p.a) * 0.75, p.y + Math.sin(p.a) * 0.75); this.cutAt(L, p.x + Math.cos(p.a) * 1.25, p.y + Math.sin(p.a) * 1.25);
@@ -564,12 +608,15 @@ class Sim {
   pickup(p, e) {
     const d = itemDef(e.item); if (!d) { e.dead = true; return; }
     if (d.canTake && !d.canTake(p)) return;
+    if (d.takeFrom) { if (d.takeFrom(this, p, e) !== false) e.dead = true; return; } // items that need the ground entity (like a dropped gem bag)
     if (e.k === 'shop') {
       const nag = (t, text) => { if (!e.warned || this.time - e.warned > 3) { e.warned = this.time; this.ev({ t, pid: p.id, text }); } };
       if (e.need && p.maxHp / 4 < e.need) return nag('dialog', 'MASTER USING IT AND YOU CAN HAVE THIS... COME BACK WITH ' + e.need + ' HEARTS.');
       if (!e.gift && p.gems < e.price) return nag('hint', 'YOU NEED ' + e.price + ' GEMS.');
       if (e.unique && p.cls === 'monk') return nag('dialog', 'YOUR HANDS ALREADY KNOW THE WAY.');
-      if (!e.gift) p.gems -= e.price;
+      if (!e.gift && d.full && d.full(p)) return nag('hint', 'YOU CAN\'T CARRY ANY MORE.');
+      if (!e.gift && this.time < (p.buyReady || 0)) return; // one purchase per BUY_COOLDOWN, so standing on the counter can't drain your gems
+      if (!e.gift) { p.gems -= e.price; p.buyReady = this.time + BUY_COOLDOWN; }
       this.giveItem(p, e.item, true);
       if (e.gift) { this.team.taken[e.tk] = true; if (e.choose) { this.team.taken[e.choose] = true; for (const o of this.ents) if (o.choose === e.choose) o.dead = true; } e.dead = true; }
       return;
@@ -616,7 +663,7 @@ class Sim {
     const p = this.players[pid]; if (!p) return null;
     const en = []; for (const e of this.ents) if (e.lvl === p.lvl) en.push(this.entView(e));
     const pl = []; for (const o of Object.values(this.players)) pl.push([o.id, o.lvl, Math.round(o.x * 100) / 100, Math.round(o.y * 100) / 100, Math.round(o.a * 100) / 100, o.color, o.armor, o.cls, o.alive ? 1 : 0, o.atk, o.name, Math.round(o.revive / REVIVE_TIME * 100) / 100, o.hp, o.maxHp, o.reviver || 0]);
-    const me = {}; for (const k of ['lvl', 'hp', 'maxHp', 'gems', 'bombs', 'maxBombs', 'arrows', 'sword', 'armor', 'items', 'potions', 'alive', 'cls', 'sel', 'color', 'name', 'dbg', 'god']) me[k] = p[k]; me.chill = p.chill > 0 ? 1 : 0;
+    const me = {}; for (const k of ['lvl', 'hp', 'maxHp', 'gems', 'bombs', 'maxBombs', 'arrows', 'sword', 'armor', 'items', 'potions', 'alive', 'cls', 'sel', 'color', 'name', 'dbg', 'god']) me[k] = p[k]; me.chill = p.chill > 0 ? 1 : 0; me.respawnIn = p.alive ? 0 : Math.max(0, Math.ceil(RESPAWN_WAIT - (this.time - (p.downAt || 0))));
     return { t: 's', paused: !!this.paused, pausedBy: this.pausedBy, me, pl, en, team: { keys: this.team.keys, maps: this.team.maps, comps: this.team.comps, shards: this.team.shards, done: this.team.done, relics: this.team.relics }, vp: this.ventPhase(), mv: this.modVer, over: this.over > 0 };
   }
   // ---- save ----

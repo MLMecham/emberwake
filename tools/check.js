@@ -43,7 +43,7 @@ function solveDungeon(D) {
   while (changed) {
     changed = false; const st = [D.startRoom], vis = new Set();
     while (st.length) { const r = st.pop(); if (vis.has(r.id)) continue; vis.add(r.id);
-      if (r.key && !got.has(r.id)) { got.add(r.id); keys++; changed = true; }
+      if ((r.key || r.looseKey) && !got.has(r.id)) { got.add(r.id); keys++; changed = true; }
       for (const oid in r.links) { const t = r.links[oid]; const k = Math.min(r.id, +oid) + '-' + Math.max(r.id, +oid); if (t === TL.LOCKED && !opened.has(k)) continue; st.push(rooms[oid]); } }
     vis.forEach(v => reached.add(v));
     if (!changed) for (const id of reached) { const r = rooms[id]; for (const oid in r.links) { const k = Math.min(r.id, +oid) + '-' + Math.max(r.id, +oid); if (r.links[oid] === TL.LOCKED && !opened.has(k) && keys > 0) { keys--; opened.add(k); changed = true; break; } } if (changed) break; }
@@ -214,6 +214,57 @@ attempt('god mode triple damage', () => {
   p.god = false; sim.damageEnemy(e, 2, null, { pid: 'p1', ignoreIframes: true }); const normal = 100 - e.hp;
   p.god = true; e.hurt = 0; const before = e.hp; sim.damageEnemy(e, 2, null, { pid: 'p1', ignoreIframes: true });
   __ok(before - e.hp === normal * 3, 'god mode should deal triple damage');
+});
+attempt('respawn after waiting', () => {
+  const sim = freshSim(); const a = sim.players.p1, b = sim.players.p2; a.god = false; b.god = false; const D = sim.W.levels.d3;
+  for (const p of [a, b]) sim.teleport(p, 'd3', D.spawn.x, D.spawn.y, 0); a.potions = 0; a.y -= 3; a.hp = 1; a.inv = 0; sim.hurtPlayer(a, 5, null);
+  __ok(!a.alive, 'should be down'); sim.onAction('p1', { t: 'respawn' }); __ok(!a.alive, 'respawned too early');
+  __ok(sim.snapshotFor('p1').me.respawnIn > 25, 'respawn countdown missing');
+  a.gems = 101; const fx = a.x, fy = a.y;
+  sim.time += 31; sim.onAction('p1', { t: 'respawn' }); __ok(a.alive && a.lvl === 'd3' && Math.abs(a.y - D.spawn.y) < 0.01, 'respawn should put you at the dungeon entrance');
+  __ok(a.gems === 51, 'respawning alone should cost half your gems');
+  const bag = sim.ents.find(e => e.item === 'gembag'); __ok(bag && bag.amount === 50 && Math.abs(bag.x - fx) < 0.01, 'gem bag should be left where you fell');
+  b.x = bag.x; b.y = bag.y; sim.tick(1 / 60); __ok(!bag.dead, 'only the owner can take the bag');
+  a.x = bag.x; a.y = bag.y; sim.tick(1 / 60); __ok(bag.dead && a.gems === 101, 'owner should get the gems back');
+});
+attempt('shops sell slowly and only what you can carry', () => {
+  const sim = freshSim(); const p = sim.players.p1; p.gems = 300; p.potions = 0;
+  const shop = { k: 'shop', lvl: p.lvl, x: p.x, y: p.y, item: 'potion', price: 60 };
+  for (let i = 0; i < 10; i++) sim.pickup(p, shop); // ten ticks on the counter at once
+  __ok(p.potions === 1 && p.gems === 240, 'one purchase per cooldown (got ' + p.potions + ' potions, ' + p.gems + ' gems)');
+  for (let t = 0; t < 60 * 5; t++) { sim.time += 1 / 60; sim.pickup(p, shop); } // stand there five seconds
+  __ok(p.potions === 2 && p.gems === 180, 'should stop charging once you can\\'t carry more (got ' + p.potions + ' potions, ' + p.gems + ' gems)');
+  p.gems = 300; p.hp = p.maxHp; sim.time += 2; sim.pickup(p, { k: 'shop', lvl: p.lvl, x: p.x, y: p.y, item: 'heart', price: 10 });
+  __ok(p.gems === 300, 'no heart sales at full health');
+});
+attempt('tideglass opening', () => {
+  for (const [seed, mode] of [[7319, 'adv'], [1234, 'rogue'], [99, 'rogue'], [4242, 'adv']]) {
+    const W = genWorld(seed, mode); const D = W.levels.d6; const st = D.startRoom; const r2 = st.children[0]; const r3 = r2.children[0];
+    __ok(r2.intro && r2.looseKey, 'd6 room 2 should be the glass key room (seed ' + seed + ' ' + mode + ')');
+    __ok(r2.links[r3.id] === TL.LOCKED, 'd6 room 2 -> 3 should be locked');
+    __ok(D.get(st.rx * DSX + 2, st.ry * DSY + 3) === TL.PIT && D.get(st.rx * DSX + 6, st.ry * DSY + 3) === TL.GLASS, 'd6 entrance should have the glass bridge over a pit');
+  }
+  const sim = freshSim(); const p = sim.players.p1; p.god = false; const D = sim.W.levels.d6; const r2 = D.startRoom.children[0];
+  sim.teleport(p, 'd6', r2.rx * DSX + 6.5, r2.ry * DSY + 6.5, -Math.PI / 2); sim.tick(1 / 60);
+  __ok(sim.ents.some(e => e.k === 'pick' && e.item === 'key' && Math.abs(e.x - (r2.rx * DSX + 10)) < 0.01), 'island key should be waiting');
+  const bat = sim.ents.find(e => e.k === 'en' && e.type === 'bat' && e.g === p.room); __ok(bat && TINFO[D.get(Math.floor(bat.x), Math.floor(bat.y))].pit, 'bat should hover over the pit');
+});
+attempt('enemies and hazards', () => {
+  const sim = freshSim(); const p = sim.players.p1; const L = sim.W.levels.ow; const x0 = Math.floor(p.x) + 3, y0 = Math.floor(p.y);
+  // a skeleton knocked off solid ground onto a pit falls in; a bat over a pit doesn't
+  L.set(x0, y0, TL.GRASS); L.set(x0 + 1, y0, TL.PIT); L.set(x0 + 2, y0, TL.PIT);
+  const sk = sim.spawnEnemy('skeleton', 'ow', x0 + 0.5, y0 + 0.5, { spawnFx: 0 }); sk.spawnFx = 0; sk.hp = 99;
+  sim.damageEnemy(sk, 1, { x: x0 - 1, y: y0 + 0.5 }, { pid: 'p1' }); for (let i = 0; i < 30; i++) sim.updateEnemy(sk, 1 / 60);
+  __ok(sk.dead, 'skeleton knocked onto a pit should fall');
+  const bat = sim.spawnEnemy('bat', 'ow', x0 + 1.5, y0 + 0.5, { spawnFx: 0 }); bat.spawnFx = 0; for (let i = 0; i < 30; i++) sim.updateEnemy(bat, 1 / 60); __ok(!bat.dead, 'bats fly over pits');
+  // lava burns a skeleton but not a magmite
+  L.set(x0 + 5, y0, TL.LAVA); const s2 = sim.spawnEnemy('skeleton', 'ow', x0 + 5.5, y0 + 0.5, { spawnFx: 0 }); s2.spawnFx = 0; s2.hp = 99; s2.stun = 9;
+  const mg = sim.spawnEnemy('magmite', 'ow', x0 + 5.5, y0 + 0.5, { spawnFx: 0 }); mg.spawnFx = 0; mg.hp = 99; mg.stun = 9;
+  for (let i = 0; i < 70; i++) { sim.time += 1 / 60; sim.updateEnemy(s2, 1 / 60); sim.updateEnemy(mg, 1 / 60); }
+  __ok(s2.hp < 99 && mg.hp === 99, 'lava should burn grounded enemies but not fire creatures (' + s2.hp + ', ' + mg.hp + ')');
+  // a hit on ice shoves further
+  const kb = (tile) => { L.set(x0 + 8, y0, tile); for (let dx = 9; dx <= 14; dx++) L.set(x0 + dx, y0, TL.GRASS); const e = sim.spawnEnemy('skeleton', 'ow', x0 + 8.5, y0 + 0.5, { spawnFx: 0 }); e.spawnFx = 0; e.hp = 99; sim.damageEnemy(e, 1, { x: e.x - 1, y: e.y }, {}); let moved = 0; for (let i = 0; i < 30 && e.kb; i++) { const bx = e.x; sim.moveEnt(e, e.kb[0] / 60, e.kb[1] / 60, enemyDef('skeleton'), true); e.kbT -= 1 / 60; if (e.kbT <= 0) e.kb = null; moved += e.x - bx; } e.dead = true; return moved; };
+  const g = kb(TL.GRASS), ic = kb(TL.ICE); __ok(ic > g * 2.5, 'ice knockback should go much further (' + g.toFixed(2) + ' vs ' + ic.toFixed(2) + ')');
 });
 // a full minute of play in a dungeon with everything going on
 attempt('dungeon minute', () => {

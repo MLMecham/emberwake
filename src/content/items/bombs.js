@@ -4,6 +4,7 @@
 defineItem({
   id: 'bombs', name: 'BOMBS', sprite: 'bomb', monk: { name: 'NOVA ORB', sprite: 'ki' }, slot: 'b', order: 2,
   owned: (p) => !!p.items.bombs || p.bombs > 0,
+  full: (p) => p.bombs >= p.maxBombs, // shops won't sell bombs you can't carry
   give(sim, p, ctx) { p.bombs = Math.min(p.maxBombs, p.bombs + 4); p.items.bombs = true; ctx.banner(); }, // bought in a shop
   use(sim, p) {
     if (p.bombs <= 0) return sim.hint(p, 'NO BOMBS.');

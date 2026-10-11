@@ -16,7 +16,7 @@ defineItem({
     sim.sfx('arrow', p.lvl);
   },
 });
-defineItem({ id: 'arrows', name: 'ARROWS', sprite: 'arrow', give(sim, p, ctx) { p.arrows = Math.min(30, p.arrows + 15); ctx.banner(); } }); // shop bundle
+defineItem({ id: 'arrows', name: 'ARROWS', sprite: 'arrow', full: (p) => p.arrows >= 30, give(sim, p, ctx) { p.arrows = Math.min(30, p.arrows + 15); ctx.banner(); } }); // shop bundle
 defineItem({ id: 'arrow', name: 'ARROWS', sprite: 'arrow', give(sim, p) { p.arrows = Math.min(30, p.arrows + 5); sim.sfx('gem', p.lvl); } }); // enemy drop
 // dungeon 8 treasure: arrows hit harder, and only silver can finish the Hollow King
 defineItem({ id: 'silver', name: 'SILVER ARROWS', sprite: 'arrow', team: true, debug: true, give(sim, p, ctx) { p.items.silver = true; ctx.banner(); } });

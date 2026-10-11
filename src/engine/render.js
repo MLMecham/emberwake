@@ -498,7 +498,7 @@ function drawMinimap(st, x0, y0, w, h) {
   }
   for (const p of st.players) {
     const pos = inCave ? owSpot(st.world, p) : p[1] === L.id ? { x: p[2], y: p[3], inside: false } : null; if (!pos) continue;
-    const c = p[0] === st.myId ? rgb(255, 255, 255) : c32(hexToRgb((PCOLORS.find(c => c.name === p[5]) || PCOLORS[0]).c));
+    let c = p[0] === st.myId ? rgb(255, 255, 255) : c32(hexToRgb((PCOLORS.find(c => c.name === p[5]) || PCOLORS[0]).c)); if (!p[8] && (Math.floor(R.time * 4) & 1)) c = rgb(255, 40, 40); // downed: blinks red
     const mx = x0 + (pos.x - sx) * sc, my = y0 + (pos.y - sy) * sc; if (mx < x0 || my < y0 || mx > x0 + w || my > y0 + h) continue;
     if (pos.inside && !(Math.floor(R.time * 3) & 1)) continue;
     rect(mx - 1, my - 1, 3, 3, c); if (p[0] === st.myId && !pos.inside) { rect(mx + Math.cos(p[4]) * 3, my + Math.sin(p[4]) * 3, 1, 1, rgb(255, 255, 0)); rect(mx + Math.cos(p[4]) * 4, my + Math.sin(p[4]) * 4, 1, 1, rgb(255, 255, 0)); }

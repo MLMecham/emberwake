@@ -1812,7 +1812,7 @@ const AI = {
       if (e.tm > 0) return;
       if (e.st === 0 && p) {
         const L = sim.W.levels[e.lvl];
-        for (let i = 0; i < 20; i++) { const a = Math.random() * TAU, r = 2.5 + Math.random() * 2; const x = p.x + Math.cos(a) * r, y = p.y + Math.sin(a) * r; if (!L.solidAt(x, y) && (!e.b || (x > e.b.x0 && x < e.b.x1 && y > e.b.y0 && y < e.b.y1))) { sim.puff(e, 0.8); e.x = x; e.y = y; break; } }
+        for (let i = 0; i < 20; i++) { const a = Math.random() * TAU, r = 2.5 + Math.random() * 2; const x = p.x + Math.cos(a) * r, y = p.y + Math.sin(a) * r; if (AI.safeAt(L, x, y) && (!e.b || (x > e.b.x0 && x < e.b.x1 && y > e.b.y0 && y < e.b.y1))) { sim.puff(e, 0.8); e.x = x; e.y = y; break; } }
         e.st = 1; e.tm = 0.7;
       } else if (e.st === 1 && p) { sim.fireProj(proj, e.lvl, e.x, e.y, Math.atan2(p.y - e.y, p.x - e.x), 'e', null, { dmg: dmg * e.dmgMul }); sim.sfx('magic', e.lvl, e.x, e.y); e.st = 0; e.tm = 1.6 + Math.random(); }
       else e.tm = 1;
@@ -1830,9 +1830,11 @@ const AI = {
   // fire `count` projectiles in a full ring
   ring(sim, e, proj, count, offset, extra) { for (let i = 0; i < count; i++) sim.fireProj(proj, e.lvl, e.x, e.y, i * TAU / count + (offset || 0), 'e', null, extra); },
   // teleport to a random open spot in the room, away from heroes
+  // somewhere a teleporting enemy can land: not a wall, and not lava, spikes or a pit (those would hurt or swallow it)
+  safeAt(L, x, y) { if (L.solidAt(x, y)) return false; const ti = TINFO[L.get(Math.floor(x), Math.floor(y))]; return !ti.hurt && !ti.pit; },
   teleportInRoom(sim, e, p, minD2) {
     const L = sim.W.levels[e.lvl];
-    for (let i = 0; i < 30; i++) { const x = e.b.x0 + 1 + Math.random() * (e.b.x1 - e.b.x0 - 2), y = e.b.y0 + 1 + Math.random() * (e.b.y1 - e.b.y0 - 2); if (!L.solidAt(x, y) && (!p || dist2(x, y, p.x, p.y) > minD2)) { sim.puff(e, 1.2); e.x = x; e.y = y; return true; } }
+    for (let i = 0; i < 30; i++) { const x = e.b.x0 + 1 + Math.random() * (e.b.x1 - e.b.x0 - 2), y = e.b.y0 + 1 + Math.random() * (e.b.y1 - e.b.y0 - 2); if (AI.safeAt(L, x, y) && (!p || dist2(x, y, p.x, p.y) > minD2)) { sim.puff(e, 1.2); e.x = x; e.y = y; return true; } }
     return false;
   },
 };
@@ -1893,6 +1895,7 @@ defineDropTable('common', 34, [
 // gimmicks: ids from content/gimmicks/. Enemies and bosses come from each enemy's spawns / bossOf.
 // Optional dungeons (10+) can also set: mapLabel (letter on the maps), bossDrop (item the boss leaves),
 // bossParty (several bosses at once, instead of the single bossOf one).
+// Any dungeon can set intro: '<gimmick id>' to use that gimmick's hand-built first two rooms (the second holds the key onward).
 'use strict';
 defineDungeon(1, {
   name: 'THE MOSSY HOLLOW', item: 'boomerang', gimmicks: ['brambles'], secret: 'BRAMBLE',
@@ -1967,7 +1970,7 @@ defineDungeon(5, {
   lore: ['SOME WALLS ARE ONLY HABITS. LISTEN FOR THE ONES THAT WHISPER.'],
 });
 defineDungeon(6, {
-  name: 'TIDEGLASS HALLS', item: 'raft', gimmicks: ['glass'],
+  name: 'TIDEGLASS HALLS', item: 'raft', gimmicks: ['glass'], intro: 'glass', // the first two rooms teach the glass (content/gimmicks/glass.js)
   theme: { wall: [70, 150, 170], mortar: [30, 70, 84], hi: [140, 210, 224], floor: [200, 230, 236], edge: [120, 170, 184], fhi: [236, 250, 252], trim: [60, 120, 140] },
   shape: [ // a fish
     '.......#',
@@ -2336,23 +2339,46 @@ defineTexture('pit', (x, y) => { const d = Math.max(Math.abs(x - 15.5), Math.abs
 defineTile('GLASS', { floor: 'glass', glass: true });
 defineTile('GLASS_CRACKED', { floor: 'glass_cracked', glass: true });
 defineTile('PIT', { floor: 'pit', pit: true });
-const CRACK_AT = 0.6, BREAK_AT = 1.2, REFORM_AFTER = 8;
+const CRACK_AT = 0.6, BREAK_AT = 1.2, REFORM_AFTER = 8, SETTLE = 0.5; // seconds; SETTLE: how fast an empty, uncracked pane recovers
 defineGimmick('glass', {
   room(L, r, { rnd, set }) {
     if (rnd() < 0.5) return false;
     for (let y = 3; y <= 5; y++) for (let x = 4; x <= 8; x++) set(x, y, 'GLASS');
     return false; // blocks may still be added on top
   },
+  // Hand-built opening for a dungeon with intro: 'glass' (Tideglass Halls). Room 1 teaches that glass holds
+  // while you keep moving; room 2 hides the key on an island in a pit, reached by a glass branch,
+  // and the door onward is locked. Skeletons patrol the ledge (knock them into the pit), a bat hovers over it.
+  intro: {
+    start(L, r, { set, prop, sign }) {
+      for (let y = 3; y <= 4; y++) for (let x = 1; x <= 11; x++) set(x, y, x >= 5 && x <= 7 ? 'GLASS' : 'PIT');
+      prop(3, 6, PR.SIGN); sign(3, 6, 'THE GLASS HOLDS FOR TWO HEARTBEATS. KEEP WALKING AND IT WILL CARRY YOU. STAND STILL AND IT WILL NOT. BROKEN GLASS MENDS ITSELF IN TIME.');
+    },
+    room(L, r, { set, rnd, d }) {
+      for (let y = 2; y <= 5; y++) for (let x = 1; x <= 11; x++) set(x, y, 'PIT');
+      for (let y = 2; y <= 5; y++) set(6, y, 'GLASS'); // bridge to the locked door
+      set(7, 3, 'GLASS'); set(8, 3, 'GLASS'); // branch to the island
+      for (let y = 3; y <= 4; y++) for (let x = 9; x <= 10; x++) set(x, y, 'DFLOOR'); // the island
+      r.looseKey = [10, 4];
+      const foot = enemiesFor('dungeons', d).filter(t => !enemyDef(t).fly && !enemyDef(t).shield);
+      const g = foot.includes('skeleton') ? 'skeleton' : (foot[0] || 'skeleton');
+      r.enemies = ['bat', g, g]; r.at = [[3.5, 3.5], [3.5, 6.5], [9.5, 6.5]]; r.shutter = false;
+    },
+  },
   update(sim, L, dt) {
     L.glassT = L.glassT || {}; L.pits = L.pits || {};
+    const under = new Set();
     for (const p of Object.values(sim.players)) {
       if (!p.alive || p.lvl !== L.id) continue;
       const i = L.idx(Math.floor(p.x), Math.floor(p.y)); const t = L.tiles[i];
       if (!TINFO[t].glass) continue;
+      if (under.has(i)) continue; under.add(i); // two heroes on one pane don't crack it twice as fast
       L.glassT[i] = (L.glassT[i] || 0) + dt;
       if (t === TL.GLASS && L.glassT[i] > CRACK_AT) { sim.setTile(L.id, i, TL.GLASS_CRACKED); sim.sfx('clink', L.id, p.x, p.y); }
       else if (t === TL.GLASS_CRACKED && L.glassT[i] > BREAK_AT) { sim.setTile(L.id, i, TL.PIT); L.pits[i] = sim.time; sim.sfx('shutter', L.id, p.x, p.y); }
     }
+    // a pane nobody is standing on settles again (until it has cracked), so a party can cross a bridge one by one
+    for (const i in L.glassT) if (!under.has(+i) && L.tiles[+i] === TL.GLASS && L.glassT[i] > 0) L.glassT[i] = Math.max(0, L.glassT[i] - dt * SETTLE);
     for (const i in L.pits) if (sim.time - L.pits[i] > REFORM_AFTER) { sim.setTile(L.id, +i, TL.GLASS); delete L.pits[i]; L.glassT[i] = 0; }
   },
 });
@@ -3086,6 +3112,7 @@ for (const [id, bossOf, proj, pal] of [['wyrm_frost', [1], 'icebolt', { r: '#86c
 defineItem({
   id: 'bombs', name: 'BOMBS', sprite: 'bomb', monk: { name: 'NOVA ORB', sprite: 'ki' }, slot: 'b', order: 2,
   owned: (p) => !!p.items.bombs || p.bombs > 0,
+  full: (p) => p.bombs >= p.maxBombs, // shops won't sell bombs you can't carry
   give(sim, p, ctx) { p.bombs = Math.min(p.maxBombs, p.bombs + 4); p.items.bombs = true; ctx.banner(); }, // bought in a shop
   use(sim, p) {
     if (p.bombs <= 0) return sim.hint(p, 'NO BOMBS.');
@@ -3186,7 +3213,7 @@ defineItem({
     sim.sfx('arrow', p.lvl);
   },
 });
-defineItem({ id: 'arrows', name: 'ARROWS', sprite: 'arrow', give(sim, p, ctx) { p.arrows = Math.min(30, p.arrows + 15); ctx.banner(); } }); // shop bundle
+defineItem({ id: 'arrows', name: 'ARROWS', sprite: 'arrow', full: (p) => p.arrows >= 30, give(sim, p, ctx) { p.arrows = Math.min(30, p.arrows + 15); ctx.banner(); } }); // shop bundle
 defineItem({ id: 'arrow', name: 'ARROWS', sprite: 'arrow', give(sim, p) { p.arrows = Math.min(30, p.arrows + 5); sim.sfx('gem', p.lvl); } }); // enemy drop
 // dungeon 8 treasure: arrows hit harder, and only silver can finish the Hollow King
 defineItem({ id: 'silver', name: 'SILVER ARROWS', sprite: 'arrow', team: true, debug: true, give(sim, p, ctx) { p.items.silver = true; ctx.banner(); } });
@@ -3199,6 +3226,7 @@ defineItem({ id: 'silver', name: 'SILVER ARROWS', sprite: 'arrow', team: true, d
 defineItem({
   id: 'candle', name: 'CANDLE', sprite: 'candle', monk: { name: 'FLAME PALM' }, slot: 'b', order: 4, debug: true,
   owned: (p) => !!p.items.candle,
+  full: (p) => !!p.items.candle,
   give(sim, p, ctx) { p.items.candle = true; p.sel = 'candle'; ctx.banner(); },
   use(sim, p) {
     if (sim.ents.some(e => e.k === 'proj' && e.pid === p.id && (e.type === 'candle' || e.type === 'palm'))) return;
@@ -3329,13 +3357,32 @@ defineItem({ id: 'dawnblade', name: 'DAWNBLADE', sprite: 'dawnblade', monk: { na
 defineItem({ id: 'gem1', name: 'GEM', sprite: 'gem_g', give(sim, p) { p.gems = Math.min(999, p.gems + 1); sim.sfx('gem', p.lvl); } });
 defineItem({ id: 'gem5', name: '5 GEMS', sprite: 'gem_b', give(sim, p) { p.gems = Math.min(999, p.gems + 5); sim.sfx('gem', p.lvl); } });
 for (const n of [30, 50, 100]) defineItem({ id: 'gems' + n, name: n + ' GEMS', sprite: 'gem_r', pickup: { sc: 0.6 }, give(sim, p, ctx) { p.gems = Math.min(999, p.gems + n); ctx.banner('+' + n + ' GEMS'); } });
+// the bag of gems you leave behind when you respawn on your own (see Sim.tryRespawn). Only its owner can take it.
+defineSprite('gembag', [
+  '................', '................', '................',
+  '.......kk.......',
+  '......kYYk......',
+  '.......kk.......',
+  '.....knnnnk.....',
+  '....knnnnnnk....',
+  '...knnrnnnnnk...',
+  '...knnnnngnnk...',
+  '...knnnnnnnnk...',
+  '...kNnnnnnnNk...',
+  '....kNNNNNNk....',
+  '.....kkkkkk.....',
+  '................', '................',
+]);
+defineItem({ id: 'gembag', name: 'YOUR GEMS', sprite: 'gembag',
+  takeFrom(sim, p, e) { if (e.owner !== p.id) return false; p.gems = Math.min(999, p.gems + (e.amount || 0)); sim.sfx('heal', p.lvl); sim.hint(p, '+' + e.amount + ' GEMS RECOVERED'); },
+  give() { } });
 
 })();
 // ---- src/content/items/hearts.js ----
 (function () {
 // ===== content/items/hearts.js : healing and max health =====
 'use strict';
-defineItem({ id: 'heart', name: 'HEART', sprite: 'heart', give(sim, p, ctx) { sim.heal(p, 4); sim.sfx('heart', p.lvl); if (ctx.fromShop) ctx.banner(); } });
+defineItem({ id: 'heart', name: 'HEART', sprite: 'heart', full: (p) => p.hp >= p.maxHp, give(sim, p, ctx) { sim.heal(p, 4); sim.sfx('heart', p.lvl); if (ctx.fromShop) ctx.banner(); } });
 defineItem({ id: 'fairy', name: 'FAIRY', sprite: 'fairy', pickup: { sc: 0.6, z: 0.3, float: true }, give(sim, p) { sim.heal(p, p.maxHp); sim.sfx('heal', p.lvl); } });
 // +1 heart for the whole party
 defineItem({ id: 'hcont', name: 'HEART CONTAINER', sprite: 'hcont', team: true, give(sim, p, ctx) { p.maxHp = Math.min(64, p.maxHp + 4); sim.heal(p, p.maxHp); ctx.banner(); } });
@@ -3357,6 +3404,7 @@ defineItem({
 defineItem({
   id: 'potion', name: 'RED POTION', sprite: 'potion', monk: { name: 'SPIRIT TEA' }, slot: 'b', order: 7,
   owned: (p) => p.potions > 0,
+  full: (p) => p.potions >= 2, // shops won't sell you one you can't carry
   give(sim, p, ctx) { p.potions = Math.min(2, p.potions + 1); p.items.potion = true; ctx.banner(); },
   use(sim, p) {
     if (p.potions <= 0) return sim.hint(p, 'NO POTIONS.');
@@ -3364,7 +3412,7 @@ defineItem({
     p.potions--; sim.heal(p, p.maxHp); sim.sfx('heal', p.lvl); sim.ev({ t: 'flash', pid: p.id, c: '#f060b0' });
   },
 });
-defineItem({ id: 'potion2', name: 'BLUE POTION', sprite: 'potion', give(sim, p, ctx) { p.potions = 2; p.items.potion = true; ctx.banner('BLUE POTION (2 DOSES)'); } });
+defineItem({ id: 'potion2', name: 'BLUE POTION', sprite: 'potion', full: (p) => p.potions >= 2, give(sim, p, ctx) { p.potions = 2; p.items.potion = true; ctx.banner('BLUE POTION (2 DOSES)'); } });
 
 })();
 // ---- src/content/items/raft.js ----
@@ -3821,6 +3869,14 @@ function genDungeon(W, d, rnd) {
     const o = nb[0]; o.parent = cur; o.depth = cur.depth + 1; cur.children.push(o); inTree.add(o.id); order.push(o); stack.push(o);
   }
   L.rooms = rooms; L.startRoom = start;
+  // ---- optional hand-built opening (def.intro names a gimmick with an intro): the entrance and the one room after it,
+  // which holds a key for a locked door onward. Only when the shape makes that a straight corridor (no way around the lock).
+  let intro = null; const ig = def.intro && Content.gimmicks[def.intro];
+  if (ig && ig.intro) {
+    const nbs = (r) => [[1, 0], [-1, 0], [0, 1], [0, -1]].map(([dx, dy]) => normal(r.rx + dx, r.ry + dy)).filter(Boolean);
+    const r2 = start.children.length === 1 ? start.children[0] : null, r3 = r2 && r2.children.length === 1 ? r2.children[0] : null;
+    if (r3 && order.length > 4 && nbs(start).length === 1 && nbs(r2).length === 2) { intro = { g: ig, r2, r3 }; r2.intro = true; }
+  }
   for (const r of Object.values(rooms)) for (let y = r.ry * DSY + 1; y < r.ry * DSY + DSY; y++) for (let x = r.rx * DSX + 1; x < r.rx * DSX + DSX; x++) L.set(x, y, TL.DFLOOR);
   const doorPos = (a, b) => a.ry === b.ry ? [Math.max(a.rx, b.rx) * DSX, a.ry * DSY + 4] : [a.rx * DSX + 6, Math.max(a.ry, b.ry) * DSY];
   const doors = [];
@@ -3839,16 +3895,17 @@ function genDungeon(W, d, rnd) {
   const itemRoom = leaves[0] || sorted[1]; if (def.item && itemRoom) itemRoom.item = def.item;
   const locked = new Set([boss.id]);
   const lockN = Math.min(1 + Math.floor(d / 2), 5);
-  const lockCand = rnd.shuffle(order.filter(r => r.depth >= 2 && r !== boss && r !== itemRoom));
+  const lockCand = rnd.shuffle(order.filter(r => r.depth >= 2 && r !== boss && r !== itemRoom && !(intro && (r === intro.r2 || r === intro.r3))));
   for (let i = 0; i < lockN - 1 && i < lockCand.length; i++) locked.add(lockCand[i].id);
-  if (itemRoom && rnd() < 0.6) locked.add(itemRoom.id);
+  if (itemRoom && rnd() < 0.6 && !(intro && itemRoom === intro.r3)) locked.add(itemRoom.id);
   const reach = new Set(); { const st = [start]; while (st.length) { const r = st.pop(); if (reach.has(r.id)) continue; reach.add(r.id); for (const oid in r.links) { const o = rooms[oid]; if (locked.has(o.id) && o.parent === r) continue; if (locked.has(r.id) && r.parent === o) continue; st.push(o); } } }
   let lockList = [...locked].filter(id => !reach.has(id));
-  const keySpots = rnd.shuffle(order.filter(r => reach.has(r.id) && r !== start && !r.item && !r.boss));
+  const keySpots = rnd.shuffle(order.filter(r => reach.has(r.id) && r !== start && !r.item && !r.boss && !r.intro));
   while (lockList.length > keySpots.length) { const drop = lockList.find(id => id !== boss.id) || lockList[0]; lockList = lockList.filter(id => id !== drop); }
   for (let i = 0; i < lockList.length; i++) keySpots[i].key = true;
   for (const id of lockList) { const r = rooms[id]; if (r.parent) setDoor(r.parent, r, TL.LOCKED, true); }
-  const mc = rnd.shuffle(order.filter(r => r !== start && !r.boss && !r.item));
+  if (intro) setDoor(intro.r2, intro.r3, TL.LOCKED, true); // its key waits in the intro room itself, so the usual key rules still hold beyond it
+  const mc = rnd.shuffle(order.filter(r => r !== start && !r.boss && !r.item && !r.intro));
   if (mc[0]) mc[0].map = true; if (mc[1]) mc[1].compass = true;
   // ---- hidden rooms: joined to one neighbor through a secret wall; each holds a heart piece and a lore tablet ----
   const secretT = TL[def.secret || 'BRICK_BOMB'] != null ? TL[def.secret || 'BRICK_BOMB'] : TL.BRICK_BOMB;
@@ -3867,7 +3924,10 @@ function genDungeon(W, d, rnd) {
   const pool = enemiesFor('dungeons', d);
   for (const r of order) {
     const ix = r.rx * DSX, iy = r.ry * DSY;
-    if (r === start) { L.set(ix + 6, iy + DSY, TL.DEXIT); continue; }
+    const sign = (x, y, text) => { L.signText = L.signText || {}; L.signText[L.idx(ix + x, iy + y)] = text; };
+    const ictx = Object.assign({}, gctx, { ix, iy, set: (x, y, t) => L.set(ix + x, iy + y, typeof t === 'string' ? TL[t] : t), prop: (x, y, pr) => { L.props[L.idx(ix + x, iy + y)] = pr; }, sign });
+    if (r === start) { if (intro) intro.g.intro.start(L, r, ictx); L.set(ix + 6, iy + DSY, TL.DEXIT); continue; }
+    if (r.intro) { intro.g.intro.room(L, r, ictx); continue; }
     if (r.boss) { r.enemies = def.bossParty ? def.bossParty.slice() : [r.boss]; if (d >= 4 && !def.bossParty && pool.length) r.enemies.push(rnd.pick(pool)); r.shutter = true; continue; }
     const lane = (x, y) => x === 6 || y === 4; // keep the cross through each room's doors clear
     const rc = Object.assign({}, gctx, { ix, iy, lane, set: (x, y, t) => L.set(ix + x, iy + y, typeof t === 'string' ? TL[t] : t), prop: (x, y, pr) => { L.props[L.idx(ix + x, iy + y)] = pr; } });
@@ -3931,6 +3991,9 @@ function migrateSave(s) {
   return s;
 }
 const REVIVE_TIME = 1.5, REVIVE_R2 = 2.6 * 2.6; // seconds to help a teammate up, and how close you must stand
+const RESPAWN_WAIT = 30; // seconds a downed hero waits before they may give up and respawn at the start on their own
+const BUY_COOLDOWN = 0.8; // seconds between shop purchases for one player
+const HAZARD_TICK = 0.5, ICE_KB = 1.5; // how often lava/spikes/vents burn a grounded enemy; how much harder hits shove enemies standing on ice
 const SWORD_DMG = [1, 1, 2, 3, 4];             // damage per sword level (0 = no sword, punches still do 1)
 // Enemy health multiplier by how many heroes are in the room (1, 2, 3, 4+). Adjusts live as people come and go.
 const PARTY_HP = [1, 1, 1.5, 2, 2.5];
@@ -3992,7 +4055,7 @@ class Sim {
   onAction(id, a) {
     const p = this.players[id]; if (!p) return;
     const L = this.W.levels[p.lvl];
-    if (!p.alive) { if (a.t === 'respawnreq') { } return; }
+    if (!p.alive) { if (a.t === 'respawn') this.tryRespawn(p); return; }
     switch (a.t) {
       case 'atk': this.playerAttack(p, a); break;
       case 'use': this.useItem(p, a.item, a); break;
@@ -4136,6 +4199,21 @@ class Sim {
       if (this.over > 3.5) { this.over = 0; this.respawnAll(); }
     } else this.over = 0;
   }
+  // a downed hero who has waited RESPAWN_WAIT seconds can get up at the start: the dungeon's entrance if they fell in
+  // a dungeon, otherwise where the adventure began (same places a party wipe sends everyone)
+  tryRespawn(p) {
+    if (p.alive || this.time - (p.downAt || 0) < RESPAWN_WAIT) return;
+    const L = this.W.levels[p.lvl]; const target = L.kind === 'dungeon' ? L : this.W.levels.ow;
+    // the price of getting up alone: half your gems stay behind in a bag where you fell. Only you can pick it up,
+    // and if you go down and respawn alone again before getting it back, that bag is lost.
+    const lost = Math.floor(p.gems / 2);
+    for (const e of this.ents) if (e.item === 'gembag' && e.owner === p.id) e.dead = true;
+    if (lost > 0) { p.gems -= lost; this.spawn({ k: 'pick', lvl: p.lvl, x: p.x, y: p.y, item: 'gembag', amount: lost, owner: p.id, perm: true, spr: 'gembag', sc: 0.6, z: 0.05 }); }
+    p.alive = true; p.hp = Math.min(p.maxHp, 12); p.inv = 2; p.revive = 0; p.reviver = null;
+    this.teleport(p, target.id, target.spawn.x, target.spawn.y, target.spawn.a);
+    this.msg(p.name + ' GOT BACK UP AT THE ' + (target.kind === 'dungeon' ? 'DUNGEON ENTRANCE.' : 'START.'));
+    if (lost > 0) this.ev({ t: 'dialog', pid: p.id, text: 'YOU LEFT ' + lost + ' GEMS IN A BAG WHERE YOU FELL. GO BACK FOR THEM BEFORE YOU FALL AGAIN.' });
+  }
   respawnAll() {
     if (this.mode === 'rogue') { this.ev({ t: 'runover' }); return; }
     for (const p of Object.values(this.players)) {
@@ -4164,19 +4242,20 @@ class Sim {
     const b = roomBounds(L, room);
     const rnd = mulberry32(hashStr(key) + Math.floor(this.time * 1000));
     const tierMul = L.kind === 'dungeon' ? 1 + (Math.min(10, L.dnum) - 1) * 0.25 : 1 + room.tier * 0.4;
-    for (const type of room.enemies) {
-      const def = enemyDef(type); if (!def) continue;
+    room.enemies.forEach((type, ei) => {
+      const def = enemyDef(type); if (!def) return;
       let x, y, tries = 0;
-      do {
+      const at = room.at && room.at[ei]; // a hand-built room can pin where each enemy appears
+      if (at) { x = room.rx * DSX + at[0]; y = room.ry * DSY + at[1]; } else do {
         x = rnd.range(b.x0, b.x1 - 1) + 0.5; y = rnd.range(b.y0, b.y1 - 1) + 0.5; tries++;
         if (def.boss && L.kind === 'dungeon') { x = room.rx * DSX + 6.5; y = room.ry * DSY + 2.5; break; }
-      } while (tries < 40 && (L.solidAt(x, y) || TINFO[L.get(Math.floor(x), Math.floor(y))].hurt || dist2(x, y, p.x, p.y) < 9));
+      } while (tries < 40 && (L.solidAt(x, y) || TINFO[L.get(Math.floor(x), Math.floor(y))].hurt || TINFO[L.get(Math.floor(x), Math.floor(y))].pit || dist2(x, y, p.x, p.y) < 9));
       let hp = Math.ceil(def.hp * (def.boss ? 1 + (L.dnum || 1) * 0.35 : tierMul));
       if (def.fixedHp) hp = def.hp;
       const e = this.spawn({ k: 'en', type, lvl: L.id, x, y, hp, maxHp: hp, f: rnd() * TAU, b, g: key, st: 0, tm: rnd() * 2, stun: 0, hurt: 0, spawnFx: 0.5, dmgMul: L.kind === 'dungeon' ? Math.ceil(Math.min(9, L.dnum) / 3) : 1 + Math.floor(room.tier / 2) });
       if (!def.boss) { const ch = L.kind === 'dungeon' ? 0.05 + Math.min(9, L.dnum) * 0.015 : 0.06 + room.tier * 0.03; if (rnd() < ch) this.makeElite(e, rnd); }
       g.ents.push(e);
-    }
+    });
     for (const s of room.dormant || []) { // statues that wake up when a hero walks close (gimmicks/statues.js)
       const e = this.spawn({ k: 'en', type: s.type, lvl: L.id, x: s.x, y: s.y, hp: Math.ceil(enemyDef(s.type).hp * tierMul), f: Math.PI / 2, b, g: key, st: 0, tm: 0.5, stun: 0, hurt: 0, spawnFx: 0, dmgMul: L.kind === 'dungeon' ? Math.ceil(Math.min(9, L.dnum) / 3) : 1, dormant: true });
       e.maxHp = e.hp; g.ents.push(e);
@@ -4188,6 +4267,9 @@ class Sim {
     // item on pedestal (visible immediately)
     if (room.item && !this.team.taken[key + ':item']) {
       if (!this.ents.find(e => e.tk === key + ':item')) this.spawn({ k: 'pick', lvl: L.id, x: room.rx * DSX + 6.5, y: room.ry * DSY + 3.5, item: room.item, tk: key + ':item', perm: true, spr: itemSprite(room.item), sc: 0.6, z: 0.35, team: true });
+    }
+    if (room.looseKey && !this.team.taken[key + ':lkey'] && !this.ents.find(e => e.tk === key + ':lkey')) { // a key waiting somewhere awkward (gimmick intro rooms)
+      this.spawn({ k: 'pick', lvl: L.id, x: room.rx * DSX + room.looseKey[0], y: room.ry * DSY + room.looseKey[1], item: 'key', tk: key + ':lkey', perm: true, spr: itemSprite('key'), sc: 0.55, z: 0.1, team: true });
     }
     if (cleared) this.roomRewards(L, room, key);
   }
@@ -4251,14 +4333,17 @@ class Sim {
     for (const p of Object.values(this.players)) { if (!p.alive || p.lvl !== e.lvl) continue; const d = dist2(p.x, p.y, e.x, e.y); if (d < bd) { bd = d; best = p; } }
     return best;
   }
-  moveEnt(e, dx, dy, def) {
+  // push: knockback, which can shove grounded enemies onto lava, spikes and pits (walking never does)
+  moveEnt(e, dx, dy, def, push) {
     const L = this.W.levels[e.lvl]; const r = def ? def.r * 0.8 : 0.25;
+    const onHazard = (() => { const ti = TINFO[L.get(Math.floor(e.x), Math.floor(e.y))]; return !!(ti.hurt || ti.pit); })();
+    const avoid = !push && !onHazard; // an enemy already standing in lava may walk out of it
     const blocked = (x, y) => {
       if (def && def.phase) return x < 1 || y < 1 || x > L.w - 1 || y > L.h - 1;
       if (e.b && (x < e.b.x0 + 0.2 || y < e.b.y0 + 0.2 || x > e.b.x1 - 0.2 || y > e.b.y1 - 0.2)) return true;
       for (const [ox, oy] of [[-r, -r], [r, -r], [-r, r], [r, r]]) {
         const tx = Math.floor(x + ox), ty = Math.floor(y + oy); const t = L.get(tx, ty); const ti = TINFO[t];
-        if (def && def.fly) { if (ti.solid && !ti.low) return true; } else { if (ti.solid || ti.hurt || ti.pit) return true; }
+        if (def && def.fly) { if (ti.solid && !ti.low) return true; } else { if (ti.solid || (avoid && (ti.hurt || ti.pit))) return true; }
         const pr = L.props[ty * L.w + tx]; if (pr && PROP_INFO[pr].solid) return true;
       }
       return false;
@@ -4285,9 +4370,10 @@ class Sim {
       return;
     }
     if (e.spawnFx > 0) { e.spawnFx -= dt; return; }
+    this.groundHazards(e, def, dt); if (e.dead) return;
     if (e.hurt > 0) e.hurt -= dt;
+    if (e.kb) { this.moveEnt(e, e.kb[0] * dt, e.kb[1] * dt, def, true); e.kbT -= dt; if (e.kbT <= 0) e.kb = null; } // a stunned enemy still gets shoved
     if (e.stun > 0) { e.stun -= dt; return; }
-    if (e.kb) { this.moveEnt(e, e.kb[0] * dt, e.kb[1] * dt, def); e.kbT -= dt; if (e.kbT <= 0) e.kb = null; }
     const p = this.nearestPlayer(e, 30);
     e.tm -= dt;
     const ctx = { p, spd: def.spd * (e.rage ? 1.5 : 1) * (e.spdMul || 1), def };
@@ -4302,6 +4388,24 @@ class Sim {
       const rr = this.enemyRadius(e) + 0.28; if (dist2(pl.x, pl.y, e.x, e.y) < rr * rr) this.hurtPlayer(pl, def.dmg * (def.boss ? 1 : e.dmgMul), e);
     }
   }
+  // Tiles hurt grounded enemies too: pits swallow them, lava, spikes and blowing vents burn them.
+  // Flyers, ghosts and bosses don't care; fire creatures shrug off lava and vents.
+  groundHazards(e, def, dt) {
+    if (def.fly || def.phase || def.boss || e.dormant) return;
+    const L = this.W.levels[e.lvl]; const ti = TINFO[L.get(Math.floor(e.x), Math.floor(e.y))];
+    if (ti.pit) { this.enemyFalls(e); return; }
+    const burn = (ti.hurt && !(def.hot && ti.lava)) || (ti.vent && this.ventPhase() === 2 && !def.hot);
+    if (!burn) { e.hazT = 0; return; }
+    e.hazT = (e.hazT || 0) - dt; if (e.hazT > 0) return; e.hazT = HAZARD_TICK;
+    if (ti.lava || ti.vent) this.sfx('sizzle', e.lvl, e.x, e.y);
+    this.damageEnemy(e, 1, null, { ignoreIframes: true, pid: e.lastPid });
+  }
+  enemyFalls(e) { // gone, with no loot (it fell with it)
+    e.dead = true; const p = e.lastPid && this.players[e.lastPid]; if (p) p.kills++;
+    this.spawn({ k: 'fx', lvl: e.lvl, x: e.x, y: e.y, spr: 'puff', life: 0.35, sc: 0.6, z: -0.3 }); this.sfx('pitfall', e.lvl, e.x, e.y);
+  }
+  // Knockback speed for a hit. Grounded enemies on ice slide much further.
+  knockFor(e, def, speed) { const L = this.W.levels[e.lvl]; return !def.fly && TINFO[L.get(Math.floor(e.x), Math.floor(e.y))].slippery ? [speed * ICE_KB, 0.3] : [speed, null]; }
   wake(e) { e.dormant = false; e.spawnFx = 0.35; this.sfx('roar', e.lvl, e.x, e.y); this.puff(e, 1); }
   // ---- elites (content/elites.js) ----
   makeElite(e, rnd) {
@@ -4321,7 +4425,7 @@ class Sim {
     this.ev({ t: 'hurt', pid: p.id, kx, ky });
     if (p.hp <= 0) {
       if (p.potions > 0) { p.potions--; p.hp = p.maxHp; this.msg(p.name + "'S POTION SAVED THEM!"); this.sfx('heal', p.lvl); return; }
-      p.hp = 0; p.alive = false; p.revive = 0; p.reviver = null; this.clearBeam(p); this.ev({ t: 'down', pid: p.id }); this.msg(p.name + ' IS DOWN!' + (Object.keys(this.players).length > 1 ? ' GET CLOSE AND HOLD F TO HELP THEM UP.' : ''));
+      p.hp = 0; p.alive = false; p.downAt = this.time; p.revive = 0; p.reviver = null; this.clearBeam(p); this.ev({ t: 'down', pid: p.id }); this.msg(p.name + ' IS DOWN!' + (Object.keys(this.players).length > 1 ? ' GET CLOSE AND HOLD F TO HELP THEM UP.' : ''));
     }
   }
   clearBeam(p) { for (const e of this.ents) if (e.k === 'proj' && e.pid === p.id && Content.projectiles[e.type].beam) e.dead = true; }
@@ -4337,8 +4441,8 @@ class Sim {
     }
     if (opt.stunOnly && !def.boss) { e.stun = 3; this.sfx('clink', e.lvl, e.x, e.y); if (!def.boomerangKills) return true; }
     if (def.onDamage && def.onDamage(this, e, dmg, opt) === false) return true;
-    e.hp -= dmg; e.hurt = 0.35; this.sfx('hit', e.lvl, e.x, e.y);
-    if (src && !def.boss) { const a = Math.atan2(e.y - src.y, e.x - src.x); e.kb = [Math.cos(a) * 9, Math.sin(a) * 9]; e.kbT = 0.12; }
+    e.hp -= dmg; e.hurt = 0.35; this.sfx('hit', e.lvl, e.x, e.y); if (opt.pid) e.lastPid = opt.pid;
+    if (src && !def.boss) { const a = Math.atan2(e.y - src.y, e.x - src.x); const [v, t] = this.knockFor(e, def, 9); e.kb = [Math.cos(a) * v, Math.sin(a) * v]; e.kbT = t || 0.12; }
     if (e.hp <= 0) this.killEnemy(e, opt.pid);
     return true;
   }
@@ -4377,7 +4481,7 @@ class Sim {
         if (d > range + this.enemyRadius(e)) continue;
         const ang = Math.atan2(e.y - p.y, e.x - p.x); if (d > 0.5 && Math.abs(angDiff(p.a, ang)) > cone) continue;
         if (this.damageEnemy(e, dmg, p, { pid: p.id })) hitAny = true;
-        if (p.cls === 'monk' && a.kind === 'punch3' && !def.boss) { e.kb = [Math.cos(p.a) * 14, Math.sin(p.a) * 14]; e.kbT = 0.2; e.stun = 0.5; }
+        if (p.cls === 'monk' && a.kind === 'punch3' && !def.boss) { const [v, t] = this.knockFor(e, def, 14); e.kb = [Math.cos(p.a) * v, Math.sin(p.a) * v]; e.kbT = t || 0.2; e.stun = 0.5; }
       }
     }
     this.cutAt(L, p.x + Math.cos(p.a) * 0.75, p.y + Math.sin(p.a) * 0.75); this.cutAt(L, p.x + Math.cos(p.a) * 1.25, p.y + Math.sin(p.a) * 1.25);
@@ -4471,12 +4575,15 @@ class Sim {
   pickup(p, e) {
     const d = itemDef(e.item); if (!d) { e.dead = true; return; }
     if (d.canTake && !d.canTake(p)) return;
+    if (d.takeFrom) { if (d.takeFrom(this, p, e) !== false) e.dead = true; return; } // items that need the ground entity (like a dropped gem bag)
     if (e.k === 'shop') {
       const nag = (t, text) => { if (!e.warned || this.time - e.warned > 3) { e.warned = this.time; this.ev({ t, pid: p.id, text }); } };
       if (e.need && p.maxHp / 4 < e.need) return nag('dialog', 'MASTER USING IT AND YOU CAN HAVE THIS... COME BACK WITH ' + e.need + ' HEARTS.');
       if (!e.gift && p.gems < e.price) return nag('hint', 'YOU NEED ' + e.price + ' GEMS.');
       if (e.unique && p.cls === 'monk') return nag('dialog', 'YOUR HANDS ALREADY KNOW THE WAY.');
-      if (!e.gift) p.gems -= e.price;
+      if (!e.gift && d.full && d.full(p)) return nag('hint', 'YOU CAN\'T CARRY ANY MORE.');
+      if (!e.gift && this.time < (p.buyReady || 0)) return; // one purchase per BUY_COOLDOWN, so standing on the counter can't drain your gems
+      if (!e.gift) { p.gems -= e.price; p.buyReady = this.time + BUY_COOLDOWN; }
       this.giveItem(p, e.item, true);
       if (e.gift) { this.team.taken[e.tk] = true; if (e.choose) { this.team.taken[e.choose] = true; for (const o of this.ents) if (o.choose === e.choose) o.dead = true; } e.dead = true; }
       return;
@@ -4523,7 +4630,7 @@ class Sim {
     const p = this.players[pid]; if (!p) return null;
     const en = []; for (const e of this.ents) if (e.lvl === p.lvl) en.push(this.entView(e));
     const pl = []; for (const o of Object.values(this.players)) pl.push([o.id, o.lvl, Math.round(o.x * 100) / 100, Math.round(o.y * 100) / 100, Math.round(o.a * 100) / 100, o.color, o.armor, o.cls, o.alive ? 1 : 0, o.atk, o.name, Math.round(o.revive / REVIVE_TIME * 100) / 100, o.hp, o.maxHp, o.reviver || 0]);
-    const me = {}; for (const k of ['lvl', 'hp', 'maxHp', 'gems', 'bombs', 'maxBombs', 'arrows', 'sword', 'armor', 'items', 'potions', 'alive', 'cls', 'sel', 'color', 'name', 'dbg', 'god']) me[k] = p[k]; me.chill = p.chill > 0 ? 1 : 0;
+    const me = {}; for (const k of ['lvl', 'hp', 'maxHp', 'gems', 'bombs', 'maxBombs', 'arrows', 'sword', 'armor', 'items', 'potions', 'alive', 'cls', 'sel', 'color', 'name', 'dbg', 'god']) me[k] = p[k]; me.chill = p.chill > 0 ? 1 : 0; me.respawnIn = p.alive ? 0 : Math.max(0, Math.ceil(RESPAWN_WAIT - (this.time - (p.downAt || 0))));
     return { t: 's', paused: !!this.paused, pausedBy: this.pausedBy, me, pl, en, team: { keys: this.team.keys, maps: this.team.maps, comps: this.team.comps, shards: this.team.shards, done: this.team.done, relics: this.team.relics }, vp: this.ventPhase(), mv: this.modVer, over: this.over > 0 };
   }
   // ---- save ----
@@ -5045,7 +5152,7 @@ function drawMinimap(st, x0, y0, w, h) {
   }
   for (const p of st.players) {
     const pos = inCave ? owSpot(st.world, p) : p[1] === L.id ? { x: p[2], y: p[3], inside: false } : null; if (!pos) continue;
-    const c = p[0] === st.myId ? rgb(255, 255, 255) : c32(hexToRgb((PCOLORS.find(c => c.name === p[5]) || PCOLORS[0]).c));
+    let c = p[0] === st.myId ? rgb(255, 255, 255) : c32(hexToRgb((PCOLORS.find(c => c.name === p[5]) || PCOLORS[0]).c)); if (!p[8] && (Math.floor(R.time * 4) & 1)) c = rgb(255, 40, 40); // downed: blinks red
     const mx = x0 + (pos.x - sx) * sc, my = y0 + (pos.y - sy) * sc; if (mx < x0 || my < y0 || mx > x0 + w || my > y0 + h) continue;
     if (pos.inside && !(Math.floor(R.time * 3) & 1)) continue;
     rect(mx - 1, my - 1, 3, 3, c); if (p[0] === st.myId && !pos.inside) { rect(mx + Math.cos(p[4]) * 3, my + Math.sin(p[4]) * 3, 1, 1, rgb(255, 255, 0)); rect(mx + Math.cos(p[4]) * 4, my + Math.sin(p[4]) * 4, 1, 1, rgb(255, 255, 0)); }
@@ -5163,6 +5270,8 @@ function sfx(name, vol) {
     case 'vent_blow': noise(0.55, 0.3 * v, 1600); tone(190, 0.4, 'triangle', 0.09 * v, 60); break;
     case 'iceslide': noise(0.2, 0.05 * v, 5200); tone(2400 + Math.random() * 400, 0.12, 'sine', 0.015 * v, 1900); break;
     case 'hearthgate': seq([262, 330, 392, 523, 659, 784, 1047], 0.12, 'triangle', 0.16 * v); tone(65, 1.6, 'sawtooth', 0.14 * v, 130); break;
+    case 'pitfall': tone(900, 0.7, 'sine', 0.13 * v, 70); noise(0.15, 0.1 * v, 500, AU.ctx.currentTime + 0.65); break; // an enemy drops into a pit
+    case 'sizzle': noise(0.25, 0.14 * v, 7000); tone(1100, 0.12, 'sawtooth', 0.03 * v, 600); break; // an enemy burning on lava or a vent
     case 'whisper': noise(0.9, 0.06 * v, 900); tone(220, 0.8, 'sine', 0.03 * v, 180); tone(330, 0.7, 'sine', 0.02 * v, 300); break;
   }
 }
@@ -5245,7 +5354,7 @@ function readInput(dt) {
   o.cycle = (p.KeyQ ? -1 : 0) + (p.KeyR ? 1 : 0) + IN.wheel; IN.wheel = 0;
   o.interact = k.KeyF; o.interactP = p.KeyF;
   o.map = p.KeyM || p.Tab; o.pause = p.Escape || p.KeyP; o.dash = p.ShiftLeft || p.ShiftRight;
-  o.confirm = p.Enter || p.Space || p.KeyF || p.Mouse0;
+  o.confirm = p.Enter || p.Space || p.KeyF || p.Mouse0; o.enterP = !!p.Enter;
   for (let i = 1; i <= 7; i++) if (p['Digit' + i]) o.slot = i;
   // gamepad
   const pads = navigator.getGamepads ? navigator.getGamepads() : []; const gp = pads && Array.from(pads).find(x => x && x.connected);
@@ -5549,7 +5658,7 @@ function updateLocal(dt, inp) {
     if (inp.confirm || inp.atkP || inp.interactP) { if (d.shown < total) d.shown = total; else Lc.dialog = null; }
     return;
   }
-  if (!me.alive) { Lc.downT += dt; Lc.swing = null; Lc.charge = 0; Lc.pitch = lerp(Lc.pitch, 25, dt * 3); Lc.a += inp.turn * 0.3; return; }
+  if (!me.alive) { if (me.respawnIn === 0 && inp.enterP && Lc.downT > 1) { sendAction({ t: 'respawn' }); Lc.downT = 0; } /* never automatic: you can keep waiting for a friend */ Lc.downT += dt; Lc.swing = null; Lc.charge = 0; Lc.pitch = lerp(Lc.pitch, 25, dt * 3); Lc.a += inp.turn * 0.3; return; }
   // selected item validity
   const owned = ownedBItems(me); if (!owned.includes(Lc.sel)) Lc.sel = owned.includes(me.sel) ? me.sel : owned[0] || null;
   if (inp.cycle && owned.length) { let i = owned.indexOf(Lc.sel); i = (i + (inp.cycle > 0 ? 1 : -1) + owned.length) % owned.length; Lc.sel = owned[i]; sfx('menu'); sendAction({ t: 'sel', item: Lc.sel }); }
@@ -5735,7 +5844,8 @@ function draw(dt) {
   if (me && me.cls === 'monk' && me.armor > 0 && !down) { const ac = me.armor === 2 ? rgb(255, 248, 200) : rgb(100, 190, 255); for (let i = 0; i < 18; i++) { const side = Math.random() < 0.5; const x = side ? (Math.random() < 0.5 ? Math.random() * 10 : R.W - Math.random() * 10) : Math.random() * R.W; const y = side ? Math.random() * R.H : R.H - Math.random() * 8; px(x, y, ac); } }
   if (Lc.dashT > 0) rectA(0, 0, R.W, R.H, rgb(200, 240, 255), 0.15);
   if (me && me.chill && !down) { rectA(0, 0, R.W, R.H, rgb(150, 210, 255), 0.14); for (let i = 0; i < 40; i++) { const e = Math.random() < 0.5; px(e ? (Math.random() < 0.5 ? Math.random() * 14 : R.W - Math.random() * 14) : Math.random() * R.W, e ? Math.random() * R.H : (Math.random() < 0.5 ? Math.random() * 10 : R.H - Math.random() * 10), rgb(235, 250, 255)); } }
-  if (down) { rectA(0, 0, R.W, R.H, rgb(40, 40, 60), 0.5); const multi = snap.pl.length > 1; textC(multi ? 'YOU ARE DOWN!' : 'YOU HAVE FALLEN...', R.W / 2, R.H / 2 - 20, rgb(255, 80, 80)); textC(multi ? 'A TEAMMATE CAN HOLD F NEXT TO YOU TO HELP YOU UP' : 'RISING AGAIN...', R.W / 2, R.H / 2 - 8, rgb(230, 230, 230)); const myP = snap.pl.find(p => p[0] === G.myId); if (myP && myP[11] > 0) { rect(R.W / 2 - 40, R.H / 2 + 6, 80, 5, rgb(30, 30, 30)); rect(R.W / 2 - 40, R.H / 2 + 6, 80 * clamp(myP[11], 0, 1), 5, rgb(80, 255, 120)); } }
+  if (down) { rectA(0, 0, R.W, R.H, rgb(40, 40, 60), 0.5); const multi = snap.pl.length > 1; textC(multi ? 'YOU ARE DOWN!' : 'YOU HAVE FALLEN...', R.W / 2, R.H / 2 - 20, rgb(255, 80, 80)); textC(multi ? 'A TEAMMATE CAN HOLD F NEXT TO YOU TO HELP YOU UP' : 'RISING AGAIN...', R.W / 2, R.H / 2 - 8, rgb(230, 230, 230)); if (multi) { const rl = me.respawnIn; textC(rl > 0 ? 'OR RESPAWN AT THE START IN ' + rl : 'PRESS ENTER TO RESPAWN AT THE START', R.W / 2, R.H / 2 + 16, rl > 0 ? rgb(170, 170, 190) : rgb(255, 220, 120)); textC('(GETTING UP ALONE DROPS HALF YOUR GEMS)', R.W / 2, R.H / 2 + 26, rgb(170, 150, 150)); } const myP = snap.pl.find(p => p[0] === G.myId); if (myP && myP[11] > 0) { rect(R.W / 2 - 40, R.H / 2 + 6, 80, 5, rgb(30, 30, 30)); rect(R.W / 2 - 40, R.H / 2 + 6, 80 * clamp(myP[11], 0, 1), 5, rgb(80, 255, 120)); } }
+  if (snap && me) drawDownMarkers(cam, L, snap);
   drawHUD(st);
   if (Lc.prompt && !Lc.reviveTarget && !Lc.dialog && me && me.alive && G.state === 'play') { const label = Lc.prompt.label; const y = R.H / 2 + 22; const w = label.length * 6 + 12; rectA(R.W / 2 - w / 2, y - 4, w, 15, rgb(0, 0, 0), 0.6); frame(R.W / 2 - w / 2, y - 4, w, 15, rgb(255, 220, 120)); textC(label, R.W / 2, y, rgb(255, 230, 150)); }
   if (Lc.reviveTarget && me && me.alive) { const t = Lc.reviveTarget; const c = c32(hexToRgb((PCOLORS.find(c => c.name === t[5]) || PCOLORS[0]).c)); const y = R.H / 2 + 22; const label = 'HOLD F: HELP UP ' + t[10]; rectA(R.W / 2 - label.length * 3 - 6, y - 4, label.length * 6 + 12, 22, rgb(0, 0, 0), 0.6); textC(label, R.W / 2, y, c); rect(R.W / 2 - 40, y + 10, 80, 4, rgb(40, 40, 40)); rect(R.W / 2 - 40, y + 10, 80 * clamp(t[11], 0, 1), 4, rgb(90, 255, 130)); }
@@ -5752,6 +5862,35 @@ function draw(dt) {
   if (NET.role === 'client' && snap && snap.paused) { rectA(0, R.H / 2 - 18, R.W, 30, rgb(0, 0, 0), 0.7); textC('PAUSED BY ' + (snap.pausedBy || 'HOST'), R.W / 2, R.H / 2 - 12, rgb(255, 220, 120)); textC('WAITING FOR THE HOST TO RESUME', R.W / 2, R.H / 2, rgb(220, 220, 230)); }
   if (G.showFps) text(Math.round(G.fps) + ' FPS', R.W - 50, R.H - 20, rgb(255, 255, 0));
   present();
+}
+// Downed teammates show through walls: a marker over them (or, if they fell in a cave or dungeon, over its entrance;
+// if you're inside somewhere and they aren't, over your way out). Off-screen ones get an arrow at the screen edge.
+function drawDownMarkers(cam, L, snap) {
+  const fov = 0.66 * (R.W / R.H) / 1.78;
+  for (const p of snap.pl) {
+    if (p[0] === G.myId || p[8]) continue;
+    let tx, ty, label;
+    if (p[1] === L.id) { tx = p[2]; ty = p[3]; label = p[10] + ' IS DOWN'; }
+    else {
+      const their = G.world.levels[p[1]];
+      if (L.kind === 'ow' && their && their.exit && their.exit.lvl === 'ow') { tx = their.exit.x; ty = their.exit.y - 1.1; label = p[10] + ' IS DOWN INSIDE'; }
+      else if (L.kind !== 'ow' && L.exit) { tx = L.spawn.x; ty = L.spawn.y + 0.8; label = 'EXIT: ' + p[10] + ' IS DOWN'; }
+      else continue;
+    }
+    const col = c32(hexToRgb((PCOLORS.find(c => c.name === p[5]) || PCOLORS[0]).c)); const pulse = 0.6 + 0.4 * Math.sin(R.time * 6);
+    const dist = Math.round(Math.hypot(tx - cam.x, ty - cam.y)); const rel = angDiff(cam.a, Math.atan2(ty - cam.y, tx - cam.x));
+    const sp = Math.abs(rel) < Math.atan(fov) * 0.98 ? projectPt(cam, tx, ty) : null;
+    if (sp) {
+      const x = Math.round(sp.x), y = Math.round(sp.y - 26 - Math.sin(R.time * 4) * 2);
+      for (let r = 6; r >= 0; r--) for (let j = -r; j <= r; j++) { const w = r - Math.abs(j); rect(x - w, y + j, 2 * w + 1, 1, r > 4 ? rgb(20, 18, 28) : (r > 2 ? col : rgb(255, 255, 255))); }
+      rect(x - 1, y - 3, 2, 4, rgb(220, 40, 40)); rect(x - 1, y + 2, 2, 1, rgb(220, 40, 40));
+      textC(label, x, y - 16, Math.floor(R.time * 3) & 1 ? col : rgb(255, 255, 255)); textC(dist + 'M', x, y + 9, rgb(230, 230, 230));
+    } else {
+      const left = rel < 0; const x = left ? 4 : R.W - 10, y = Math.round(R.H / 2 - 30);
+      for (let i = 0; i < 6; i++) rect(left ? x + i : x + 5 - i, y - i, 1, 2 * i + 1, col); // arrow
+      text(p[10] + ' ' + dist + 'M', left ? x + 9 : x - 4 - (p[10].length + String(dist).length + 2) * 6, y - 3, pulse > 0.8 ? rgb(255, 255, 255) : col);
+    }
+  }
 }
 function projectPt(cam, x, y) {
   const dirX = Math.cos(cam.a), dirY = Math.sin(cam.a); const fov = 0.66 * (R.W / R.H) / 1.78; const plX = -dirY * fov, plY = dirX * fov;

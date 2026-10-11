@@ -75,6 +75,8 @@ function sfx(name, vol) {
     case 'vent_blow': noise(0.55, 0.3 * v, 1600); tone(190, 0.4, 'triangle', 0.09 * v, 60); break;
     case 'iceslide': noise(0.2, 0.05 * v, 5200); tone(2400 + Math.random() * 400, 0.12, 'sine', 0.015 * v, 1900); break;
     case 'hearthgate': seq([262, 330, 392, 523, 659, 784, 1047], 0.12, 'triangle', 0.16 * v); tone(65, 1.6, 'sawtooth', 0.14 * v, 130); break;
+    case 'pitfall': tone(900, 0.7, 'sine', 0.13 * v, 70); noise(0.15, 0.1 * v, 500, AU.ctx.currentTime + 0.65); break; // an enemy drops into a pit
+    case 'sizzle': noise(0.25, 0.14 * v, 7000); tone(1100, 0.12, 'sawtooth', 0.03 * v, 600); break; // an enemy burning on lava or a vent
     case 'whisper': noise(0.9, 0.06 * v, 900); tone(220, 0.8, 'sine', 0.03 * v, 180); tone(330, 0.7, 'sine', 0.02 * v, 300); break;
   }
 }

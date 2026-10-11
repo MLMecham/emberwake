@@ -104,7 +104,7 @@ function updateLocal(dt, inp) {
     if (inp.confirm || inp.atkP || inp.interactP) { if (d.shown < total) d.shown = total; else Lc.dialog = null; }
     return;
   }
-  if (!me.alive) { Lc.downT += dt; Lc.swing = null; Lc.charge = 0; Lc.pitch = lerp(Lc.pitch, 25, dt * 3); Lc.a += inp.turn * 0.3; return; }
+  if (!me.alive) { if (me.respawnIn === 0 && inp.enterP && Lc.downT > 1) { sendAction({ t: 'respawn' }); Lc.downT = 0; } /* never automatic: you can keep waiting for a friend */ Lc.downT += dt; Lc.swing = null; Lc.charge = 0; Lc.pitch = lerp(Lc.pitch, 25, dt * 3); Lc.a += inp.turn * 0.3; return; }
   // selected item validity
   const owned = ownedBItems(me); if (!owned.includes(Lc.sel)) Lc.sel = owned.includes(me.sel) ? me.sel : owned[0] || null;
   if (inp.cycle && owned.length) { let i = owned.indexOf(Lc.sel); i = (i + (inp.cycle > 0 ? 1 : -1) + owned.length) % owned.length; Lc.sel = owned[i]; sfx('menu'); sendAction({ t: 'sel', item: Lc.sel }); }
@@ -290,7 +290,8 @@ function draw(dt) {
   if (me && me.cls === 'monk' && me.armor > 0 && !down) { const ac = me.armor === 2 ? rgb(255, 248, 200) : rgb(100, 190, 255); for (let i = 0; i < 18; i++) { const side = Math.random() < 0.5; const x = side ? (Math.random() < 0.5 ? Math.random() * 10 : R.W - Math.random() * 10) : Math.random() * R.W; const y = side ? Math.random() * R.H : R.H - Math.random() * 8; px(x, y, ac); } }
   if (Lc.dashT > 0) rectA(0, 0, R.W, R.H, rgb(200, 240, 255), 0.15);
   if (me && me.chill && !down) { rectA(0, 0, R.W, R.H, rgb(150, 210, 255), 0.14); for (let i = 0; i < 40; i++) { const e = Math.random() < 0.5; px(e ? (Math.random() < 0.5 ? Math.random() * 14 : R.W - Math.random() * 14) : Math.random() * R.W, e ? Math.random() * R.H : (Math.random() < 0.5 ? Math.random() * 10 : R.H - Math.random() * 10), rgb(235, 250, 255)); } }
-  if (down) { rectA(0, 0, R.W, R.H, rgb(40, 40, 60), 0.5); const multi = snap.pl.length > 1; textC(multi ? 'YOU ARE DOWN!' : 'YOU HAVE FALLEN...', R.W / 2, R.H / 2 - 20, rgb(255, 80, 80)); textC(multi ? 'A TEAMMATE CAN HOLD F NEXT TO YOU TO HELP YOU UP' : 'RISING AGAIN...', R.W / 2, R.H / 2 - 8, rgb(230, 230, 230)); const myP = snap.pl.find(p => p[0] === G.myId); if (myP && myP[11] > 0) { rect(R.W / 2 - 40, R.H / 2 + 6, 80, 5, rgb(30, 30, 30)); rect(R.W / 2 - 40, R.H / 2 + 6, 80 * clamp(myP[11], 0, 1), 5, rgb(80, 255, 120)); } }
+  if (down) { rectA(0, 0, R.W, R.H, rgb(40, 40, 60), 0.5); const multi = snap.pl.length > 1; textC(multi ? 'YOU ARE DOWN!' : 'YOU HAVE FALLEN...', R.W / 2, R.H / 2 - 20, rgb(255, 80, 80)); textC(multi ? 'A TEAMMATE CAN HOLD F NEXT TO YOU TO HELP YOU UP' : 'RISING AGAIN...', R.W / 2, R.H / 2 - 8, rgb(230, 230, 230)); if (multi) { const rl = me.respawnIn; textC(rl > 0 ? 'OR RESPAWN AT THE START IN ' + rl : 'PRESS ENTER TO RESPAWN AT THE START', R.W / 2, R.H / 2 + 16, rl > 0 ? rgb(170, 170, 190) : rgb(255, 220, 120)); textC('(GETTING UP ALONE DROPS HALF YOUR GEMS)', R.W / 2, R.H / 2 + 26, rgb(170, 150, 150)); } const myP = snap.pl.find(p => p[0] === G.myId); if (myP && myP[11] > 0) { rect(R.W / 2 - 40, R.H / 2 + 6, 80, 5, rgb(30, 30, 30)); rect(R.W / 2 - 40, R.H / 2 + 6, 80 * clamp(myP[11], 0, 1), 5, rgb(80, 255, 120)); } }
+  if (snap && me) drawDownMarkers(cam, L, snap);
   drawHUD(st);
   if (Lc.prompt && !Lc.reviveTarget && !Lc.dialog && me && me.alive && G.state === 'play') { const label = Lc.prompt.label; const y = R.H / 2 + 22; const w = label.length * 6 + 12; rectA(R.W / 2 - w / 2, y - 4, w, 15, rgb(0, 0, 0), 0.6); frame(R.W / 2 - w / 2, y - 4, w, 15, rgb(255, 220, 120)); textC(label, R.W / 2, y, rgb(255, 230, 150)); }
   if (Lc.reviveTarget && me && me.alive) { const t = Lc.reviveTarget; const c = c32(hexToRgb((PCOLORS.find(c => c.name === t[5]) || PCOLORS[0]).c)); const y = R.H / 2 + 22; const label = 'HOLD F: HELP UP ' + t[10]; rectA(R.W / 2 - label.length * 3 - 6, y - 4, label.length * 6 + 12, 22, rgb(0, 0, 0), 0.6); textC(label, R.W / 2, y, c); rect(R.W / 2 - 40, y + 10, 80, 4, rgb(40, 40, 40)); rect(R.W / 2 - 40, y + 10, 80 * clamp(t[11], 0, 1), 4, rgb(90, 255, 130)); }
@@ -307,6 +308,35 @@ function draw(dt) {
   if (NET.role === 'client' && snap && snap.paused) { rectA(0, R.H / 2 - 18, R.W, 30, rgb(0, 0, 0), 0.7); textC('PAUSED BY ' + (snap.pausedBy || 'HOST'), R.W / 2, R.H / 2 - 12, rgb(255, 220, 120)); textC('WAITING FOR THE HOST TO RESUME', R.W / 2, R.H / 2, rgb(220, 220, 230)); }
   if (G.showFps) text(Math.round(G.fps) + ' FPS', R.W - 50, R.H - 20, rgb(255, 255, 0));
   present();
+}
+// Downed teammates show through walls: a marker over them (or, if they fell in a cave or dungeon, over its entrance;
+// if you're inside somewhere and they aren't, over your way out). Off-screen ones get an arrow at the screen edge.
+function drawDownMarkers(cam, L, snap) {
+  const fov = 0.66 * (R.W / R.H) / 1.78;
+  for (const p of snap.pl) {
+    if (p[0] === G.myId || p[8]) continue;
+    let tx, ty, label;
+    if (p[1] === L.id) { tx = p[2]; ty = p[3]; label = p[10] + ' IS DOWN'; }
+    else {
+      const their = G.world.levels[p[1]];
+      if (L.kind === 'ow' && their && their.exit && their.exit.lvl === 'ow') { tx = their.exit.x; ty = their.exit.y - 1.1; label = p[10] + ' IS DOWN INSIDE'; }
+      else if (L.kind !== 'ow' && L.exit) { tx = L.spawn.x; ty = L.spawn.y + 0.8; label = 'EXIT: ' + p[10] + ' IS DOWN'; }
+      else continue;
+    }
+    const col = c32(hexToRgb((PCOLORS.find(c => c.name === p[5]) || PCOLORS[0]).c)); const pulse = 0.6 + 0.4 * Math.sin(R.time * 6);
+    const dist = Math.round(Math.hypot(tx - cam.x, ty - cam.y)); const rel = angDiff(cam.a, Math.atan2(ty - cam.y, tx - cam.x));
+    const sp = Math.abs(rel) < Math.atan(fov) * 0.98 ? projectPt(cam, tx, ty) : null;
+    if (sp) {
+      const x = Math.round(sp.x), y = Math.round(sp.y - 26 - Math.sin(R.time * 4) * 2);
+      for (let r = 6; r >= 0; r--) for (let j = -r; j <= r; j++) { const w = r - Math.abs(j); rect(x - w, y + j, 2 * w + 1, 1, r > 4 ? rgb(20, 18, 28) : (r > 2 ? col : rgb(255, 255, 255))); }
+      rect(x - 1, y - 3, 2, 4, rgb(220, 40, 40)); rect(x - 1, y + 2, 2, 1, rgb(220, 40, 40));
+      textC(label, x, y - 16, Math.floor(R.time * 3) & 1 ? col : rgb(255, 255, 255)); textC(dist + 'M', x, y + 9, rgb(230, 230, 230));
+    } else {
+      const left = rel < 0; const x = left ? 4 : R.W - 10, y = Math.round(R.H / 2 - 30);
+      for (let i = 0; i < 6; i++) rect(left ? x + i : x + 5 - i, y - i, 1, 2 * i + 1, col); // arrow
+      text(p[10] + ' ' + dist + 'M', left ? x + 9 : x - 4 - (p[10].length + String(dist).length + 2) * 6, y - 3, pulse > 0.8 ? rgb(255, 255, 255) : col);
+    }
+  }
 }
 function projectPt(cam, x, y) {
   const dirX = Math.cos(cam.a), dirY = Math.sin(cam.a); const fov = 0.66 * (R.W / R.H) / 1.78; const plX = -dirY * fov, plY = dirX * fov;
