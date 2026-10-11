@@ -246,7 +246,29 @@ function drawViewmodel(st) {
   const col = hexToRgb((PCOLORS.find(c => c.name === me.color) || PCOLORS[0]).c);
   const tier = me.cls === 'monk' ? 0 : me.armor; const pal = tunicPal(c32ToHex(col), tier === 1 ? 0 : tier); // chain is worn over the cloth sleeve (rings drawn below)
   const chain = tier === 1 ? chainCols(c32ToHex(col)) : null;
-  const sleeve = c32(pal.T), sleeveD = c32(pal.t), sleeveH = c32(pal.h); const skin = c32(hexToRgb(PAL.s)), skinD = c32(hexToRgb(PAL.S));
+  // Armor on a forearm curve (bez(t) along the arm from the shoulder, rr(t) its radius, brush paints along it):
+  // chain = rings from the shoulder to the elbow; plate = a rounded pauldron at the shoulder, banded lames and rivets,
+  // and a bracer edge just above the cuff.
+  const sleeveArmor = (bez, rr, brush, cuffT) => {
+    const nrm = (t) => { const [x, y] = bez(t), [x2, y2] = bez(Math.min(1, t + 0.01)); let nx = -(y2 - y), ny = x2 - x; const l = Math.hypot(nx, ny) || 1; return [x, y, nx / l, ny / l]; };
+    if (chain) {
+      const ELB = 0.42, ring = c32(chain.ring), gap = c32(chain.gap);
+      brush(0, ELB, 0, gap, 0); let row = 0, lastX = null, lastY = null;
+      for (let i = 0; i <= 400; i++) { const t = ELB * i / 400; const [x, y, nx, ny] = nrm(t); if (lastX != null && Math.hypot(x - lastX, y - lastY) < 3.5) continue; lastX = x; lastY = y; row++;
+        const r = rr(t) - 1.5; for (let o = -r + (row & 1) * 2; o <= r; o += 4) { const cx3 = Math.round(x + nx * o), cy3 = Math.round(y + ny * o); for (const [ax, ay] of [[-1, -1], [0, -1], [1, -1], [-1, 0], [1, 0], [-1, 1], [0, 1], [1, 1]]) px(cx3 + ax, cy3 + ay, ring); } }
+      { const [x, y, nx, ny] = nrm(ELB); const r = rr(ELB); for (let o = -r; o <= r; o += 1) { const hx2 = Math.round(x + nx * o), hy2 = Math.round(y + ny * o); px(hx2, hy2, gap); if ((Math.round(o) & 1) === 0) px(hx2 + 1, hy2, ring); } }
+    }
+    if (tier === 2) {
+      for (const t of [0.2, 0.34, 0.48, 0.62]) brush(t, t + 0.012, 0, sleeveD, 0); // lames
+      brush(cuffT - 0.1, cuffT - 0.085, 0, sleeveH, 0); // bracer edge
+      for (const t of [0.27, 0.41, 0.55]) { const [x, y, nx, ny] = nrm(t); const r = rr(t) * 0.55; px(Math.round(x + nx * r), Math.round(y + ny * r), rgb(255, 255, 255)); px(Math.round(x - nx * r), Math.round(y - ny * r), sleeveH); } // rivets
+      const [x, y] = bez(0.14); const R0 = Math.round(rr(0.14) * 1.25); // pauldron
+      disc(Math.round(x), Math.round(y), R0 + 2, rgb(20, 18, 28)); disc(Math.round(x), Math.round(y), R0, sleeve); disc(Math.round(x - R0 * 0.25), Math.round(y - R0 * 0.3), Math.round(R0 * 0.55), sleeveH);
+      for (let k = 0; k < 2; k++) { const rr2 = R0 - 3 - k * 4; if (rr2 > 2) for (let a = -2.6; a < -0.4; a += 0.05) px(Math.round(x + Math.cos(a) * rr2), Math.round(y + Math.sin(a) * rr2), sleeveD); }
+    }
+  };
+  const plateCols = tier === 2 ? [mix(STEEL, col, 0.12), mix(STEEL_D, col, 0.12), STEEL_H] : null; // plate arms are steel through and through
+  const sleeve = c32(plateCols ? plateCols[0] : pal.T), sleeveD = c32(plateCols ? plateCols[1] : pal.t), sleeveH = c32(plateCols ? plateCols[2] : pal.h); const skin = c32(hexToRgb(PAL.s)), skinD = c32(hexToRgb(PAL.S));
   const drawSleeve = (x, y, w, h) => {
     rect(x, y, w, h, sleeve); rect(x, y, 3, h, sleeveD);
     if (tier === 1) for (let j = 0; j < h; j += 2) for (let i = (j / 2) & 1; i < w; i += 2) px(x + i, y + j, sleeveH);
@@ -346,14 +368,7 @@ function drawViewmodel(st) {
     brush(0, cuffT, 0, sleeve, 0);                          // sleeve
     brush(0, cuffT, 0, sleeveD, -0.62, 0.4);                // shadow on the top edge (the side facing away)
     if (tier >= 2) brush(0, cuffT, 0, sleeveH, 0.3, 0.22);  // plate: metal sheen on the underside
-    if (chain) { // chainmail: a sleeve of rings from the shoulder down to the elbow, tinted toward the tunic, with a ragged hem
-      const ELB = 0.42, ring = c32(chain.ring), gap = c32(chain.gap);
-      brush(0, ELB, 0, gap, 0); let row = 0, lastX = null, lastY = null;
-      for (let i = 0; i <= 400; i++) { const t = ELB * i / 400; const [x, y] = bez(t); if (lastX != null && Math.hypot(x - lastX, y - lastY) < 3.5) continue; lastX = x; lastY = y; row++;
-        const [x2, y2] = bez(Math.min(1, t + 0.01)); let nx = -(y2 - y), ny = x2 - x; const l = Math.hypot(nx, ny) || 1; nx /= l; ny /= l; const r = rr(t) - 1.5;
-        for (let o = -r + (row & 1) * 2; o <= r; o += 4) { const cx3 = Math.round(x + nx * o), cy3 = Math.round(y + ny * o); for (const [ax, ay] of [[-1, -1], [0, -1], [1, -1], [-1, 0], [1, 0], [-1, 1], [0, 1], [1, 1]]) px(cx3 + ax, cy3 + ay, ring); } }
-      { const [x, y] = bez(ELB); const [x2, y2] = bez(ELB + 0.01); let nx = -(y2 - y), ny = x2 - x; const l = Math.hypot(nx, ny) || 1; nx /= l; ny /= l; const r = rr(ELB); for (let o = -r; o <= r; o += 1) { const hx2 = Math.round(x + nx * o), hy2 = Math.round(y + ny * o); px(hx2, hy2, gap); if ((Math.round(o) & 1) === 0) px(hx2 + 1, hy2, ring); } }
-    }
+    sleeveArmor(bez, rr, brush, cuffT);
     brush(cuffT - 0.04, 1, 0, skin, 0); brush(cuffT, 1, 0, skinL, 0.25, 0.4); // inner wrist
     { const [cx2, cy2] = bez(cuffT - 0.04); const r = rr(cuffT); rect(Math.round(cx2) - 1, Math.round(cy2 - r + 1), 3, Math.round(r * 2 - 1), sleeveD); }
     // hand: the grip bar shows above and below; four fingers wrap around it in front, tips curling back toward the wrist
@@ -394,7 +409,7 @@ function drawViewmodel(st) {
     const bez = (t) => { const u = 1 - t; return [u * u * P0x + 2 * u * t * P1x + t * t * P2x, u * u * P0y + 2 * u * t * P1y + t * t * P2y]; };
     const steps = 50, rr = (t) => (aw / 2) * (1.45 - 0.6 * t), cuffT = 0.8;
     const brush = (t0, t1, grow, c, off, scale) => { for (let i = Math.round(t0 * steps); i <= Math.round(t1 * steps); i++) { const t = i / steps; const [bx2, by2] = bez(t); const r = (scale ? rr(t) * scale : rr(t)) + grow; disc(Math.round(bx2 + off * rr(t) * 0.6), Math.round(by2 - off * rr(t) * 0.6), Math.max(1, Math.round(r)), c); } };
-    brush(0, 1, 1.5, OUT, 0); brush(0, cuffT, 0, sleeve, 0); brush(0, cuffT, 0, sleeveD, 0.9, 0.4); if (tier >= 2) brush(0, cuffT, 0, sleeveH, -0.5, 0.22);
+    brush(0, 1, 1.5, OUT, 0); brush(0, cuffT, 0, sleeve, 0); brush(0, cuffT, 0, sleeveD, 0.9, 0.4); if (tier >= 2) brush(0, cuffT, 0, sleeveH, -0.5, 0.22); sleeveArmor(bez, rr, brush, cuffT);
     brush(cuffT - 0.04, 1, 0, skin, 0); brush(cuffT, 1, 0, skinL, -0.4, 0.4);
     brush(cuffT - 0.06, cuffT - 0.02, 0, sleeveD, 0); // cuff
     // fist, drawn in grip space (u along the grip toward the blade, v across it): a rounded clump with finger creases

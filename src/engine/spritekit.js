@@ -78,7 +78,7 @@ function tunicPal(hex, tier) {
 function chainCols(hex) { const base = hexToRgb(hex); return { ring: mix(STEEL_H, base, 0.38), gap: mix(shade(base, 0.4), STEEL_D, 0.45) }; }
 // Tier 1 (chain): the cloth stays the tunic's own color, with a shirt of rings over the chest and upper arms;
 // the skirt below the belt stays cloth with a ring hem. Tier 2 (plate) keeps its steel palette and glints.
-function armorOverlay(s, hex, tier) {
+function armorOverlay(s, hex, tier, dir) {
   if (tier < 1) return s;
   const cloth = tunicPal(hex, 0); const u = (c) => c32(c) >>> 0; const T = u(cloth.T), t = u(cloth.t), h = u(cloth.h); // >>> 0: sprite pixels are unsigned
   if (tier === 1) {
@@ -93,8 +93,20 @@ function armorOverlay(s, hex, tier) {
     }
     return s;
   }
-  const pal = tunicPal(hex, tier); const tc = u(pal.T), hc = u(pal.h);
-  for (let y = 0; y < s.h; y++) for (let x = 0; x < s.w; x++) { const i = y * s.w + x; if (s.px[i] === tc && (x + y * 3) % 7 === 0) s.px[i] = hc; } // plate glints
+  // plate: steel body with a tabard in the tunic color down the middle (an emblem on the chest), a steel helmet with a
+  // plume in the tunic color, and pauldrons that square off the shoulders
+  const pal = tunicPal(hex, tier); const tc = u(pal.T), td = u(pal.t), hc = u(pal.h); const steel = (v) => v === tc || v === td || v === hc;
+  const P = (x, y) => (x >= 0 && y >= 0 && x < s.w && y < s.h) ? s.px[y * s.w + x] : 0; const S = (x, y, c) => { if (x >= 0 && y >= 0 && x < s.w && y < s.h) s.px[y * s.w + x] = c; };
+  for (let y = 0; y < s.h; y++) for (let x = 0; x < s.w; x++) if (P(x, y) === tc && (x + y * 3) % 7 === 0) S(x, y, hc); // glints
+  const cT = u(cloth.T), cD = u(cloth.t), gold = u([248, 216, 64]);
+  const cols = dir === 'side' ? [9] : [7, 8];
+  for (let y = 7; y <= 12; y++) for (const x of cols) if (steel(P(x, y))) S(x, y, x === cols[cols.length - 1] && cols.length > 1 ? cD : cT); // tabard
+  if (dir === 'front') S(7, 8, gold); // emblem
+  // helmet: the hair becomes steel (lighter on top), with a plume on the crown
+  const hair = u(hexToRgb(PAL.H)); let top = -1;
+  for (let y = 0; y < 7; y++) for (let x = 0; x < s.w; x++) if (P(x, y) === hair) { if (top < 0) top = y; S(x, y, y === top ? hc : (x + y) % 5 === 0 ? td : tc); }
+  if (top > 0) { const px0 = dir === 'side' ? 8 : 7; S(px0, top - 1, cT); if (dir !== 'side') S(px0 + 1, top - 1, cD); }
+  if (dir !== 'side') for (const x of [3, 12]) { S(x, 7, td); if (P(x, 8)) S(x, 8, tc); } // pauldrons
   return s;
 }
 const _heroCache = {};
@@ -102,7 +114,7 @@ function heroSprite(cls, hex, tier, dir) { // dir: front/back/side/side_l
   const key = cls + hex + tier + dir;
   if (_heroCache[key]) return _heroCache[key];
   const base = (cls === 'monk' ? 'monk_' : 'hero_') + (dir === 'side_l' ? 'side' : dir);
-  const t2 = cls === 'monk' ? 0 : tier; let s = buildSprite(Content.sprites[base].rows, tunicPal(hex, t2 === 1 ? 0 : t2)); s = armorOverlay(s, hex, t2);
+  const t2 = cls === 'monk' ? 0 : tier; let s = buildSprite(Content.sprites[base].rows, tunicPal(hex, t2 === 1 ? 0 : t2)); s = armorOverlay(s, hex, t2, dir === 'side_l' ? 'side' : dir);
   if (dir === 'side_l') { const m = new Uint32Array(s.px.length); for (let y = 0; y < s.h; y++) for (let x = 0; x < s.w; x++) m[y * s.w + x] = s.px[y * s.w + (s.w - 1 - x)]; s = { w: s.w, h: s.h, px: m }; }
   _heroCache[key] = s; return s;
 }
@@ -125,7 +137,7 @@ function heroSpriteRun(cls, hex, tier, dir, frame, flip) {
   if (_heroCache[key]) return _heroCache[key];
   const baseDir = dir === 'side_l' ? 'side' : dir;
   const src = runRows(Content.sprites[(cls === 'monk' ? 'monk_' : 'hero_') + baseDir].rows, cls, baseDir === 'side' ? 'side' : 'front', frame);
-  const t2 = cls === 'monk' ? 0 : tier; let s = buildSprite(src, tunicPal(hex, t2 === 1 ? 0 : t2)); s = armorOverlay(s, hex, t2);
+  const t2 = cls === 'monk' ? 0 : tier; let s = buildSprite(src, tunicPal(hex, t2 === 1 ? 0 : t2)); s = armorOverlay(s, hex, t2, baseDir);
   if (dir === 'side_l' || flip) s = mirrorSpr(s);
   _heroCache[key] = s; return s;
 }

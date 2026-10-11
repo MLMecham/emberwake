@@ -10,6 +10,7 @@ Not built yet. Parked here so they don't get lost. Newest at the bottom.
 - **Skeleton Key** (every lock, no keys used). Built, but not in the world yet. A post-game reward, or the prize for finding every secret?
 
 ## Combat
+- **Gauntlets as their own item.** Plate doesn't change your hands; gauntlets should be a separate find with a reason to exist. Ideas: strength (heavier hits and knockback), pushing big blocks or lifting boulders, punching through cracked walls without bombs, or grabbing a ledge. In first person your hands turn steel when you wear them.
 - **Armored enemies.** A bomb (or bomb arrow) cracks the armor; only then do sword hits land.
 - **Shield enemy rework.** Shield knights are fine early but too tough later, even in a group. Add a technique that knocks their shield down for 1–2 s. Armored versions can ignore it, for another layer.
 
