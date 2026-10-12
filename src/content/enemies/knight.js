@@ -98,17 +98,22 @@ defineSprite('slash_fx', [ // a knight's counter cut
   '................', '..............w.', '............ww..', '..........www...', '........wwv.....', '......wwv.......', '....wwv.........', '...wv...........',
   '..wv............', '.w..............', '................', '................', '................', '................', '................', '................']);
 // The sword knights' brain: chase like any knight, but a counter that's winding up takes over (face the hero, then cut).
+const KNIGHT_LUNGE = 2.2; // how far a sword knight lunges into its counter
 function knightAi(sim, e, dt, ctx) {
   const def = enemyDef(e.type);
   if (e.counterT > 0) {
     const p = ctx.p; if (p) { const ta = Math.atan2(p.y - e.y, p.x - e.x); e.f += clamp(angDiff(e.f, ta), -dt * 6, dt * 6); }
     e.counterT -= dt; if (e.counterT > 0) return;
+    // the cut: it lunges at whoever hit its shield (KNIGHT_LUNGE tiles at most), so stepping back alone won't save you
+    const tgt = (e.counterOn && sim.players[e.counterOn] && sim.players[e.counterOn].alive && sim.players[e.counterOn].lvl === e.lvl) ? sim.players[e.counterOn] : ctx.p;
+    if (tgt) { const a = Math.atan2(tgt.y - e.y, tgt.x - e.x), d = Math.sqrt(dist2(tgt.x, tgt.y, e.x, e.y)); e.f = a; const step = Math.max(0, Math.min(KNIGHT_LUNGE, d - 0.8)); for (let i = 0; i < 6; i++) sim.moveEnt(e, Math.cos(a) * step / 6, Math.sin(a) * step / 6, def); }
     sim.sfx('swing', e.lvl, e.x, e.y); sim.spawn({ k: 'fx', lvl: e.lvl, x: e.x + Math.cos(e.f) * 0.8, y: e.y + Math.sin(e.f) * 0.8, spr: 'slash_fx', life: 0.2, sc: 1, z: 0.2 });
+    const followUp = e.counterHits < (def.counterHits || 1); // the champion's second cut lands even though the first just hit you
     for (const pl of Object.values(sim.players)) {
       if (!pl.alive || pl.lvl !== e.lvl) continue; const d = Math.sqrt(dist2(pl.x, pl.y, e.x, e.y));
-      if (d < 1.7 && Math.abs(angDiff(e.f, Math.atan2(pl.y - e.y, pl.x - e.x))) < 1.1) sim.hurtPlayer(pl, def.counterDmg * e.dmgMul, e);
+      if (d < 1.8 && Math.abs(angDiff(e.f, Math.atan2(pl.y - e.y, pl.x - e.x))) < 1.2) { if (followUp) pl.inv = 0; sim.hurtPlayer(pl, def.counterDmg * e.dmgMul, e); }
     }
-    if (--e.counterHits > 0) e.counterT = 0.28; // a champion's great sword comes back for a second cut
+    if (--e.counterHits > 0) e.counterT = 0.28; // a champion's great sword comes back for a second cut (and lunges again)
     return;
   }
   AI.chase(sim, e, dt, ctx);

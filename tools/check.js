@@ -661,6 +661,13 @@ attempt('magic wand, spells and casting together', () => {
   // old saves: the fire rod keeps its fire
   const sv = sim.makeSave(); sv.v = 7; for (const c in sv.players) { sv.players[c].items = { rod: true }; delete sv.players[c].wandEl; } const s2 = new Sim(genWorld(7319, 'adv'), sv); const pl = Object.values(s2.savedPlayers)[0]; __ok(pl.items.wandfire && pl.wandEl === 'fire', 'an old fire rod becomes the wand with fire');
 });
+attempt('frost arrows freeze without shoving', () => {
+  const sim = freshSim(); const p = sim.players.p1; p.items.bow = true; p.items.frostarrows = true; p.arrowType = 'frost'; p.arrows = 5; p.a = 0;
+  for (const e of sim.ents) if (e.k === 'en') e.dead = true; sim.ents = sim.ents.filter(e => !e.dead);
+  const k = sim.spawnEnemy('skeleton', p.lvl, p.x + 2.5, p.y, {}); k.spawnFx = 0; k.hp = 20; sim.useItem(p, 'bow', {});
+  for (let i = 0; i < 40; i++) { for (const e of sim.ents.slice()) if (e.k === 'proj') sim.updateEnt(e, 1 / 60); sim.ents = sim.ents.filter(e => !e.dead); }
+  __ok(k.hp < 20 && k.stun > 1 && !k.kb, 'a frost arrow freezes its target in place');
+});
 attempt('stronger knights', () => {
   const sim = freshSim(); const p = sim.players.p1; p.god = false; p.hp = p.maxHp = 40; p.sword = 2; p.a = 0; p.inv = 0;
   const clear = () => { for (const e of sim.ents) if (e.k === 'en' || e.k === 'proj') e.dead = true; sim.ents = sim.ents.filter(e => !e.dead); };
@@ -672,9 +679,11 @@ attempt('stronger knights', () => {
   k = knight('knight_sword'); swing(k); __ok(!(k.counterT > 0), 'one block: nothing yet'); swing(k); __ok(k.counterT > 0, 'two blocks: it winds up');
   __ok(sim.snapshotFor('p1').en.find(v => v[0] === k.id)[1] === 'knight_sword_s_windup', 'the blade glows while it winds up');
   const hp0 = p.hp; p.inv = 0; for (let i = 0; i < 40; i++) sim.updateEnemy(k, 1 / 60); __ok(p.hp < hp0, 'then it cuts whoever is in front (' + (hp0 - p.hp) + ')');
-  p.hp = 40; p.inv = 0; k.counterT = 0; k.blocks = 0; p.x -= 3; swing(k); swing(k); for (let i = 0; i < 40; i++) sim.updateEnemy(k, 1 / 60); __ok(p.hp === 40, 'backing off dodges it'); p.x += 3;
+  p.hp = 40; p.inv = 0; k.counterT = 0; k.blocks = 0; swing(k); swing(k); p.x -= 1.6; for (let i = 0; i < 40; i++) sim.updateEnemy(k, 1 / 60); __ok(p.hp < 40, 'stepping back is not enough: it lunges at you');
+  p.hp = 40; p.inv = 0; k.counterT = 0; k.blocks = 0; k.x = p.x + 1.1; k.y = p.y; swing(k); swing(k); p.x -= 5; for (let i = 0; i < 40; i++) sim.updateEnemy(k, 1 / 60); __ok(p.hp === 40, 'getting well clear does dodge it'); p.x += 5; k.x = p.x + 1.1;
   // the champion swings twice and its great shield only gives to a triple shot
   k = knight('knight_champion'); __ok(k.armor === 3, 'the champion wears full plate'); swing(k); swing(k); __ok(k.counterHits === 2, 'its counter is a two-cut combo');
+  const cut = Math.max(1, Math.round(3 * 2 * (p.armor === 2 ? 0.25 : p.armor === 1 ? 0.5 : 1))); p.hp = 40; p.inv = 0; for (let i = 0; i < 60; i++) sim.updateEnemy(k, 1 / 60); __ok(40 - p.hp === 2 * cut, 'both cuts of the combo land (' + (40 - p.hp) + ' of ' + 2 * cut + ')');
   k = knight('knight_champion'); p.items.bow = true; p.arrows = 20; p.items.loaded = p.items.loaded2 = true; p.x = k.x - 3; p.a = 0;
   const shoot = (n) => { for (const e of sim.ents) if (e.k === 'proj') e.dead = true; sim.ents = sim.ents.filter(e => !e.dead); k.hurt = 0; k.reelUntil = 0; k.stun = 0; sim.useItem(p, 'bow', { loaded: n }); for (let i = 0; i < 60; i++) { for (const e of sim.ents.slice()) if (e.k === 'proj') sim.updateEnt(e, 1 / 60); sim.ents = sim.ents.filter(e => !e.dead); } };
   shoot(2); __ok(!(k.reelUntil > sim.time), 'a double loaded shot does nothing to a great shield'); shoot(3); __ok(k.reelUntil > sim.time, 'a triple shot jars it');

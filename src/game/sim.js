@@ -579,7 +579,7 @@ class Sim {
     if (def.shield && !e.disarmed && src && !opt.pierceShield && !(e.reelUntil > this.time)) { // blocks hits from the front (not while reeling from a loaded shot)
       const toSrc = Math.atan2(src.y - e.y, src.x - e.x); if (Math.abs(angDiff(e.f, toSrc)) < 0.9) {
         this.sfx('clink', e.lvl, e.x, e.y);
-        if (def.counter) this.shieldBlocked(e, def); // sword knights strike back after enough blocks
+        if (def.counter) this.shieldBlocked(e, def, opt.pid); // sword knights strike back after enough blocks
         if (!opt.shieldBreak || (def.bigShield && (opt.breakNocks || 0) < 3)) { e.stun = 0.15; return false; } // a big shield shrugs off anything less than a triple shot
         dmg = opt.shieldBreak * (atk && atk.god ? 3 : 1); e.stun = Math.max(e.stun, SHIELD_STUN); e.reelUntil = this.time + SHIELD_STUN; // a loaded shot jars the shield: half damage, and the knight reels long enough for a sword strike
       }
@@ -596,7 +596,7 @@ class Sim {
     e.hp -= dmg; e.hurt = 0.35; this.sfx('hit', e.lvl, e.x, e.y); if (opt.pid) e.lastPid = opt.pid;
     if (def.dummy) { e.total = (this.time - (e.hitAt != null ? e.hitAt : -99) < DUMMY_RESET ? e.total || 0 : 0) + dmg; this.ev({ t: 'pow', lvl: e.lvl, x: e.x, y: e.y, num: true, word: fmtDmg(dmg) + '  (' + fmtDmg(e.total) + ')' }); } // training dummy: show the numbers
     e.hitAt = this.time;
-    if (src && !def.boss && !def.anchored) { const a = Math.atan2(e.y - src.y, e.x - src.x); const [v, t] = this.knockFor(e, def, 9 * (opt.kbMul || 1)); e.kb = [Math.cos(a) * v, Math.sin(a) * v]; e.kbT = t || 0.12; }
+    if (src && !def.boss && !def.anchored && !opt.noKb) { const a = Math.atan2(e.y - src.y, e.x - src.x); const [v, t] = this.knockFor(e, def, 9 * (opt.kbMul || 1)); e.kb = [Math.cos(a) * v, Math.sin(a) * v]; e.kbT = t || 0.12; }
     if (e.hp <= 0) this.killEnemy(e, opt.pid);
     return true;
   }
@@ -674,8 +674,8 @@ class Sim {
   }
   // A sword knight counts the hits its shield stops; after def.counter of them (within 4 s) it winds up a counter-attack
   // (enemies/knight.js knightAi swings it).
-  shieldBlocked(e, def) {
-    if (this.time - (e.blockAt != null ? e.blockAt : -99) > 4) e.blocks = 0; e.blockAt = this.time;
+  shieldBlocked(e, def, pid) {
+    if (this.time - (e.blockAt != null ? e.blockAt : -99) > 4) e.blocks = 0; e.blockAt = this.time; if (pid && this.players[pid]) e.counterOn = pid; // the counter goes after whoever hit the shield last
     e.blocks = (e.blocks || 0) + 1; if (e.blocks >= def.counter && !(e.counterT > 0)) { e.blocks = 0; e.counterT = KNIGHT_WINDUP; e.counterHits = def.counterHits || 1; this.sfx('windup', e.lvl, e.x, e.y); }
   }
   // DISARM (Heavy Pommel on a foe with def.disarm): what it holds goes flying (a 'tossed' entity), it staggers for a moment,
@@ -789,7 +789,7 @@ class Sim {
         const r = this.enemyRadius(en) + 0.2;
         if (dist2(en.x, en.y, e.x, e.y) < r * r) {
           e.hitSet[en.id] = 1;
-          const landed = this.damageEnemy(en, e.dmg * (e.frost && enemyDef(en.type).hot ? 2 : 1), { x: e.x - e.vx * 0.1, y: e.y - e.vy * 0.1 }, { pid: e.pid, silver: e.silver, pierceShield: def.pierceShield, ignoreIframes: def.pierce, kbMul: e.kbMul, shieldBreak: e.shieldBreak ? e.dmg / (e.shieldBreak === true ? 2 : e.shieldBreak) : 0, breakNocks: e.shieldBreak === true ? 2 : e.shieldBreak || 0 }); // a loaded shot jars a shield for one arrow's damage
+          const landed = this.damageEnemy(en, e.dmg * (e.frost && enemyDef(en.type).hot ? 2 : 1), { x: e.x - e.vx * 0.1, y: e.y - e.vy * 0.1 }, { pid: e.pid, silver: e.silver, noKb: !!e.frost, pierceShield: def.pierceShield, ignoreIframes: def.pierce, kbMul: e.kbMul, shieldBreak: e.shieldBreak ? e.dmg / (e.shieldBreak === true ? 2 : e.shieldBreak) : 0, breakNocks: e.shieldBreak === true ? 2 : e.shieldBreak || 0 }); // a loaded shot jars a shield for one arrow's damage
           if (e.frost && landed && !en.dead) { en.stun = Math.max(en.stun, enemyDef(en.type).boss ? 0.6 : 2.5); this.spawn({ k: 'fx', lvl: e.lvl, x: en.x, y: en.y, spr: 'icefx', life: 0.4, sc: 1 }); this.sfx('freeze', e.lvl, en.x, en.y); }
           if (def.fire) this.spawn({ k: 'fire', lvl: e.lvl, x: e.x, y: e.y, life: 0.8, spr: 'flame', sc: 0.8, z: -0.05, pid: e.pid });
           if (def.stun && landed && !en.dead && !enemyDef(en.type).boss) en.stun = Math.max(en.stun, def.stun);
