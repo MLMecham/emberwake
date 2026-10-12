@@ -17,24 +17,21 @@ Not built yet. Parked here so they don't get lost. Newest at the bottom.
 ## Enemies
 - **Spider webs and a better spider boss.** Web tiles that slow or stick you (fire burns them away), and a spider boss (Tideglass Halls) that uses them: strings webs across the room, drops from the ceiling, wraps you if you stand still.
 - **Knight tiers.** (1) Today's knight: a loaded shot stuns it. (2) Big-shield knight: only a three-arrow loaded shot (the triple-shot scroll) stuns it. (3) Armored knight with a sword: it swings at you, takes less damage, and only a triple bomb arrow stuns it. Later dungeons mix them.
+- **Knight tiers.** A lava monster that pulls you into the lava :
 
 ## Bow techniques
-- **Loaded Shot 2: triple shot.** A second scroll lets you nock a third arrow (sprite `arrow3` is already drawn). The order you find the two scrolls in shouldn't matter.
 - **Knight shield tiers.** Better shields on later knights, so a loaded shot stops stunning them and you need the triple shot (or something else).
 - **Enemies with loaded shots.** Archers that fire doubled arrows you can't block without a better shield.
-- **Quiver 50.** The third quiver (15 → 30 from Bramble Keep → 50). Somewhere later: a grotto shop or a later dungeon.
 
 ## Technique scrolls
 - **Boomerang path:** built (wide throw, then a second boomerang), debug only. Still to decide: where in the world each one is found.
-- **Gale Cloak slam:** only if you end the flight early (press the item again mid-flight): you drop and slam, stunning foes around where you land. Riding the flight out to the end gives no slam.
-- **Sword:** dash strike (Shift + attack charges forward), a quick follow-up slash on every third swing in a chain, pommel bash (Shift: little damage, long stun; hold for a bigger stun), spin attack on a full charge.
 - Hidden in grottos. The **candle** should be the way to find them (lighting a hidden grotto), so the candle stays useful for beginners.
 - **Fire rod → magic rod.** Fire this early is too strong (free, fast, spammable projectiles, and great against ice enemies). Make it a plain magic rod. Scrolls then add fire or ice to it, which pushes elemental magic later in the game.
+- **Built, debug only (still need a place in the world):** Lunge and Heavy Pommel scrolls, Loaded Shot 2 (triple shot), Great Quiver (50), Gale Slam scroll, armored skeletons.
 - **Bomb arrows scroll.** Damage of an arrow plus one bomb, with the bomb's effects on enemies. Permanently closes eye targets, so some eye timers can be very short. That's safe because eyes are timers that always need hitting again, never one-way switches.
 
 ## Bombs
-- You can carry 1 bomb (maybe fewer?) without a bomb bag. Right now skipping the bag is fine, and lots of bombs barely matter.
-- One bomb bag in its temple, and a second one sold in a grotto, for more gem and candle use. Late-game fire magic could open it if the grotto was missed.
+- Built: 1 bomb without a bag, 8 with Bramble Keep's, 16 from the hidden grotto shop. Later: late-game fire magic could open the grotto if it was missed.
 - Give players a reason to want more bombs later, so the bag's value rises.
 
 ## World
@@ -42,3 +39,16 @@ Not built yet. Parked here so they don't get lost. Newest at the bottom.
 - **More grottos and push-open tombs.** Extra hidden grottos, and graves or tombs you push aside to find stairs, so exploring pays off beyond bombing walls.
 - **Salt water.** Tiles marked `salty` never freeze (only the rough southern sea for now). Later: salty pools or a coastal dungeon where frost arrows don't work, so you need another way across.
 - Grottos you've already found still regrow their trees, just differently.
+
+## Monk
+- **The monk needs a full rework.** He has no pommel strike or lunge. For now his punches split gourds (marked `TODO(monk rework)` in sim.js; remove it in the rework). Maybe his fists just break armor outright.
+
+## Text to replace
+- Two shop lines are lifted from another game: the merchant's "BUY SOMETHIN' WILL YA!" and the secret cave's "IT'S A SECRET TO EVERYONE" (content/caves.js). Write our own.
+
+## Story
+- **The Hearthwyrm's third head.** Iron Cathedral's tablet says the Hollow King took it, and "what remains of it hungers for light." Decide what he did with it: does he wear it, did it become the stolen light the Hearth needs, can it be won back? It could become a fight, a quest or an item.
+- **Not every tablet points to the Hollow King, on purpose.** Other powers are at play. The wyrms look like his allies, but they aren't. Keep it that way.
+
+## Lore
+- The hollow king can offer one of the players a deal. if they accept they can kill their teamates for an alternate ending?

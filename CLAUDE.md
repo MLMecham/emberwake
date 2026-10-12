@@ -50,6 +50,7 @@ Read this first in a new chat. It's the context from the long first build sessio
 - **Frogs:** 1 in 10 spawns as a poison frog (never placed directly), and frogs never spawn in rooms with no water.
 - **Dungeons:**
   - Each is drawn as a shape in `content/dungeons.js`. The generator builds a random tree, loops, locks and keys (keys always reachable), map, compass, and hidden rooms (`H`).
+  - **Bramble Keep has no keys** (`noKeys`): every lock, and the way out of the entrance, is a cracked wall with a powder gourd in the room before it. Some rooms have a corner nook behind a cracked block with a prize (`gimmicks/cracked.js`). Gourds grow only where asked (`gourds: 'asked'`). Its tablet: "WE MELTED THE KEYS. WE DROPPED THE SKY. LET HIM DIG."
   - Optional fields on a dungeon: `itemSpots` (shape cells the treasure may sit in; the Sunken Stair's bow sits at a trident tip), `intro` (hand-built first rooms), `bossEye` (eye niche in the boss room), `secret: 'EYE'` (hidden room opened by a small eye), `loops`, `bombLoops`, `bossParty`, `bossDrop`.
   - Gimmick hooks: `room`, `doors`, `plan` (pre-pass with `solve(hasBow)`), `arena` (boss room), `update`, `level`.
 - **The 12 dungeons:**
@@ -57,7 +58,7 @@ Read this first in a new chat. It's the context from the long first build sessio
   | # | Name | Gimmick | Treasure |
   |---|---|---|---|
   | 1 | Mossy Hollow | brambles | boomerang |
-  | 2 | Bramble Keep | cracked walls | bomb bag (the boss-room eye niche holds the Big Quiver and the Loaded Shot scroll) |
+  | 2 | Bramble Keep | no keys: cracked walls, gourds, prize nooks | bomb bag (the boss-room eye niche holds the Big Quiver and the Loaded Shot scroll) |
   | 3 | Sunken Stair | tides, eyes and the spiral room | bow (boss: the Bog King) |
   | 4 | Emberforge | conveyors | fire rod |
   | 5 | Whispering Vault | fake walls | whistle |
@@ -86,19 +87,29 @@ Read this first in a new chat. It's the context from the long first build sessio
 - **Player status:** chill (slow), poison (5% of max health per tick, 2–5 ticks, restarts on a new dose, goes through shields, can't kill), Gale Cloak flight (`p.flyUntil`; tiles below don't affect you).
 - **Controls:**
   - Click/Space: attack. Space is dash for the martial artist.
-  - Right-click/E: item. Hold for power: the bow fires on release and holding nocks a Loaded Shot. Shift (LB) + item: the item's technique (`useAlt`): bomb arrows, the wide boomerang throw.
+  - Shift is a modifier for both hands. Shift + attack (hold) = reverse grip (sword techniques). Shift + item = the item's technique (`useAlt`): bomb arrows, the wide boomerang throw.
+  - Right-click/E: item. Hold for power: the bow fires on release; holding nocks more arrows (one per Loaded Shot scroll).
+  - Favorites (`favList` in main.js, stored in this browser only): star items in the inventory. Wheel and R step through favorites (all items if none), Q + wheel through everything, a tap of Q steps back, 1-4 pick the first four favorites.
   - I: inventory. M: map.
   - Attacking or switching items lets a drawn arrow go slack.
 - **Inventory** (`renderBag` in main.js, `sim.equip`; three pages: GEAR, ITEMS, UPGRADES, no scrolling): wear any sword or tunic up to the best you've earned (`swordMax`/`armorMax`), pick plain or frost arrows, set the item button, and see upgrades and techniques.
+- **Sword techniques** (sword hero only; `pommelStrike`, `chainHit`, `updateBackswing` in sim.js, reverse grip in main.js):
+  - Pommel strike (everyone starts with it): Shift + hold attack, let go after 0.2 s. 0.25 damage, 2.5 s stun; a shield still blocks it from the front. Only it splits gourds.
+  - Lunge (scroll `lunge`): hold the grip 1.5 s until it chimes, let go: dash forward and slash 2/3/4 times (wooden/white/magic+ sword). Stops at a foe and at the edge of pits, deep water and lava.
+  - Heavy Pommel (scroll `heavypommel`): pommel strikes also strip armor.
+  - Backswing: every third sword hit in a chain (hits under 2 s apart) readies a backswing. It fires on the first hit that leaves a foe standing (a kill saves it), cutting that foe again 0.14 s later.
+- **Armor** (`def.armor` 0-3, `e.armor`, `stripArmor` in sim.js): 25% less damage per level. Bombs (and bomb arrows) and the Heavy Pommel knock one level off with no damage, each only once per foe (`e.stripped`); a repeat just clanks. Armored skeletons `skeleton_a1..3` are debug-spawner only so far; their sprite loses greaves and gauntlets, then helmet, then breastplate.
+- **Gourds and breakables** (`content/gourds.js`, `breakGourd`/`updateGourds` in sim.js, `placeGourds` in world.js): low props you walk over. Only a pommel strike (or a monk punch, marked TODO for his rework) splits one. Bramble Keep's powder gourds drop a bomb; coral, slag, bone piles and crystals elsewhere sometimes drop gems or a heart. They grow back 40 s later once nobody is within 6 tiles, and a save never keeps one broken.
+- **Bombs:** carry 1 without a bag, 8 with the Bramble Keep bag, 16 with the Big Bomb Bag from the hidden grotto shop (`bombshop` cave). `bombCap` in sim.js.
 - **Items of note:**
-  - Quivers: 15 to start, Big Quiver 30, a 50 one planned.
-  - Loaded Shot: 2 arrows for double damage and more knockback; against a shield it does one arrow's damage and makes the knight reel.
+  - Quivers: 15 to start, Big Quiver 30, Great Quiver 50 (`quiver50`, debug only so far).
+  - Loaded Shot: each scroll (`loadedshot`, `tripleshot`, any order) lets you nock one more arrow: 2 or 3 arrows for 2x or 3x damage and more knockback; against a shield it does one arrow's damage and makes the knight reel.
   - Arrow kinds: plain, frost or silver, picked in the inventory (`p.arrowType`). Only silver finishes the Hollow King.
   - Bomb arrows (scroll, debug only so far): Shift + bow costs an arrow and a bomb, bursts like a bomb, and seals a timed eye for good.
   - Thunder Rod (debug only): a bolt that hops between up to 3 foes and stuns them. Fire and lightning belong to rods.
   - Boomerang drags loot and small keys back. A normal throw stuns for 3 s with a 0.25 chip. Hitting an already stunned foe only renews the stun (no damage). After 6 s of chained stun the foe gets a short immunity (`STUN_LOCK` in sim.js), so two boomerangs can't lock it forever. Bats still die in one hit (`boomerangKills`).
   - Boomerang upgrades (debug only so far, order: wide throw first, then the second): the WIDE THROW scroll (`widethrow`, Shift + boomerang) sweeps a curving arc that hits at sword strength with knockback, never stuns, and doesn't stop on a hit. The SECOND BOOMERANG (`boomerang2`) allows two out at once, and the wide throw becomes a mirrored pair of arcs.
-  - Gale Cloak and Skeleton Key: built, given by debug, not placed in the world yet.
+  - Gale Cloak and Skeleton Key: built, given by debug, not placed in the world yet. Pressing the cloak again mid-flight drops you; with the Gale Slam scroll (`galeslam`) that drop stuns and shoves foes around you.
   - Candle: one flame every 2.5 s. Holding it (selected) lights dark rooms around you.
   - Raft: works outdoors only, never in dungeons.
 - **Bosses leave a glowing WARP tile** (`sim.openWarp`) instead of throwing everyone out.
@@ -125,6 +136,7 @@ Read this first in a new chat. It's the context from the long first build sessio
 - New snapshot fields go in `snapshotFor` (`me.*` for the player's own state). The client reads them from `G.snap`.
 - When making something only some enemy types have, add a field to the enemy def (`swim`, `spawnAt`, `noElites`, `sprFor`, `onDamage`, `view`). Don't special-case ids in the sim.
 - **Knights** are the only enemy with a back sprite (`def.backSprite`, picked per viewer in `sim.entView`) when you're more than ~120° behind them. No side sprites, on purpose: players learn about the back from an old man's hint (`defineHints` in knight.js).
+- Snapshot entity tuples: `[id, sprite, x, y, scale, z, flags, price, bossHp, npcText, elite, isFoe]`.
 - Underwater sprites are named `<enemy id>_sub` so the boss bar can find the name.
 
 ## Decisions already made (don't relitigate)
