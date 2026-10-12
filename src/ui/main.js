@@ -100,6 +100,8 @@ function favList(owned) { if (!G.favs) G.favs = loadFavs(); const f = owned.filt
 const BODY_PTS = [-0.22, 0, 0.22].flatMap(ox => [-0.22, 0, 0.22].map(oy => [ox, oy])); // the hero's collision box, sampled 3x3 (corners, edge middles, center) so small round props can't hide between the corners
 const POMMEL_MIN = 0.2, LUNGE_HOLD = 1.5, LUNGE_DUR = 0.22, LUNGE_SPD = 11; // reverse grip timings (seconds) and lunge speed (tiles/s)
 function raftOK(me, L, ti) { return !!me.items.raft && L.kind !== 'dungeon' && !ti.ocean; }
+// the enemy a boss sprite belongs to: underwater (_sub), glowing (_glow) and other looks are named <id>_<look>
+function bossDefFor(spr) { let id = String(spr); while (id && !enemyDef(id) && id.includes('_')) id = id.replace(/_[^_]*$/, ''); return enemyDef(id); }
 function ownedBItems(me) { return me ? bItems().filter(d => d.owned(me)).map(d => d.id) : []; }
 function sendAction(a) {
   if (NET.role === 'host') G.sim.onAction(G.myId, a); else if (NET.hostConn) NET.hostConn.send({ t: 'a', a });
@@ -345,7 +347,7 @@ function draw(dt) {
   // pow words
   for (const p of Lc.pow) { const sc = projectPt(cam, p.x, p.y); if (sc) { const c = p.big ? rgb(255, 230, 60) : rgb(255, 255, 255); text(p.word, sc.x - p.word.length * 3, sc.y - 30 - p.t * (p.num ? 45 : 30), p.num ? rgb(255, 236, 120) : Math.floor(p.t * 20) & 1 ? c : rgb(255, 80, 40)); } }
   const bossE = ents.find(e => e[8] >= 0);
-  const st = { me, bob: Lc.bob, moveK: Lc.moveK || 0, readyK: Lc.readyK || 0, blockT: Lc.blockT || 0, swing: Lc.swing, swingDir: Lc.swingDir || 1, grip: Lc.gripT || 0, pommelT: Lc.pommelT, lungeReady: !!(Lc.gripT >= LUNGE_HOLD && me && me.items.lunge), punch: Lc.punch, charge: Lc.charge, useFlash: Lc.useFlash, useSpr: Lc.useSpr, level: L, cam, players: snap ? snap.pl : [], myId: G.myId, team: snap ? snap.team : { keys: {}, maps: {}, comps: {}, shards: [], done: [] }, seen: G.seen[L.id] || new Uint8Array(L.w * L.h), seenOW: G.seen.ow || new Uint8Array(1), seenRooms: G.seenRooms, selItem: Lc.sel, pitch: Lc.pitch, lvlKind: L.kind, bossHp: bossE ? bossE[8] : -1, bossName: bossE ? ((enemyDef(bossE[1]) || enemyDef(String(bossE[1]).replace(/_sub$/, '')) || {}).title || null) : null, world: G.world };
+  const st = { me, bob: Lc.bob, moveK: Lc.moveK || 0, readyK: Lc.readyK || 0, blockT: Lc.blockT || 0, swing: Lc.swing, swingDir: Lc.swingDir || 1, grip: Lc.gripT || 0, pommelT: Lc.pommelT, lungeReady: !!(Lc.gripT >= LUNGE_HOLD && me && me.items.lunge), punch: Lc.punch, charge: Lc.charge, useFlash: Lc.useFlash, useSpr: Lc.useSpr, level: L, cam, players: snap ? snap.pl : [], myId: G.myId, team: snap ? snap.team : { keys: {}, maps: {}, comps: {}, shards: [], done: [] }, seen: G.seen[L.id] || new Uint8Array(L.w * L.h), seenOW: G.seen.ow || new Uint8Array(1), seenRooms: G.seenRooms, selItem: Lc.sel, pitch: Lc.pitch, lvlKind: L.kind, bossHp: bossE ? bossE[8] : -1, bossName: bossE ? ((bossDefFor(bossE[1]) || {}).title || null) : null, world: G.world };
   if (me && !down) drawViewmodel(st);
   if (me && me.cls === 'monk' && me.armor > 0 && !down) { const ac = me.armor === 2 ? rgb(255, 248, 200) : rgb(100, 190, 255); for (let i = 0; i < 18; i++) { const side = Math.random() < 0.5; const x = side ? (Math.random() < 0.5 ? Math.random() * 10 : R.W - Math.random() * 10) : Math.random() * R.W; const y = side ? Math.random() * R.H : R.H - Math.random() * 8; px(x, y, ac); } }
   if (Lc.dashT > 0) rectA(0, 0, R.W, R.H, rgb(200, 240, 255), 0.15);

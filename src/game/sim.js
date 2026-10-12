@@ -74,7 +74,7 @@ class Sim {
     this.W = world; this.players = {}; this.ents = []; this.mods = {}; this.modVer = 1; this.events = []; this.rigShots = {}; this.thaws = {}; // thaws: 'lvl' -> { tile idx: when it melts }.
     // rigShots: 'lvl:room' -> when its timed eye was last shot
     this.team = { keys: {}, maps: {}, comps: {}, shards: [], done: [], relics: [], taken: {}, cleared: {}, clearedAt: {} };
-    this.groups = {}; this.gourdRegrow = []; this.time = 0; this.levelInit = {}; this.over = 0; this.won = false; this.mode = world.mode;
+    this.groups = {}; this.gourdRegrow = []; this.tempTiles = []; this.time = 0; this.levelInit = {}; this.over = 0; this.won = false; this.mode = world.mode;
     if (save) this.loadSave(save);
   }
   // ---- players ----
@@ -666,6 +666,13 @@ class Sim {
     const item = b.drop(Math.random); if (item) this.dropItem(item, L.id, cx, cy);
     return true;
   }
+  // a tile that's something else for `dur` seconds (a wyrm's ice strip, a lava splash), then goes back. Saves never keep it.
+  setTempTile(lvl, i, tile, dur) {
+    const L = this.W.levels[lvl]; const old = this.tempTiles.find(t => t.lvl === lvl && t.i === i);
+    if (old) { old.at = this.time + dur; if (L.tiles[i] !== tile) this.setTile(lvl, i, tile); return; }
+    this.tempTiles.push({ lvl, i, orig: L.tiles[i], tile, at: this.time + dur }); this.setTile(lvl, i, tile);
+  }
+  updateTempTiles() { if (!this.tempTiles.length) return; this.tempTiles = this.tempTiles.filter(t => { if (this.time < t.at) return true; const L = this.W.levels[t.lvl]; if (L.tiles[t.i] === t.tile) this.setTile(t.lvl, t.i, t.orig); return false; }); }
   updateGourds() {
     if (!this.gourdRegrow.length) return;
     this.gourdRegrow = this.gourdRegrow.filter(g => {
@@ -858,7 +865,7 @@ class Sim {
     if (d.team) for (const o of Object.values(this.players)) d.give(this, o, ctx); else d.give(this, p, ctx);
   }
   tick(dt) {
-    this.update(dt); this.updateGourds();
+    this.update(dt); this.updateGourds(); this.updateTempTiles();
     if (this.pendingExit && this.time > this.pendingExit.at) {
       const L = this.W.levels[this.pendingExit.lvl];
       for (const p of Object.values(this.players)) if (p.lvl === L.id) { p.alive = true; p.hp = p.maxHp; this.teleport(p, 'ow', L.exit.x, L.exit.y, L.exit.a); }
@@ -900,8 +907,9 @@ class Sim {
     for (const p of Object.values(this.players)) players[p.color] = this.playerSaveData(p);
     const cl = {}; for (const k in this.team.cleared) if (!k.startsWith('ow:')) cl[k] = true;
     const tileNames = []; for (const k in TL) tileNames[TL[k]] = k;
+    let mods = this.mods; if (this.tempTiles.length) { mods = JSON.parse(JSON.stringify(this.mods)); for (const t of this.tempTiles) if (mods[t.lvl] && mods[t.lvl][t.i]) mods[t.lvl][t.i][0] = t.orig; } // temporary tiles are saved as they'll end up
     const propNames = PROPS.slice();
-    return { v: SAVE_VERSION, tileNames, propNames, seed: this.W.seed, mode: this.W.mode, team: { keys: this.team.keys, maps: this.team.maps, comps: this.team.comps, shards: this.team.shards, done: this.team.done, relics: this.team.relics, taken: this.team.taken, cleared: cl }, mods: this.mods, players, time: Date.now() };
+    return { v: SAVE_VERSION, tileNames, propNames, seed: this.W.seed, mode: this.W.mode, team: { keys: this.team.keys, maps: this.team.maps, comps: this.team.comps, shards: this.team.shards, done: this.team.done, relics: this.team.relics, taken: this.team.taken, cleared: cl }, mods, players, time: Date.now() };
   }
   loadSave(s) {
     s = migrateSave(s);

@@ -138,7 +138,7 @@ function genTunnel(W, biome, rnd) {
   main.forEach((r, i) => { const t = heat(r); r.tier = 2 + Math.round(t); if (i === 0 || i === gw - 1) return; const n = 2 + rnd.int(2); for (let k = 0; k < n; k++) r.enemies.push(rnd.pick(rnd() < t ? late : early)); });
   // the miniboss: two wyrmlings at once (Mossy Hollow's frost pair on the cold road, Emberforge's magma pair on the ember road),
   // two rooms before the far end. Beat them for a heart piece.
-  const mb = main[gw - 3]; mb.enemies = snow ? ['wyrm_frost', 'wyrm_frost'] : ['wyrm', 'wyrm']; mb.reward = 'hpiece'; mb.miniboss = true;
+  const mb = main[gw - 3]; mb.enemies = snow ? ['wyrm_elder_frost', 'wyrm_elder_frost'] : ['wyrm_elder', 'wyrm_elder']; mb.reward = 'hpiece'; mb.miniboss = true; mb.at = [[3.5, 4.5], [9.5, 4.5]]; // elder wyrmlings (enemies/wyrm.js), one at each end of the room
   for (const r of sides) { const t = heat(r); r.tier = 2 + Math.round(t); r.reward = rnd.pick(['gems30', 'heart', 'bomb', 'gems50', 'arrows']); for (let k = 0; k < 2; k++) r.enemies.push(rnd.pick(rnd() < t ? late : early)); }
   L.rooms = rooms; L.startRoom = main[0];
   // the ends: an archway out at each end, with the step in front of it

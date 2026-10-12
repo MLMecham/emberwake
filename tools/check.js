@@ -720,13 +720,39 @@ attempt('frontier tunnels', () => {
     const themed = (r) => { let n = 0, all = 0; for (let y = r.ry * DSY; y <= r.ry * DSY + DSY; y++) for (let x = r.rx * DSX; x <= r.rx * DSX + DSX; x++) { const t = T.get(x, y); all++; if ([TL.ICEWALL, TL.SNOW, TL.ICE, TL.BASALT, TL.ASH, TL.LAVA].includes(t)) n++; } return n / all; };
     __ok(themed(rooms[rooms.length - 1]) > themed(rooms[1]) + 0.3, b + ': the far end is much ' + (b === 'snow' ? 'colder' : 'hotter') + ' (' + themed(rooms[1]).toFixed(2) + ' -> ' + themed(rooms[rooms.length - 1]).toFixed(2) + ')');
     __ok(Object.values(T.rooms).filter(r => r.side).every(r => r.reward), b + ': every side room guards a prize');
-    const mbr = Object.values(T.rooms).find(r => r.miniboss); __ok(mbr && mbr.enemies.length === 2 && mbr.enemies.every(t => enemyDef(t).boss) && mbr.reward === 'hpiece', b + ': a pair of wyrmlings guards a heart piece');
+    const mbr = Object.values(T.rooms).find(r => r.miniboss); __ok(mbr && mbr.enemies.length === 2 && mbr.enemies.every(t => enemyDef(t).boss && /^wyrm_elder/.test(t)) && mbr.reward === 'hpiece', b + ': a pair of elder wyrmlings guards a heart piece');
     __ok(Object.values(T.rooms).every(r => r.enemies.every(t => t !== 'skeleton' && t !== 'slime')), b + ': skeletons here are always armored');
     sim.teleport(p, T.id, mbr.rx * DSX + 1.5, DSY + 4.5, 0); sim.tick(1 / 60); __ok(sim.ents.filter(e => e.k === 'en' && e.lvl === T.id && !e.dead && enemyDef(e.type).boss).length === 2, b + ': both wyrmlings show up together');
     for (const e of sim.ents) if (e.k === 'en' && e.lvl === T.id) e.dead = true; sim.tick(1 / 60); sim.tick(1 / 60); __ok(sim.ents.some(e => e.k === 'pick' && e.item === 'hpiece' && e.lvl === T.id), b + ': beating them drops the heart piece');
     // walking in wakes a room's foes
     const mid = rooms[6]; sim.teleport(p, T.id, mid.rx * DSX + 6.5, DSY + 4.5, 0); sim.tick(1 / 60); __ok(sim.ents.some(e => e.k === 'en' && e.lvl === T.id && !e.dead), b + ': foes in the rooms');
   }
+});
+attempt('elder wyrmlings', () => {
+  const sim = freshSim(); const p = sim.players.p1; p.god = false; p.hp = p.maxHp = 60; const T = sim.W.levels.tsnow; const mb = Object.values(T.rooms).find(r => r.miniboss);
+  sim.teleport(p, T.id, mb.rx * DSX + 6.5, DSY + 4.5, 0); sim.tick(1 / 60);
+  const ws = sim.ents.filter(e => e.k === 'en' && e.lvl === T.id && e.type === 'wyrm_elder_frost'); __ok(ws.length === 2, 'two elder frost wyrms');
+  for (const w of ws) { w.spawnFx = 0; w.chargeIn = 99; } p.inv = 99; // no charging yet, and keep the hero alive
+  for (let i = 0; i < 180; i++) for (const w of ws) sim.updateEnemy(w, 1 / 60);
+  const [a, b] = ws.slice().sort((x, y) => x.x - y.x); __ok(b.x - a.x > 3.5, 'crossfire: they hold opposite ends (' + (b.x - a.x).toFixed(1) + ' apart)');
+  // charge: a glowing wind-up, then a dash at you
+  a.chargeIn = 0; a.tm = 9; sim.updateEnemy(a, 1 / 60); __ok(a.chargeT > 0 && sim.entView(a, p)[1] === 'wyrm_elder_frost_glow', 'a charge starts with a glow');
+  const x0 = a.x, y0 = a.y; for (let i = 0; i < 50; i++) sim.updateEnemy(a, 1 / 60); __ok(Math.hypot(a.x - x0, a.y - y0) > 1.5, 'then it dashes');
+  // frost lance: the floor turns to ice for a while, then back; a save never keeps it
+  a.chargeIn = 99; a.dashT = 0; a.n = 2; a.tm = 0; const before = Array.from(T.tiles); sim.updateEnemy(a, 1 / 60);
+  const iced = []; T.tiles.forEach((t, i) => { if (t === TL.ICE && before[i] !== TL.ICE) iced.push(i); }); __ok(iced.length >= 3, 'a frost lance ices the floor (' + iced.length + ' tiles)');
+  const sv = sim.makeSave(); __ok(iced.every(i => !sv.mods.tsnow || !sv.mods.tsnow[i] || sv.mods.tsnow[i][0] === before[i]), 'a save keeps the floor as it will be, not iced');
+  sim.time += 6; sim.updateTempTiles(); __ok(iced.every(i => T.tiles[i] === before[i]), 'the ice melts back');
+  // grief: when one falls, the other roars and fights harder
+  b.dead = true; sim.ents = sim.ents.filter(e => !e.dead); sim.updateEnemy(a, 1 / 60); __ok(a.grief, 'the survivor grieves');
+  a.tm = 0; a.n = 0; a.chargeIn = 99; for (const e of sim.ents) if (e.k === 'proj') e.dead = true; sim.ents = sim.ents.filter(e => !e.dead); sim.updateEnemy(a, 1 / 60); __ok(sim.ents.filter(e => e.k === 'proj' && e.owner === 'e').length === 5, 'five shots now');
+  // ember rain on the magma road: shadows, then burning splashes that hurt
+  const sim2 = freshSim(); const q = sim2.players.p1; q.god = false; q.hp = q.maxHp = 60; const T2 = sim2.W.levels.tash; const mb2 = Object.values(T2.rooms).find(r => r.miniboss);
+  sim2.teleport(q, T2.id, mb2.rx * DSX + 6.5, DSY + 4.5, 0); sim2.tick(1 / 60); const m = sim2.ents.find(e => e.k === 'en' && e.type === 'wyrm_elder'); m.spawnFx = 0; m.chargeIn = 99; m.n = 2; m.tm = 0; m.init = true;
+  sim2.updateEnemy(m, 1 / 60); const blobs = sim2.ents.filter(e => e.k === 'emberblob'); __ok(blobs.length === 3 && sim2.ents.some(e => e.spr === 'shadowring'), 'ember rain: three blobs, each with a shadow');
+  q.inv = 0; const hp0 = q.hp; for (let i = 0; i < 90; i++) for (const e of sim2.ents.slice()) if (e.k === 'emberblob') sim2.updateEnt(e, 1 / 60);
+  __ok(q.hp < hp0, 'the one aimed at you lands on you'); __ok(T2.tiles[T2.idx(Math.floor(q.x), Math.floor(q.y))] === TL.LAVA, 'and leaves a burning splash');
+  sim2.time += 4; sim2.updateTempTiles(); __ok(T2.tiles[T2.idx(Math.floor(q.x), Math.floor(q.y))] !== TL.LAVA, 'which cools again');
 });
 attempt('tideglass opening', () => {
   for (const [seed, mode] of [[7319, 'adv'], [1234, 'rogue'], [99, 'rogue'], [4242, 'adv']]) {
@@ -769,7 +795,7 @@ try { vm.runInContext(tests, ctx, { filename: 'tests.js' }); } catch (e) { failu
 const allSrc = []; (function walk(d) { for (const n of fs.readdirSync(path.join(root, d))) { const p = d + '/' + n; if (fs.statSync(path.join(root, p)).isDirectory()) walk(p); else if (n.endsWith('.js')) allSrc.push(p); } })('src');
 // every source file must at least compile, including the browser-only ones the tests above never load (a stray // can swallow code)
 for (const f of allSrc) if (f.endsWith('.js')) { try { new vm.Script(fs.readFileSync(path.join(root, f), 'utf8'), { filename: f }); } catch (e) { failures.push(f + ' does not compile: ' + e.message); } }
-for (const f of allSrc) { const src = fs.readFileSync(path.join(root, f), 'utf8').split('\n'); src.forEach((line, i) => { const m = line.match(/\/\/[^'"`]*\b(const|let) [A-Za-z_]\w* = /); if (m && !/^\s*\/\//.test(line.slice(0, line.indexOf('//')) + '//')) failures.push(f + ':' + (i + 1) + ' has code after a // comment: ' + line.trim().slice(0, 80)); }); }
+for (const f of allSrc) { const src = fs.readFileSync(path.join(root, f), 'utf8').split('\n'); src.forEach((line, i) => { const m = line.match(/\/\/[^'"`]*\b(const|let) [A-Za-z_]\w* = /) || line.match(/\/\/[^'"`]*;\s*[A-Za-z_][\w.]*(\[[^\]]*\])?\s*=\s*[^=]/) || line.match(/\/\/[^'"`]*\b[a-z_]\w*\.[A-Za-z_]\w*\s*=\s*[^=>]/); if (m && !/^\s*\/\//.test(line.slice(0, line.indexOf('//')) + '//')) failures.push(f + ':' + (i + 1) + ' has code after a // comment: ' + line.trim().slice(0, 80)); }); }
 // browser-only files (render, input, net, ui) aren't run here, so at least make sure they parse
 for (const f of ['src/engine/render.js', 'src/engine/audio.js', 'src/engine/input.js', 'src/net/relay.js', 'src/net/net.js', 'src/ui/debug.js', 'src/ui/main.js']) {
   const fp = path.join(__dirname, '..', f); if (!fs.existsSync(fp)) continue;
