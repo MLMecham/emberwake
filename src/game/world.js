@@ -108,13 +108,17 @@ function genTunnel(W, biome, rnd) {
   // the run: room 0 at the main-land end, room gw-1 at the frontier end (west for the snow, east for the ash)
   const colOf = (i) => snow ? gw - 1 - i : i; const main = [];
   for (let i = 0; i < gw; i++) main.push(mk(colOf(i), 1));
-  const sides = []; const cols = rnd.shuffle([2, 3, 4, 5, 6, 7, 8, 9]).slice(0, 4).sort((a, b) => a - b);
+  const sides = []; const cols = rnd.shuffle([2, 3, 4, 5, 6, 7]).slice(0, 4).sort((a, b) => a - b); // 8-10 are kept for the secret wing
   cols.forEach((i, k) => { const r = mk(colOf(i), k % 2 ? 0 : 2); r.side = true; r.from = main[i]; sides.push(r); });
+  // the SECRET WING above room gw-3: a twin-eye gate, the elder wyrm pair, and a loot room beyond them
+  const wingFrom = main[gw - 3]; const fight = mk(colOf(gw - 3), 0), loot = mk(colOf(gw - 2), 0);
+  for (const r of [fight, loot]) { r.side = true; r.wing = true; r.from = wingFrom; }
   for (const r of Object.values(rooms)) for (let y = r.ry * DSY + 1; y < r.ry * DSY + DSY; y++) for (let x = r.rx * DSX + 1; x < r.rx * DSX + DSX; x++) L.set(x, y, TL.CFLOOR);
   const heat = (r) => (r.side ? main.indexOf(r.from) : main.indexOf(r)) / (gw - 1); // 0 at the way in, 1 at the frontier
   // doors: along the run (a little up or down so it isn't a perfect straight line), and up or down into the side rooms
   for (let i = 0; i < gw - 1; i++) { const a = main[i], b = main[i + 1]; const x = Math.max(a.rx, b.rx) * DSX, c = DSY + 4 + rnd.range(-1, 1); for (let y = c - 1; y <= c + 1; y++) L.set(x, y, TL.CFLOOR); a.links[b.id] = b.links[a.id] = 1; a.children.push(b); }
   for (const r of sides) { const y = r.ry === 0 ? DSY : 2 * DSY; for (let x = r.rx * DSX + 5; x <= r.rx * DSX + 7; x++) L.set(x, y, TL.CFLOOR); r.links[r.from.id] = r.from.links[r.id] = 1; }
+  { const x = Math.max(fight.rx, loot.rx) * DSX; for (let y = 3; y <= 5; y++) L.set(x, y, TL.CFLOOR); fight.links[loot.id] = loot.links[fight.id] = 1; fight.links[wingFrom.id] = wingFrom.links[fight.id] = 1; }
   // the look, room by room
   for (const r of Object.values(rooms)) {
     const t = heat(r), x0 = r.rx * DSX, y0 = r.ry * DSY;
@@ -138,9 +142,16 @@ function genTunnel(W, biome, rnd) {
   main.forEach((r, i) => { const t = heat(r); r.tier = 2 + Math.round(t); if (i === 0 || i === gw - 1) return; const n = 2 + rnd.int(2); for (let k = 0; k < n; k++) r.enemies.push(rnd.pick(rnd() < t ? late : early)); });
   // the miniboss: two wyrmlings at once (Mossy Hollow's frost pair on the cold road, Emberforge's magma pair on the ember road),
   // two rooms before the far end. Beat them for a heart piece.
-  const mb = main[gw - 3]; mb.enemies = snow ? ['wyrm_elder_frost', 'wyrm_elder_frost'] : ['wyrm_elder', 'wyrm_elder']; mb.reward = 'hpiece'; mb.miniboss = true; mb.at = [[3.5, 4.5], [9.5, 4.5]]; // elder wyrmlings (enemies/wyrm.js), one at each end of the room
-  for (const r of sides) { const t = heat(r); r.tier = 2 + Math.round(t); r.reward = rnd.pick(['gems30', 'heart', 'bomb', 'gems50', 'arrows']); for (let k = 0; k < 2; k++) r.enemies.push(rnd.pick(rnd() < t ? late : early)); }
+  const mb = fight; mb.enemies = snow ? ['wyrm_elder_frost', 'wyrm_elder_frost'] : ['wyrm_elder', 'wyrm_elder']; mb.reward = 'hpiece'; mb.miniboss = true; mb.at = [[3.5, 4.5], [9.5, 4.5]]; // elder wyrmlings (enemies/wyrm.js), one at each end of the room
+  // the loot beyond them: a scroll worth the trouble, and a fat purse
+  loot.stash = [{ item: snow ? 'tripleshot' : 'quiver50', x: 5.5, y: 4.5 }, { item: 'gems100', x: 7.5, y: 4.5 }]; loot.tier = 3;
+  for (const r of sides) { if (r.wing) continue; const t = heat(r); r.tier = 2 + Math.round(t); r.reward = rnd.pick(['gems30', 'heart', 'bomb', 'gems50', 'arrows']); for (let k = 0; k < 2; k++) r.enemies.push(rnd.pick(rnd() < t ? late : early)); }
   L.rooms = rooms; L.startRoom = main[0];
+  // the twin-eye gate into the secret wing: the gate in the middle of the wall, an eye three steps to each side (gimmicks/twingate.js)
+  { const x0 = wingFrom.rx * DSX, y = DSY; const gate = L.idx(x0 + 6, y), eyes = [L.idx(x0 + 3, y), L.idx(x0 + 9, y)];
+    L.tiles[gate] = TL.TWINGATE; for (const i of eyes) L.tiles[i] = TL.EYE; L.eyeLinks = L.eyeLinks || {}; for (const i of eyes) L.eyeLinks[i] = { kind: 'twin', gate };
+    L.twinGates = [{ gate, eyes, openTo: TL.CFLOOR }];
+    const si = L.idx(x0 + 1, DSY + 1); L.props[si] = PR.SIGN; L.signText[si] = 'THE GATE OPENS ONLY WHEN IT IS NOT SEEN.'; }
   // the ends: an archway out at each end, with the step in front of it
   const endAt = (r, frontier) => { const outward = (frontier ? (snow ? -1 : 1) : (snow ? 1 : -1)); const x = outward < 0 ? r.rx * DSX : (r.rx + 1) * DSX; const y = DSY + 4; L.set(x, y, TL.CEXIT); L.set(x - outward, y, TL.EXIT); return { x: x - outward, y, inX: x - outward * 2 + 0.5, a: outward < 0 ? 0 : Math.PI }; };
   const inEnd = endAt(main[0], false), outEnd = endAt(main[gw - 1], true);

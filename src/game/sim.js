@@ -49,6 +49,7 @@ const DUMMY_RESET = 3; // a training dummy heals (and gets its armor back) after
 const fmtDmg = (n) => String(Math.round(n * 100) / 100);
 const DISARM_STAGGER = 1.2;
 const KNIGHT_WINDUP = 0.45; // seconds a sword knight raises its blade before the counter lands (your cue to back off) // seconds a disarmed foe reels
+const TWIN_EYE_TIME = 1.2; // seconds a twin-eye gate's eye stays shut (content/gimmicks/twingate.js)
 const GOURD_REGROW = 40; // seconds before a split gourd can grow back (and only with nobody within 6 tiles)
 // how many bombs you can carry: 1 without a bag, 8 with the Bramble Keep bag, 16 with the second one (sold in a grotto)
 const bombCap = (p) => p.items.bombbag2 ? 16 : p.items.bombbag ? 8 : 1;
@@ -147,6 +148,10 @@ class Sim {
   hitEye(L, idx, forGood) {
     const link = L.eyeLinks && L.eyeLinks[idx]; if (!link) return; const t = L.tiles[idx]; const x = idx % L.w + 0.5, y = Math.floor(idx / L.w) + 0.5;
     if (link.kind === 'timed') { this.rigShots[L.id + ':' + link.rid] = forGood ? Infinity : this.time; if (forGood) this.msg('THE EYE IS SEALED SHUT.'); this.sfx('eyeshut', L.id, x, y); return; } // shooting it again keeps it shut longer
+    if (link.kind === 'twin') { // a twin-eye gate's eye: shut for a moment (or for good, with a bomb arrow); updateTwinGates does the rest
+      if (forGood) this.setTile(L.id, idx, TL.EYE_SHUT); else this.setTempTile(L.id, idx, TL.EYE_SHUT, TWIN_EYE_TIME);
+      this.sfx('eyeshut', L.id, x, y); this.updateTwinGates(L); return;
+    }
     if (link.kind === 'seal' && !TINFO[t].shut) {
       this.setTile(L.id, idx, TINFO[t].small ? TL.EYE_SMALL_SHUT : TL.EYE_SHUT); this.sfx('eyeshut', L.id, x, y);
       for (const o of link.opens || []) this.setTile(L.id, o, link.openTo != null ? link.openTo : TL.OPENDOOR);
@@ -673,6 +678,15 @@ class Sim {
     this.tempTiles.push({ lvl, i, orig: L.tiles[i], tile, at: this.time + dur }); this.setTile(lvl, i, tile);
   }
   updateTempTiles() { if (!this.tempTiles.length) return; this.tempTiles = this.tempTiles.filter(t => { if (this.time < t.at) return true; const L = this.W.levels[t.lvl]; if (L.tiles[t.i] === t.tile) this.setTile(t.lvl, t.i, t.orig); return false; }); }
+  // twin-eye gates: closed with no eye shut, half raised with one, and open for good once both are shut at the same time
+  updateTwinGates(only) {
+    for (const L of only ? [only] : Object.values(this.W.levels)) for (const g of L.twinGates || []) {
+      const cur = L.tiles[g.gate]; if (!TINFO[cur].twinGate) continue; // already open
+      const shut = g.eyes.filter(i => TINFO[L.tiles[i]].shut).length;
+      if (shut >= 2) { this.setTile(L.id, g.gate, g.openTo); for (const i of g.eyes) { this.tempTiles = this.tempTiles.filter(t => !(t.lvl === L.id && t.i === i)); this.setTile(L.id, i, TL.EYE_SHUT); } this.sfx('secret', L.id); this.msg('THE GATE GRINDS ALL THE WAY UP!'); continue; }
+      const want = shut ? TL.TWINGATE_HALF : TL.TWINGATE; if (cur !== want) { this.setTile(L.id, g.gate, want); this.sfx(shut ? 'door' : 'clank', L.id, g.gate % L.w + 0.5, Math.floor(g.gate / L.w) + 0.5); }
+    }
+  }
   updateGourds() {
     if (!this.gourdRegrow.length) return;
     this.gourdRegrow = this.gourdRegrow.filter(g => {
@@ -865,7 +879,7 @@ class Sim {
     if (d.team) for (const o of Object.values(this.players)) d.give(this, o, ctx); else d.give(this, p, ctx);
   }
   tick(dt) {
-    this.update(dt); this.updateGourds(); this.updateTempTiles();
+    this.update(dt); this.updateGourds(); this.updateTempTiles(); this.updateTwinGates();
     if (this.pendingExit && this.time > this.pendingExit.at) {
       const L = this.W.levels[this.pendingExit.lvl];
       for (const p of Object.values(this.players)) if (p.lvl === L.id) { p.alive = true; p.hp = p.maxHp; this.teleport(p, 'ow', L.exit.x, L.exit.y, L.exit.a); }

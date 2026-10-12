@@ -2868,6 +2868,29 @@ defineGimmick('statues', {
 });
 
 })();
+// ---- src/content/gimmicks/twingate.js ----
+(function () {
+// ===== content/gimmicks/twingate.js : the twin-eye gate =====
+// A portcullis with an eye set in the wall on each side of it. An arrow in one eye heaves the gate half way up; it only
+// opens if BOTH eyes are shut at the same moment. Each eye snaps open again after TWIN_EYE_TIME seconds (short!), so
+// alone you need to be very quick, or seal one for good with a bomb arrow first. Easy with a friend: shoot together.
+// Once open it stays open. Used for the secret wing of each frontier tunnel (game/world.js genTunnel).
+// The logic lives in game/sim.js (hitEye 'twin', updateTwinGates); the layout in L.twinGates = [{ gate, eyes, openTo }].
+'use strict';
+const gateTex = (raised) => (x, y, r, th, ctx) => {
+  const frame = x < 3 || x > 28 || y < 3; if (frame) return ctx.vary(th.wall || [110, 104, 98], x, y, 0.1);
+  const gap = raised && y > 17; if (gap) return y > 29 ? [20, 16, 14] : [8, 6, 8]; // half raised: dark space under the bars
+  const by = raised ? y + 14 : y; // the bars, shifted up when raised
+  const bar = (x % 6) < 2, rail = (by % 10) < 2; if (bar || rail) return ctx.vary([150, 146, 160], x, y, 0.12);
+  if (raised && y > 15 && y <= 17) return [150, 140, 120]; // the spiked bottom edge
+  return [16, 12, 16];
+};
+defineTexture('twingate', gateTex(false), { themed: true });
+defineTexture('twingate_half', gateTex(true), { themed: true });
+defineTile('TWINGATE', { solid: true, wall: 'twingate', twinGate: true });
+defineTile('TWINGATE_HALF', { solid: true, wall: 'twingate_half', twinGate: true });
+
+})();
 // ---- src/content/gimmicks/vents.js ----
 (function () {
 // ===== content/gimmicks/vents.js : fire vents that blow on a shared rhythm (sim.ventPhase: cool, glowing, blowing) =====
@@ -4611,13 +4634,17 @@ function genTunnel(W, biome, rnd) {
   // the run: room 0 at the main-land end, room gw-1 at the frontier end (west for the snow, east for the ash)
   const colOf = (i) => snow ? gw - 1 - i : i; const main = [];
   for (let i = 0; i < gw; i++) main.push(mk(colOf(i), 1));
-  const sides = []; const cols = rnd.shuffle([2, 3, 4, 5, 6, 7, 8, 9]).slice(0, 4).sort((a, b) => a - b);
+  const sides = []; const cols = rnd.shuffle([2, 3, 4, 5, 6, 7]).slice(0, 4).sort((a, b) => a - b); // 8-10 are kept for the secret wing
   cols.forEach((i, k) => { const r = mk(colOf(i), k % 2 ? 0 : 2); r.side = true; r.from = main[i]; sides.push(r); });
+  // the SECRET WING above room gw-3: a twin-eye gate, the elder wyrm pair, and a loot room beyond them
+  const wingFrom = main[gw - 3]; const fight = mk(colOf(gw - 3), 0), loot = mk(colOf(gw - 2), 0);
+  for (const r of [fight, loot]) { r.side = true; r.wing = true; r.from = wingFrom; }
   for (const r of Object.values(rooms)) for (let y = r.ry * DSY + 1; y < r.ry * DSY + DSY; y++) for (let x = r.rx * DSX + 1; x < r.rx * DSX + DSX; x++) L.set(x, y, TL.CFLOOR);
   const heat = (r) => (r.side ? main.indexOf(r.from) : main.indexOf(r)) / (gw - 1); // 0 at the way in, 1 at the frontier
   // doors: along the run (a little up or down so it isn't a perfect straight line), and up or down into the side rooms
   for (let i = 0; i < gw - 1; i++) { const a = main[i], b = main[i + 1]; const x = Math.max(a.rx, b.rx) * DSX, c = DSY + 4 + rnd.range(-1, 1); for (let y = c - 1; y <= c + 1; y++) L.set(x, y, TL.CFLOOR); a.links[b.id] = b.links[a.id] = 1; a.children.push(b); }
   for (const r of sides) { const y = r.ry === 0 ? DSY : 2 * DSY; for (let x = r.rx * DSX + 5; x <= r.rx * DSX + 7; x++) L.set(x, y, TL.CFLOOR); r.links[r.from.id] = r.from.links[r.id] = 1; }
+  { const x = Math.max(fight.rx, loot.rx) * DSX; for (let y = 3; y <= 5; y++) L.set(x, y, TL.CFLOOR); fight.links[loot.id] = loot.links[fight.id] = 1; fight.links[wingFrom.id] = wingFrom.links[fight.id] = 1; }
   // the look, room by room
   for (const r of Object.values(rooms)) {
     const t = heat(r), x0 = r.rx * DSX, y0 = r.ry * DSY;
@@ -4641,9 +4668,16 @@ function genTunnel(W, biome, rnd) {
   main.forEach((r, i) => { const t = heat(r); r.tier = 2 + Math.round(t); if (i === 0 || i === gw - 1) return; const n = 2 + rnd.int(2); for (let k = 0; k < n; k++) r.enemies.push(rnd.pick(rnd() < t ? late : early)); });
   // the miniboss: two wyrmlings at once (Mossy Hollow's frost pair on the cold road, Emberforge's magma pair on the ember road),
   // two rooms before the far end. Beat them for a heart piece.
-  const mb = main[gw - 3]; mb.enemies = snow ? ['wyrm_elder_frost', 'wyrm_elder_frost'] : ['wyrm_elder', 'wyrm_elder']; mb.reward = 'hpiece'; mb.miniboss = true; mb.at = [[3.5, 4.5], [9.5, 4.5]]; // elder wyrmlings (enemies/wyrm.js), one at each end of the room
-  for (const r of sides) { const t = heat(r); r.tier = 2 + Math.round(t); r.reward = rnd.pick(['gems30', 'heart', 'bomb', 'gems50', 'arrows']); for (let k = 0; k < 2; k++) r.enemies.push(rnd.pick(rnd() < t ? late : early)); }
+  const mb = fight; mb.enemies = snow ? ['wyrm_elder_frost', 'wyrm_elder_frost'] : ['wyrm_elder', 'wyrm_elder']; mb.reward = 'hpiece'; mb.miniboss = true; mb.at = [[3.5, 4.5], [9.5, 4.5]]; // elder wyrmlings (enemies/wyrm.js), one at each end of the room
+  // the loot beyond them: a scroll worth the trouble, and a fat purse
+  loot.stash = [{ item: snow ? 'tripleshot' : 'quiver50', x: 5.5, y: 4.5 }, { item: 'gems100', x: 7.5, y: 4.5 }]; loot.tier = 3;
+  for (const r of sides) { if (r.wing) continue; const t = heat(r); r.tier = 2 + Math.round(t); r.reward = rnd.pick(['gems30', 'heart', 'bomb', 'gems50', 'arrows']); for (let k = 0; k < 2; k++) r.enemies.push(rnd.pick(rnd() < t ? late : early)); }
   L.rooms = rooms; L.startRoom = main[0];
+  // the twin-eye gate into the secret wing: the gate in the middle of the wall, an eye three steps to each side (gimmicks/twingate.js)
+  { const x0 = wingFrom.rx * DSX, y = DSY; const gate = L.idx(x0 + 6, y), eyes = [L.idx(x0 + 3, y), L.idx(x0 + 9, y)];
+    L.tiles[gate] = TL.TWINGATE; for (const i of eyes) L.tiles[i] = TL.EYE; L.eyeLinks = L.eyeLinks || {}; for (const i of eyes) L.eyeLinks[i] = { kind: 'twin', gate };
+    L.twinGates = [{ gate, eyes, openTo: TL.CFLOOR }];
+    const si = L.idx(x0 + 1, DSY + 1); L.props[si] = PR.SIGN; L.signText[si] = 'THE GATE OPENS ONLY WHEN IT IS NOT SEEN.'; }
   // the ends: an archway out at each end, with the step in front of it
   const endAt = (r, frontier) => { const outward = (frontier ? (snow ? -1 : 1) : (snow ? 1 : -1)); const x = outward < 0 ? r.rx * DSX : (r.rx + 1) * DSX; const y = DSY + 4; L.set(x, y, TL.CEXIT); L.set(x - outward, y, TL.EXIT); return { x: x - outward, y, inX: x - outward * 2 + 0.5, a: outward < 0 ? 0 : Math.PI }; };
   const inEnd = endAt(main[0], false), outEnd = endAt(main[gw - 1], true);
@@ -5237,6 +5271,7 @@ const DUMMY_RESET = 3; // a training dummy heals (and gets its armor back) after
 const fmtDmg = (n) => String(Math.round(n * 100) / 100);
 const DISARM_STAGGER = 1.2;
 const KNIGHT_WINDUP = 0.45; // seconds a sword knight raises its blade before the counter lands (your cue to back off) // seconds a disarmed foe reels
+const TWIN_EYE_TIME = 1.2; // seconds a twin-eye gate's eye stays shut (content/gimmicks/twingate.js)
 const GOURD_REGROW = 40; // seconds before a split gourd can grow back (and only with nobody within 6 tiles)
 // how many bombs you can carry: 1 without a bag, 8 with the Bramble Keep bag, 16 with the second one (sold in a grotto)
 const bombCap = (p) => p.items.bombbag2 ? 16 : p.items.bombbag ? 8 : 1;
@@ -5335,6 +5370,10 @@ class Sim {
   hitEye(L, idx, forGood) {
     const link = L.eyeLinks && L.eyeLinks[idx]; if (!link) return; const t = L.tiles[idx]; const x = idx % L.w + 0.5, y = Math.floor(idx / L.w) + 0.5;
     if (link.kind === 'timed') { this.rigShots[L.id + ':' + link.rid] = forGood ? Infinity : this.time; if (forGood) this.msg('THE EYE IS SEALED SHUT.'); this.sfx('eyeshut', L.id, x, y); return; } // shooting it again keeps it shut longer
+    if (link.kind === 'twin') { // a twin-eye gate's eye: shut for a moment (or for good, with a bomb arrow); updateTwinGates does the rest
+      if (forGood) this.setTile(L.id, idx, TL.EYE_SHUT); else this.setTempTile(L.id, idx, TL.EYE_SHUT, TWIN_EYE_TIME);
+      this.sfx('eyeshut', L.id, x, y); this.updateTwinGates(L); return;
+    }
     if (link.kind === 'seal' && !TINFO[t].shut) {
       this.setTile(L.id, idx, TINFO[t].small ? TL.EYE_SMALL_SHUT : TL.EYE_SHUT); this.sfx('eyeshut', L.id, x, y);
       for (const o of link.opens || []) this.setTile(L.id, o, link.openTo != null ? link.openTo : TL.OPENDOOR);
@@ -5861,6 +5900,15 @@ class Sim {
     this.tempTiles.push({ lvl, i, orig: L.tiles[i], tile, at: this.time + dur }); this.setTile(lvl, i, tile);
   }
   updateTempTiles() { if (!this.tempTiles.length) return; this.tempTiles = this.tempTiles.filter(t => { if (this.time < t.at) return true; const L = this.W.levels[t.lvl]; if (L.tiles[t.i] === t.tile) this.setTile(t.lvl, t.i, t.orig); return false; }); }
+  // twin-eye gates: closed with no eye shut, half raised with one, and open for good once both are shut at the same time
+  updateTwinGates(only) {
+    for (const L of only ? [only] : Object.values(this.W.levels)) for (const g of L.twinGates || []) {
+      const cur = L.tiles[g.gate]; if (!TINFO[cur].twinGate) continue; // already open
+      const shut = g.eyes.filter(i => TINFO[L.tiles[i]].shut).length;
+      if (shut >= 2) { this.setTile(L.id, g.gate, g.openTo); for (const i of g.eyes) { this.tempTiles = this.tempTiles.filter(t => !(t.lvl === L.id && t.i === i)); this.setTile(L.id, i, TL.EYE_SHUT); } this.sfx('secret', L.id); this.msg('THE GATE GRINDS ALL THE WAY UP!'); continue; }
+      const want = shut ? TL.TWINGATE_HALF : TL.TWINGATE; if (cur !== want) { this.setTile(L.id, g.gate, want); this.sfx(shut ? 'door' : 'clank', L.id, g.gate % L.w + 0.5, Math.floor(g.gate / L.w) + 0.5); }
+    }
+  }
   updateGourds() {
     if (!this.gourdRegrow.length) return;
     this.gourdRegrow = this.gourdRegrow.filter(g => {
@@ -6053,7 +6101,7 @@ class Sim {
     if (d.team) for (const o of Object.values(this.players)) d.give(this, o, ctx); else d.give(this, p, ctx);
   }
   tick(dt) {
-    this.update(dt); this.updateGourds(); this.updateTempTiles();
+    this.update(dt); this.updateGourds(); this.updateTempTiles(); this.updateTwinGates();
     if (this.pendingExit && this.time > this.pendingExit.at) {
       const L = this.W.levels[this.pendingExit.lvl];
       for (const p of Object.values(this.players)) if (p.lvl === L.id) { p.alive = true; p.hp = p.maxHp; this.teleport(p, 'ow', L.exit.x, L.exit.y, L.exit.a); }

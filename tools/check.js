@@ -719,18 +719,36 @@ attempt('frontier tunnels', () => {
     const rooms = Object.values(T.rooms).filter(r => !r.side).sort((a, c) => a.heat - c.heat);
     const themed = (r) => { let n = 0, all = 0; for (let y = r.ry * DSY; y <= r.ry * DSY + DSY; y++) for (let x = r.rx * DSX; x <= r.rx * DSX + DSX; x++) { const t = T.get(x, y); all++; if ([TL.ICEWALL, TL.SNOW, TL.ICE, TL.BASALT, TL.ASH, TL.LAVA].includes(t)) n++; } return n / all; };
     __ok(themed(rooms[rooms.length - 1]) > themed(rooms[1]) + 0.3, b + ': the far end is much ' + (b === 'snow' ? 'colder' : 'hotter') + ' (' + themed(rooms[1]).toFixed(2) + ' -> ' + themed(rooms[rooms.length - 1]).toFixed(2) + ')');
-    __ok(Object.values(T.rooms).filter(r => r.side).every(r => r.reward), b + ': every side room guards a prize');
+    __ok(Object.values(T.rooms).filter(r => r.side && !r.wing).every(r => r.reward), b + ': every side room guards a prize');
     const mbr = Object.values(T.rooms).find(r => r.miniboss); __ok(mbr && mbr.enemies.length === 2 && mbr.enemies.every(t => enemyDef(t).boss && /^wyrm_elder/.test(t)) && mbr.reward === 'hpiece', b + ': a pair of elder wyrmlings guards a heart piece');
     __ok(Object.values(T.rooms).every(r => r.enemies.every(t => t !== 'skeleton' && t !== 'slime')), b + ': skeletons here are always armored');
-    sim.teleport(p, T.id, mbr.rx * DSX + 1.5, DSY + 4.5, 0); sim.tick(1 / 60); __ok(sim.ents.filter(e => e.k === 'en' && e.lvl === T.id && !e.dead && enemyDef(e.type).boss).length === 2, b + ': both wyrmlings show up together');
+    sim.teleport(p, T.id, mbr.rx * DSX + 1.5, mbr.ry * DSY + 4.5, 0); sim.tick(1 / 60); __ok(sim.ents.filter(e => e.k === 'en' && e.lvl === T.id && !e.dead && enemyDef(e.type).boss).length === 2, b + ': both wyrmlings show up together');
     for (const e of sim.ents) if (e.k === 'en' && e.lvl === T.id) e.dead = true; sim.tick(1 / 60); sim.tick(1 / 60); __ok(sim.ents.some(e => e.k === 'pick' && e.item === 'hpiece' && e.lvl === T.id), b + ': beating them drops the heart piece');
     // walking in wakes a room's foes
     const mid = rooms[6]; sim.teleport(p, T.id, mid.rx * DSX + 6.5, DSY + 4.5, 0); sim.tick(1 / 60); __ok(sim.ents.some(e => e.k === 'en' && e.lvl === T.id && !e.dead), b + ': foes in the rooms');
   }
 });
+attempt('twin-eye gates', () => {
+  const sim = freshSim(); const p = sim.players.p1; p.god = true; p.items.bow = true; p.arrows = 30; p.bombs = 5; p.items.bombarrow = true;
+  for (const b of ['snow', 'ash']) {
+    const T = sim.W.levels['t' + b]; const g = T.twinGates[0]; const [e1, e2] = g.eyes; const gx = g.gate % T.w, gy = Math.floor(g.gate / T.w);
+    __ok(T.tiles[g.gate] === TL.TWINGATE && g.eyes.every(i => T.tiles[i] === TL.EYE), b + ': a closed gate between two eyes');
+    const wing = Object.values(T.rooms).filter(r => r.wing); __ok(wing.length === 2 && wing.some(r => r.miniboss) && wing.some(r => (r.stash || []).length >= 2), b + ': behind it the wyrm pair and a loot room');
+    sim.teleport(p, T.id, gx + 0.5, gy + 3.5, -Math.PI / 2);
+    sim.hitEye(T, e1, false); __ok(T.tiles[g.gate] === TL.TWINGATE_HALF, b + ': one eye: half way up');
+    sim.time += TWIN_EYE_TIME + 0.1; sim.updateTempTiles(); sim.updateTwinGates(); __ok(T.tiles[e1] === TL.EYE && T.tiles[g.gate] === TL.TWINGATE, b + ': too slow: the eye opens and the gate drops');
+    const save = sim.makeSave(); __ok(!save.mods[T.id] || !save.mods[T.id][e1] || save.mods[T.id][e1][0] === TL.EYE, b + ': a save never keeps an eye shut by a plain arrow');
+    sim.hitEye(T, e1, false); sim.time += 0.5; sim.updateTempTiles(); sim.hitEye(T, e2, false); __ok(T.tiles[g.gate] === TL.CFLOOR, b + ': both at once: open');
+    sim.time += 5; sim.updateTempTiles(); sim.updateTwinGates(); __ok(T.tiles[g.gate] === TL.CFLOOR && g.eyes.every(i => T.tiles[i] === TL.EYE_SHUT), b + ': and it stays open');
+  }
+  // alone: a bomb arrow seals one for good, then a plain arrow in the other opens it
+  const sim2 = freshSim(); const T = sim2.W.levels.tsnow; const g = T.twinGates[0];
+  sim2.hitEye(T, g.eyes[0], true); sim2.time += 10; sim2.updateTempTiles(); sim2.updateTwinGates(); __ok(T.tiles[g.eyes[0]] === TL.EYE_SHUT && T.tiles[g.gate] === TL.TWINGATE_HALF, 'a bomb arrow keeps one eye shut (gate half up)');
+  sim2.hitEye(T, g.eyes[1], false); __ok(T.tiles[g.gate] === TL.CFLOOR, 'then one arrow in the other opens it');
+});
 attempt('elder wyrmlings', () => {
   const sim = freshSim(); const p = sim.players.p1; p.god = false; p.hp = p.maxHp = 60; const T = sim.W.levels.tsnow; const mb = Object.values(T.rooms).find(r => r.miniboss);
-  sim.teleport(p, T.id, mb.rx * DSX + 6.5, DSY + 4.5, 0); sim.tick(1 / 60);
+  sim.teleport(p, T.id, mb.rx * DSX + 6.5, mb.ry * DSY + 4.5, 0); sim.tick(1 / 60);
   const ws = sim.ents.filter(e => e.k === 'en' && e.lvl === T.id && e.type === 'wyrm_elder_frost'); __ok(ws.length === 2, 'two elder frost wyrms');
   for (const w of ws) { w.spawnFx = 0; w.chargeIn = 99; } p.inv = 99; // no charging yet, and keep the hero alive
   for (let i = 0; i < 180; i++) for (const w of ws) sim.updateEnemy(w, 1 / 60);
@@ -748,7 +766,7 @@ attempt('elder wyrmlings', () => {
   a.tm = 0; a.n = 0; a.chargeIn = 99; for (const e of sim.ents) if (e.k === 'proj') e.dead = true; sim.ents = sim.ents.filter(e => !e.dead); sim.updateEnemy(a, 1 / 60); __ok(sim.ents.filter(e => e.k === 'proj' && e.owner === 'e').length === 5, 'five shots now');
   // ember rain on the magma road: shadows, then burning splashes that hurt
   const sim2 = freshSim(); const q = sim2.players.p1; q.god = false; q.hp = q.maxHp = 60; const T2 = sim2.W.levels.tash; const mb2 = Object.values(T2.rooms).find(r => r.miniboss);
-  sim2.teleport(q, T2.id, mb2.rx * DSX + 6.5, DSY + 4.5, 0); sim2.tick(1 / 60); const m = sim2.ents.find(e => e.k === 'en' && e.type === 'wyrm_elder'); m.spawnFx = 0; m.chargeIn = 99; m.n = 2; m.tm = 0; m.init = true;
+  sim2.teleport(q, T2.id, mb2.rx * DSX + 6.5, mb2.ry * DSY + 4.5, 0); sim2.tick(1 / 60); const m = sim2.ents.find(e => e.k === 'en' && e.type === 'wyrm_elder'); m.spawnFx = 0; m.chargeIn = 99; m.n = 2; m.tm = 0; m.init = true;
   sim2.updateEnemy(m, 1 / 60); const blobs = sim2.ents.filter(e => e.k === 'emberblob'); __ok(blobs.length === 3 && sim2.ents.some(e => e.spr === 'shadowring'), 'ember rain: three blobs, each with a shadow');
   q.inv = 0; const hp0 = q.hp; for (let i = 0; i < 90; i++) for (const e of sim2.ents.slice()) if (e.k === 'emberblob') sim2.updateEnt(e, 1 / 60);
   __ok(q.hp < hp0, 'the one aimed at you lands on you'); __ok(T2.tiles[T2.idx(Math.floor(q.x), Math.floor(q.y))] === TL.LAVA, 'and leaves a burning splash');
