@@ -99,6 +99,7 @@ Read this first in a new chat. It's the context from the long first build sessio
   - Heavy Pommel (scroll `heavypommel`): pommel strikes also strip armor, and disarm foes with `def.disarm` (knights lose their shield, wizards their staff): `disarmEnemy` tosses a `tossed` entity, then `def.disarmedSprite` and `def.disarmedAi` take over. Disarmed knights can't block and charge faster; disarmed wizards can't cast and blink away.
   - Armored foes (armor > 0) are never stunned by the pommel; the armor takes the blow.
   - Sword beams: other swords need full health, one at a time. The Dawnblade's beam flies at any health, up to 3 at once.
+  - Every sword swing lands, even on a foe that was just hit (swings ignore the 0.35 s hit protection; projectiles don't).
   - Backswing: every third sword hit in a chain (hits under 2 s apart) readies a backswing. It fires on the first hit that leaves a foe standing (a kill saves it), cutting that foe again 0.14 s later.
 - **Armor** (`def.armor` 0-3, `e.armor`, `stripArmor` in sim.js): 25% less damage per level. Bombs (and bomb arrows) and the Heavy Pommel knock one level off with no damage, each only once per foe (`e.stripped`); a repeat just clanks. Armored skeletons `skeleton_a1..3` are debug-spawner only so far; their sprite loses greaves and gauntlets, then helmet, then breastplate.
 - **Gourds and breakables** (`content/gourds.js`, `breakGourd`/`updateGourds` in sim.js, `placeGourds` in world.js): low props you walk over. Only a pommel strike (or a monk punch, marked TODO for his rework) splits one. Bramble Keep's powder gourds drop a bomb; coral, slag, bone piles and crystals elsewhere sometimes drop gems or a heart. They grow back 40 s later once nobody is within 6 tiles, and a save never keeps one broken.
@@ -124,7 +125,7 @@ Read this first in a new chat. It's the context from the long first build sessio
   - Title DEBUG loadout, and EVERYTHING (Dawnblade, all items, relics, shards, god mode).
   - Pause menu: DEBUG ON/OFF, GOD MODE (god mode does triple damage), MAP HERE / COMPASS HERE, and a warp list.
   - Warp Stone (hops between dungeons) and Boss Bell (cycles 12, 9, 10, 11).
-  - Pause menu also has TEST ZONE (level `dbg` from `genTestZone` in world.js: a strip of every hazard, an eye moat, a sealed eye, a bomb wall, vents and open floor), SPAWN A FOE (any enemy plus an elite), and BOSS ROOMS (warp into any boss room).
+  - Pause menu also has TEST ZONE (level `dbg` from `genTestZone` in world.js: a strip of every hazard, an eye moat, a sealed eye, a bomb wall, vents and open floor), SPAWN A FOE (any enemy plus an elite), and BOSS ROOMS (warp into any boss room). The test zone also has two training dummies (`content/enemies/dummy.js`, `L.dummies`): they show each hit's damage and the running total, never move or hurt you, and heal (and re-armor) after 3 s.
 - **Networking:**
   - PeerJS with 5-character join codes. ICE servers: 1 Google STUN plus Metered's public openrelay.
   - Mitch decided not to run his own relay; never ask for or embed the Metered secret key.

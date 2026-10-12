@@ -2123,6 +2123,7 @@ defineDropTable('common', 34, [
   { item: 'fairy', w: 2.5 },
   { item: 'arrow', w: 10.5, when: anyoneHas('bow') },
 ]);
+defineDropTable('none', 1, []); // drops nothing (training dummies)
 
 })();
 // ---- src/content/dungeons.js ----
@@ -3013,6 +3014,22 @@ headDef({
     special(sim, e) { for (let i = 0; i < 2; i++) sim.spawnMinion(e, 'bat'); } }),
   onDeath(sim, e) { lastHead(sim, e, 'THE HOLLOW HEAD FALLS... AND THE STOLEN LIGHT RETURNS.'); },
 });
+
+})();
+// ---- src/content/enemies/dummy.js ----
+(function () {
+// ===== content/enemies/dummy.js : training dummies for the test zone =====
+// They never move or hurt anyone, can't be knocked around, and every hit shows its damage (and the running total) above them.
+// After DUMMY_RESET seconds without a hit they heal up and get any armor back (game/sim.js). One plain, one in full armor.
+'use strict';
+const DUMMY_ROWS = [
+  '................', '......kkkk......', '.....kNNNNk.....', '.....kNkkNk.....', '.....kNNNNk.....', '......kNNk......', '..kkkkknnkkkkk..', '..kNNNNnnNNNNk..',
+  '..kkkkknnkkkkk..', '.....kNNNNk.....', '.....kNxxNk.....', '.....kNNNNk.....', '......kNNk......', '.......nn.......', '.......nn.......', '.....kknnkk.....'];
+const dummyAi = function (sim, e) { if (sim.time - (e.hitAt != null ? e.hitAt : -99) > DUMMY_RESET && (e.hp < e.maxHp || (enemyDef(e.type).armor || 0) !== (e.armor || 0))) { e.hp = e.maxHp; e.armor = enemyDef(e.type).armor || 0; e.stripped = {}; e.total = 0; } e.stun = 0; };
+defineEnemy({ id: 'dummy', title: 'TRAINING DUMMY', hp: 999, spd: 0, dmg: 0, r: 0.34, sc: 0.95, dummy: true, anchored: true, noElites: ['giant'], drops: 'none', spawns: {}, ai: dummyAi, sprite: DUMMY_ROWS });
+defineEnemy({ id: 'dummy_armored', title: 'ARMORED DUMMY', hp: 999, spd: 0, dmg: 0, r: 0.34, sc: 0.95, dummy: true, anchored: true, armor: 3, noElites: ['giant'], drops: 'none', spawns: {}, ai: dummyAi,
+  sprite: DUMMY_ROWS.map((r, y) => y >= 6 && y <= 11 ? r.replace(/N/g, 'G').replace(/x/g, 'g') : y >= 1 && y <= 4 ? r.replace(/N/g, 'g') : r),
+  sprFor: (e) => e.armor > 0 ? null : 'dummy' });
 
 })();
 // ---- src/content/enemies/frog.js ----
@@ -4366,6 +4383,7 @@ function genTestZone(W) {
   sign(18, 18, 'OPEN FLOOR: SPAWN FOES HERE FROM THE PAUSE MENU (DEBUG).');
   // a row of breakables (pommel strike: Shift + hold attack, let go); they grow back
   L.gourds = {}; [['GOURD', 3], ['CORAL', 5], ['SLAG', 7], ['BONEPILE', 9], ['CRYSTAL', 11]].forEach(([n, x]) => { if (PR[n] == null) return; const i = L.idx(x, 19); L.props[i] = PR[n]; L.gourds[i] = PR[n]; });
+  L.dummies = [['dummy', 13.5, 17.5], ['dummy_armored', 15.5, 17.5]]; sign(14, 19, 'TRAINING DUMMIES: EVERY HIT SHOWS ITS DAMAGE AND THE RUNNING TOTAL. THEY HEAL AFTER 3 SECONDS. THE RIGHT ONE WEARS FULL ARMOR.');
   sign(7, 21, 'GOURDS AND THE LIKE: ONLY A POMMEL STRIKE (SHIFT + HOLD ATTACK, THEN LET GO) SPLITS THEM.');
   L.set(18, h - 1, TL.CEXIT); L.set(18, h - 2, TL.EXIT); L.spawn = { x: 18.5, y: h - 3.5, a: -Math.PI / 2 };
   const ow = W.levels.ow; L.exit = { lvl: 'ow', x: ow.spawn.x, y: ow.spawn.y, a: ow.spawn.a };
@@ -4903,12 +4921,14 @@ const BACK_ANGLE = 2.1;
 // ARMOR (def.armor 0-3, e.armor now): each level blocks ARMOR_STEP of the damage. Bombs and the Heavy Pommel knock one level off
 // instead of hurting, but each of those ways only works once per foe (e.stripped), so a fight can't be just one trick.
 const ARMOR_STEP = 0.25;
+const DUMMY_RESET = 3; // a training dummy heals (and gets its armor back) after this many seconds without a hit
+const fmtDmg = (n) => String(Math.round(n * 100) / 100);
 const DISARM_STAGGER = 1.2; // seconds a disarmed foe reels
 const GOURD_REGROW = 40; // seconds before a split gourd can grow back (and only with nobody within 6 tiles)
 // how many bombs you can carry: 1 without a bag, 8 with the Bramble Keep bag, 16 with the second one (sold in a grotto)
 const bombCap = (p) => p.items.bombbag2 ? 16 : p.items.bombbag ? 8 : 1;
 // sword techniques: the pommel strike (reverse grip), the lunge's slashes, and the backswing on every third hit
-const POMMEL_DMG = 0.25, POMMEL_STUN = 2.5, CHAIN_GAP = 2, BACKSWING_DELAY = 0.14; // radians off a foe's facing that count as behind it (about 120 degrees)
+const POMMEL_DMG = 0.25, POMMEL_STUN = 2.5, CHAIN_GAP = 2, BACKSWING_DELAY = 0.2; // the backswing lands while the blade comes back (ui/main.js plays it right after the forward cut) // radians off a foe's facing that count as behind it (about 120 degrees)
 const SHIELD_STUN = 0.9; // seconds a knight reels after a loaded shot hits its shield
 const FREEZE_TIME = 6, FREEZE_PATH = 6; // seconds frost-arrow ice lasts; how many tiles of water one arrow freezes along its flight
 const HAZARD_TICK = 0.5, ICE_KB = 1.5, SHALLOW_SLOW = 0.75; // how often lava/spikes/vents burn a grounded enemy; how much harder hits shove enemies standing on ice
@@ -5067,7 +5087,8 @@ class Sim {
   teleport(p, lvl, x, y, a) {
     p.lvl = lvl; p.x = x; p.y = y; p.a = a; this.ev({ t: 'tp', pid: p.id, lvl, x, y, a });
     this.initLevel(lvl);
-    if (lvl === 'dbg') this.ev({ t: 'title', pid: p.id, text: 'TEST ZONE', sub: 'DEBUG' });
+    if (lvl === 'dbg') { this.ev({ t: 'title', pid: p.id, text: 'TEST ZONE', sub: 'DEBUG' }); // and its training dummies (world.js genTestZone L.dummies)
+      for (const [type, x, y] of (this.W.levels.dbg.dummies || [])) if (!this.ents.some(e => e.k === 'en' && e.lvl === 'dbg' && e.type === type && !e.dead)) { const d = this.spawnEnemy(type, 'dbg', x, y, {}); d.spawnFx = 0; d.f = Math.PI / 2; } }
     else if (lvl[0] === 'd') { const d = +lvl.slice(1); this.ev({ t: 'title', pid: p.id, text: d <= 9 ? 'LEVEL-' + d : dungeonName(d), sub: d <= 9 ? dungeonName(d) : (d === 12 ? 'THE LAST FLAME' : 'OPTIONAL DUNGEON') }); }
     if (lvl === 'ow') this.autosave = true;
   }
@@ -5373,7 +5394,7 @@ class Sim {
     if (e.dead) return;
     if (!skipAi) (e.disarmed && def.disarmedAi ? def.disarmedAi : def.ai)(this, e, dt, ctx);
     // contact damage
-    if ((elite && elite.noContact) || e.sub || e.air) return; // can't bite you from under the water or in mid-air
+    if ((elite && elite.noContact) || e.sub || e.air || !def.dmg) return; // can't bite you from under the water or in mid-air
     for (const pl of Object.values(this.players)) {
       if (!pl.alive || pl.lvl !== e.lvl || pl.inv > 0) continue;
       const rr = this.enemyRadius(e) + 0.28; if (dist2(pl.x, pl.y, e.x, e.y) < rr * rr) this.hurtPlayer(pl, def.dmg * (def.boss ? 1 : e.dmgMul), e);
@@ -5447,7 +5468,9 @@ class Sim {
     if (e.armor > 0) dmg *= 1 - ARMOR_STEP * Math.min(3, e.armor);
     if (def.onDamage && def.onDamage(this, e, dmg, opt) === false) return true;
     e.hp -= dmg; e.hurt = 0.35; this.sfx('hit', e.lvl, e.x, e.y); if (opt.pid) e.lastPid = opt.pid;
-    if (src && !def.boss) { const a = Math.atan2(e.y - src.y, e.x - src.x); const [v, t] = this.knockFor(e, def, 9 * (opt.kbMul || 1)); e.kb = [Math.cos(a) * v, Math.sin(a) * v]; e.kbT = t || 0.12; }
+    if (def.dummy) { e.total = (this.time - (e.hitAt != null ? e.hitAt : -99) < DUMMY_RESET ? e.total || 0 : 0) + dmg; this.ev({ t: 'pow', lvl: e.lvl, x: e.x, y: e.y, num: true, word: fmtDmg(dmg) + '  (' + fmtDmg(e.total) + ')' }); } // training dummy: show the numbers
+    e.hitAt = this.time;
+    if (src && !def.boss && !def.anchored) { const a = Math.atan2(e.y - src.y, e.x - src.x); const [v, t] = this.knockFor(e, def, 9 * (opt.kbMul || 1)); e.kb = [Math.cos(a) * v, Math.sin(a) * v]; e.kbT = t || 0.12; }
     if (e.hp <= 0) this.killEnemy(e, opt.pid);
     return true;
   }
@@ -5488,7 +5511,7 @@ class Sim {
         const def = enemyDef(e.type); const d = Math.sqrt(dist2(e.x, e.y, p.x, p.y));
         if (d > range + this.enemyRadius(e)) continue;
         const ang = Math.atan2(e.y - p.y, e.x - p.x); if (d > 0.5 && Math.abs(angDiff(p.a, ang)) > cone) continue;
-        if (this.damageEnemy(e, dmg, p, { pid: p.id, ignoreIframes: slash })) { hitAny = true; hits.push(e); }
+        if (this.damageEnemy(e, dmg, p, { pid: p.id, ignoreIframes: true })) { hitAny = true; hits.push(e); } // every swing lands (swings come every 0.3 s, faster than the 0.35 s a hit protects a foe)
         if (p.cls === 'monk' && a.kind === 'punch3' && !def.boss) { const [v, t] = this.knockFor(e, def, 14); e.kb = [Math.cos(p.a) * v, Math.sin(p.a) * v]; e.kbT = t || 0.2; e.stun = 0.5; }
       }
     }
@@ -5535,9 +5558,9 @@ class Sim {
   stripArmor(e, method, src) {
     if (!(e.armor > 0) || e.dead) return false; e.stripped = e.stripped || {};
     if (e.stripped[method]) { this.sfx('clank', e.lvl, e.x, e.y); return false; }
-    e.stripped[method] = true; e.armor--; e.hurt = 0.25;
+    e.stripped[method] = true; e.armor--; e.hurt = 0.25; e.hitAt = this.time; if (enemyDef(e.type).dummy) this.ev({ t: 'pow', lvl: e.lvl, x: e.x, y: e.y, num: true, word: 'ARMOR -1' });
     this.sfx('armor', e.lvl, e.x, e.y); this.spawn({ k: 'fx', lvl: e.lvl, x: e.x, y: e.y, spr: 'armorbits', life: 0.45, sc: 0.9, z: 0.3 });
-    if (src && !enemyDef(e.type).boss) { const a = Math.atan2(e.y - src.y, e.x - src.x); const [v, t] = this.knockFor(e, enemyDef(e.type), 6); e.kb = [Math.cos(a) * v, Math.sin(a) * v]; e.kbT = t || 0.12; }
+    if (src && !enemyDef(e.type).boss && !enemyDef(e.type).anchored) { const a = Math.atan2(e.y - src.y, e.x - src.x); const [v, t] = this.knockFor(e, enemyDef(e.type), 6); e.kb = [Math.cos(a) * v, Math.sin(a) * v]; e.kbT = t || 0.12; }
     return true;
   }
   // POMMEL STRIKE: little damage and a long stun on whatever's right in front of you. A shield still blocks it from the front.
@@ -6815,8 +6838,8 @@ function handleEvent(e) {
     case 'get': if (e.pid === me || e.all) { Lc.get = { item: e.item, text: (e.pid === me ? '' : '') + e.text, t: 2.2 }; sfx(e.item === 'shard' ? 'fanfare' : 'get'); if (e.item === 'fists' && e.pid === me) unlockMonk(); } break;
     case 'down': if (e.pid === me) { Lc.downT = 0; sfx('die'); } break;
     case 'monk': if (e.pid === me) { Lc.flash = 1; Lc.flashC = rgb(255, 255, 255); G.profile.cls = 'monk'; saveProfile(); setTimeout(() => showDialog('YOUR SWORD CLATTERS TO THE FLOOR. YOUR FISTS HUM WITH POWER. PUNCH WITH ATTACK. HOLD ATTACK TO CHARGE A STARFALL WAVE. [SPACE] FLASH STEP. EVERY ITEM YOU OWN... IS NOW SOMETHING ELSE.'), 1600); } break;
-    case 'backswing': if (e.pid === me) { Lc.swing = 0; Lc.swingDir = -1; Lc.swingFast = false; sfx('swing'); Lc.atkVis = 0.2; } break; // every third hit: the blade comes back the other way
-    case 'pow': if (e.lvl === Lc.lvl) Lc.pow.push({ x: e.x, y: e.y, t: 0, big: e.big, word: e.big ? ['KA-POW!', 'WHAM!', 'BOOM!'][Math.random() * 3 | 0] : ['POW!', 'BAM!', 'THWACK!', 'SMACK!'][Math.random() * 4 | 0] }); break;
+    case 'backswing': if (e.pid === me) { Lc.backQueued = true; Lc.swingFast = true; } break; // every third hit: the forward cut speeds up and the blade comes straight back (two fast cuts)
+    case 'pow': if (e.lvl === Lc.lvl) Lc.pow.push({ x: e.x, y: e.y, t: 0, big: e.big, num: e.num, word: e.word || (e.big ? ['KA-POW!', 'WHAM!', 'BOOM!'][Math.random() * 3 | 0] : ['POW!', 'BAM!', 'THWACK!', 'SMACK!'][Math.random() * 4 | 0]) }); break;
     case 'shake': if (e.lvl === Lc.lvl && dist2(e.x, e.y, Lc.x, Lc.y) < 64) Lc.shake = 0.35; break;
     case 'flash': if (e.pid === me) { Lc.flash = 0.4; Lc.flashC = c32(hexToRgb(e.c)); } break;
     case 'win': G.state = 'win'; musicPlay('final'); showScreen('winScreen'); $('winStats').textContent = 'SHARDS 8/8  -  ' + Object.values(G.snap ? G.snap.pl : []).length + ' HERO(ES)'; if (NET.role === 'host') { try { localStorage.removeItem(saveKey(G.world.mode)); } catch (er) { } } break;
@@ -6944,7 +6967,7 @@ function updateLocal(dt, inp) {
   Lc.reviveTarget = (snap.pl || []).find(p => p[0] !== G.myId && !p[8] && p[1] === Lc.lvl && dist2(p[2], p[3], Lc.x, Lc.y) < REVIVE_R2) || null;
   if (inp.interact && Lc.reviveTarget) { const nw = performance.now(); if (nw - (Lc.reviveSent || 0) > 100) { Lc.reviveSent = nw; sendAction({ t: 'revive' }); } }
   // attack
-  Lc.atkCd -= dt; Lc.comboT -= dt; if (Lc.swing != null) { Lc.swing += dt * (Lc.swingFast ? 2.3 : 1); if (Lc.swing > 0.3) Lc.swing = null; } if (Lc.punch) { Lc.punch.t += dt; if (Lc.punch.t > 0.25) Lc.punch = null; }
+  Lc.atkCd -= dt; Lc.comboT -= dt; if (Lc.swing != null) { Lc.swing += dt * (Lc.swingFast ? 2.3 : 1); if (Lc.swing > 0.3) { Lc.swing = null; if (Lc.backQueued) { Lc.backQueued = false; Lc.swing = 0; Lc.swingDir = -1; sfx('swing'); Lc.atkVis = 0.2; } else if (!Lc.lunge) Lc.swingFast = false; } } if (Lc.punch) { Lc.punch.t += dt; if (Lc.punch.t > 0.25) Lc.punch = null; }
   if (Lc.atkVis > 0) Lc.atkVis -= dt;
   if (monk) {
     if (inp.atkP && Lc.atkCd <= 0) {
@@ -7076,7 +7099,7 @@ function draw(dt) {
   R.ventPhase = snap ? snap.vp || 0 : 0;
   renderWorld(cam, L, ents, snap ? snap.pl : [], G.myId);
   // pow words
-  for (const p of Lc.pow) { const sc = projectPt(cam, p.x, p.y); if (sc) { const c = p.big ? rgb(255, 230, 60) : rgb(255, 255, 255); text(p.word, sc.x - p.word.length * 3, sc.y - 30 - p.t * 30, Math.floor(p.t * 20) & 1 ? c : rgb(255, 80, 40)); } }
+  for (const p of Lc.pow) { const sc = projectPt(cam, p.x, p.y); if (sc) { const c = p.big ? rgb(255, 230, 60) : rgb(255, 255, 255); text(p.word, sc.x - p.word.length * 3, sc.y - 30 - p.t * (p.num ? 45 : 30), p.num ? rgb(255, 236, 120) : Math.floor(p.t * 20) & 1 ? c : rgb(255, 80, 40)); } }
   const bossE = ents.find(e => e[8] >= 0);
   const st = { me, bob: Lc.bob, moveK: Lc.moveK || 0, readyK: Lc.readyK || 0, blockT: Lc.blockT || 0, swing: Lc.swing, swingDir: Lc.swingDir || 1, grip: Lc.gripT || 0, pommelT: Lc.pommelT, lungeReady: !!(Lc.gripT >= LUNGE_HOLD && me && me.items.lunge), punch: Lc.punch, charge: Lc.charge, useFlash: Lc.useFlash, useSpr: Lc.useSpr, level: L, cam, players: snap ? snap.pl : [], myId: G.myId, team: snap ? snap.team : { keys: {}, maps: {}, comps: {}, shards: [], done: [] }, seen: G.seen[L.id] || new Uint8Array(L.w * L.h), seenOW: G.seen.ow || new Uint8Array(1), seenRooms: G.seenRooms, selItem: Lc.sel, pitch: Lc.pitch, lvlKind: L.kind, bossHp: bossE ? bossE[8] : -1, bossName: bossE ? ((enemyDef(bossE[1]) || enemyDef(String(bossE[1]).replace(/_sub$/, '')) || {}).title || null) : null, world: G.world };
   if (me && !down) drawViewmodel(st);

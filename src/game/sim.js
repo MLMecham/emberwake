@@ -42,12 +42,14 @@ const BACK_ANGLE = 2.1;
 // ARMOR (def.armor 0-3, e.armor now): each level blocks ARMOR_STEP of the damage. Bombs and the Heavy Pommel knock one level off
 // instead of hurting, but each of those ways only works once per foe (e.stripped), so a fight can't be just one trick.
 const ARMOR_STEP = 0.25;
+const DUMMY_RESET = 3; // a training dummy heals (and gets its armor back) after this many seconds without a hit
+const fmtDmg = (n) => String(Math.round(n * 100) / 100);
 const DISARM_STAGGER = 1.2; // seconds a disarmed foe reels
 const GOURD_REGROW = 40; // seconds before a split gourd can grow back (and only with nobody within 6 tiles)
 // how many bombs you can carry: 1 without a bag, 8 with the Bramble Keep bag, 16 with the second one (sold in a grotto)
 const bombCap = (p) => p.items.bombbag2 ? 16 : p.items.bombbag ? 8 : 1;
 // sword techniques: the pommel strike (reverse grip), the lunge's slashes, and the backswing on every third hit
-const POMMEL_DMG = 0.25, POMMEL_STUN = 2.5, CHAIN_GAP = 2, BACKSWING_DELAY = 0.14; // radians off a foe's facing that count as behind it (about 120 degrees)
+const POMMEL_DMG = 0.25, POMMEL_STUN = 2.5, CHAIN_GAP = 2, BACKSWING_DELAY = 0.2; // the backswing lands while the blade comes back (ui/main.js plays it right after the forward cut) // radians off a foe's facing that count as behind it (about 120 degrees)
 const SHIELD_STUN = 0.9; // seconds a knight reels after a loaded shot hits its shield
 const FREEZE_TIME = 6, FREEZE_PATH = 6; // seconds frost-arrow ice lasts; how many tiles of water one arrow freezes along its flight
 const HAZARD_TICK = 0.5, ICE_KB = 1.5, SHALLOW_SLOW = 0.75; // how often lava/spikes/vents burn a grounded enemy; how much harder hits shove enemies standing on ice
@@ -206,7 +208,8 @@ class Sim {
   teleport(p, lvl, x, y, a) {
     p.lvl = lvl; p.x = x; p.y = y; p.a = a; this.ev({ t: 'tp', pid: p.id, lvl, x, y, a });
     this.initLevel(lvl);
-    if (lvl === 'dbg') this.ev({ t: 'title', pid: p.id, text: 'TEST ZONE', sub: 'DEBUG' });
+    if (lvl === 'dbg') { this.ev({ t: 'title', pid: p.id, text: 'TEST ZONE', sub: 'DEBUG' }); // and its training dummies (world.js genTestZone L.dummies)
+      for (const [type, x, y] of (this.W.levels.dbg.dummies || [])) if (!this.ents.some(e => e.k === 'en' && e.lvl === 'dbg' && e.type === type && !e.dead)) { const d = this.spawnEnemy(type, 'dbg', x, y, {}); d.spawnFx = 0; d.f = Math.PI / 2; } }
     else if (lvl[0] === 'd') { const d = +lvl.slice(1); this.ev({ t: 'title', pid: p.id, text: d <= 9 ? 'LEVEL-' + d : dungeonName(d), sub: d <= 9 ? dungeonName(d) : (d === 12 ? 'THE LAST FLAME' : 'OPTIONAL DUNGEON') }); }
     if (lvl === 'ow') this.autosave = true;
   }
@@ -512,7 +515,7 @@ class Sim {
     if (e.dead) return;
     if (!skipAi) (e.disarmed && def.disarmedAi ? def.disarmedAi : def.ai)(this, e, dt, ctx);
     // contact damage
-    if ((elite && elite.noContact) || e.sub || e.air) return; // can't bite you from under the water or in mid-air
+    if ((elite && elite.noContact) || e.sub || e.air || !def.dmg) return; // can't bite you from under the water or in mid-air
     for (const pl of Object.values(this.players)) {
       if (!pl.alive || pl.lvl !== e.lvl || pl.inv > 0) continue;
       const rr = this.enemyRadius(e) + 0.28; if (dist2(pl.x, pl.y, e.x, e.y) < rr * rr) this.hurtPlayer(pl, def.dmg * (def.boss ? 1 : e.dmgMul), e);
@@ -586,7 +589,9 @@ class Sim {
     if (e.armor > 0) dmg *= 1 - ARMOR_STEP * Math.min(3, e.armor);
     if (def.onDamage && def.onDamage(this, e, dmg, opt) === false) return true;
     e.hp -= dmg; e.hurt = 0.35; this.sfx('hit', e.lvl, e.x, e.y); if (opt.pid) e.lastPid = opt.pid;
-    if (src && !def.boss) { const a = Math.atan2(e.y - src.y, e.x - src.x); const [v, t] = this.knockFor(e, def, 9 * (opt.kbMul || 1)); e.kb = [Math.cos(a) * v, Math.sin(a) * v]; e.kbT = t || 0.12; }
+    if (def.dummy) { e.total = (this.time - (e.hitAt != null ? e.hitAt : -99) < DUMMY_RESET ? e.total || 0 : 0) + dmg; this.ev({ t: 'pow', lvl: e.lvl, x: e.x, y: e.y, num: true, word: fmtDmg(dmg) + '  (' + fmtDmg(e.total) + ')' }); } // training dummy: show the numbers
+    e.hitAt = this.time;
+    if (src && !def.boss && !def.anchored) { const a = Math.atan2(e.y - src.y, e.x - src.x); const [v, t] = this.knockFor(e, def, 9 * (opt.kbMul || 1)); e.kb = [Math.cos(a) * v, Math.sin(a) * v]; e.kbT = t || 0.12; }
     if (e.hp <= 0) this.killEnemy(e, opt.pid);
     return true;
   }
@@ -627,7 +632,7 @@ class Sim {
         const def = enemyDef(e.type); const d = Math.sqrt(dist2(e.x, e.y, p.x, p.y));
         if (d > range + this.enemyRadius(e)) continue;
         const ang = Math.atan2(e.y - p.y, e.x - p.x); if (d > 0.5 && Math.abs(angDiff(p.a, ang)) > cone) continue;
-        if (this.damageEnemy(e, dmg, p, { pid: p.id, ignoreIframes: slash })) { hitAny = true; hits.push(e); }
+        if (this.damageEnemy(e, dmg, p, { pid: p.id, ignoreIframes: true })) { hitAny = true; hits.push(e); } // every swing lands (swings come every 0.3 s, faster than the 0.35 s a hit protects a foe)
         if (p.cls === 'monk' && a.kind === 'punch3' && !def.boss) { const [v, t] = this.knockFor(e, def, 14); e.kb = [Math.cos(p.a) * v, Math.sin(p.a) * v]; e.kbT = t || 0.2; e.stun = 0.5; }
       }
     }
@@ -674,9 +679,9 @@ class Sim {
   stripArmor(e, method, src) {
     if (!(e.armor > 0) || e.dead) return false; e.stripped = e.stripped || {};
     if (e.stripped[method]) { this.sfx('clank', e.lvl, e.x, e.y); return false; }
-    e.stripped[method] = true; e.armor--; e.hurt = 0.25;
+    e.stripped[method] = true; e.armor--; e.hurt = 0.25; e.hitAt = this.time; if (enemyDef(e.type).dummy) this.ev({ t: 'pow', lvl: e.lvl, x: e.x, y: e.y, num: true, word: 'ARMOR -1' });
     this.sfx('armor', e.lvl, e.x, e.y); this.spawn({ k: 'fx', lvl: e.lvl, x: e.x, y: e.y, spr: 'armorbits', life: 0.45, sc: 0.9, z: 0.3 });
-    if (src && !enemyDef(e.type).boss) { const a = Math.atan2(e.y - src.y, e.x - src.x); const [v, t] = this.knockFor(e, enemyDef(e.type), 6); e.kb = [Math.cos(a) * v, Math.sin(a) * v]; e.kbT = t || 0.12; }
+    if (src && !enemyDef(e.type).boss && !enemyDef(e.type).anchored) { const a = Math.atan2(e.y - src.y, e.x - src.x); const [v, t] = this.knockFor(e, enemyDef(e.type), 6); e.kb = [Math.cos(a) * v, Math.sin(a) * v]; e.kbT = t || 0.12; }
     return true;
   }
   // POMMEL STRIKE: little damage and a long stun on whatever's right in front of you. A shield still blocks it from the front.

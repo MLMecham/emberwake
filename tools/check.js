@@ -587,6 +587,21 @@ attempt('beams, disarming, hooked frogs, loaded bomb arrows', () => {
   clear(); sim.useItem(p, 'bow', { alt: true, loaded: 2 }); __ok(sim.ents.find(e => e.k === 'proj' && e.bomb).spr === 'arrow2_bomb', 'a double bomb arrow');
   __ok(Content.hints.some(t => /BOOMERANG CURVES/.test(t)), 'the old men know about boomerangs and shields');
 });
+attempt('training dummies', () => {
+  const sim = freshSim(); const p = sim.players.p1; p.god = false; p.sword = 2; p.hp = 1;
+  sim.teleport(p, 'dbg', 14.5, 16.4, Math.PI / 2); const ds = sim.ents.filter(e => e.k === 'en' && e.lvl === 'dbg' && enemyDef(e.type).dummy); __ok(ds.length === 2, 'the test zone has two dummies');
+  sim.teleport(p, 'dbg', 14.5, 16.4, Math.PI / 2); __ok(sim.ents.filter(e => e.k === 'en' && e.lvl === 'dbg' && enemyDef(e.type).dummy && !e.dead).length === 2, 'and never more than two');
+  const d = ds.find(e => e.type === 'dummy'); p.x = d.x; p.y = d.y - 1; p.a = Math.PI / 2;
+  const x0 = d.x; sim.playerAttack(p, { kind: 'sword' }); __ok(d.hp === d.maxHp - SWORD_DMG[2] && d.x === x0, 'a dummy takes the hit and does not budge');
+  // the backswing really lands: three hits plus the backswing = four hits of damage
+  d.hp = d.maxHp; p.chain = 0; p.backArmed = false; for (let i = 0; i < 3; i++) { d.hurt = 0; sim.playerAttack(p, { kind: 'sword' }); } sim.time += BACKSWING_DELAY + 0.01; sim.updateBackswing(p);
+  __ok(d.maxHp - d.hp === 4 * SWORD_DMG[2], 'three cuts and a backswing: four hits of damage (' + (d.maxHp - d.hp) + ')');
+  sim.time += DUMMY_RESET + 0.1; sim.updateEnemy(d, 1 / 60); __ok(d.hp === d.maxHp, 'it heals after a pause');
+  const a = ds.find(e => e.type === 'dummy_armored'); __ok(a.armor === 3, 'the armored dummy wears full armor');
+  const b = sim.spawn({ k: 'bomb', lvl: 'dbg', x: a.x, y: a.y, fuse: 0, pid: 'p1' }); sim.updateEnt(b, 1 / 60); __ok(a.armor === 2, 'a bomb strips it');
+  sim.time += DUMMY_RESET + 0.1; sim.updateEnemy(a, 1 / 60); __ok(a.armor === 3, 'and it gets its armor back');
+  sim.hurtPlayer = () => { throw new Error('a dummy hurt the hero'); }; p.x = a.x; p.y = a.y; sim.updateEnemy(a, 1 / 60); __ok(true, 'dummies never hurt you');
+});
 attempt('tideglass opening', () => {
   for (const [seed, mode] of [[7319, 'adv'], [1234, 'rogue'], [99, 'rogue'], [4242, 'adv']]) {
     const W = genWorld(seed, mode); const D = W.levels.d6; const st = D.startRoom; const r2 = st.children[0]; const r3 = r2.children[0];

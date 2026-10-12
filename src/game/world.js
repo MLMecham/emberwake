@@ -112,6 +112,7 @@ function genTestZone(W) {
   sign(18, 18, 'OPEN FLOOR: SPAWN FOES HERE FROM THE PAUSE MENU (DEBUG).');
   // a row of breakables (pommel strike: Shift + hold attack, let go); they grow back
   L.gourds = {}; [['GOURD', 3], ['CORAL', 5], ['SLAG', 7], ['BONEPILE', 9], ['CRYSTAL', 11]].forEach(([n, x]) => { if (PR[n] == null) return; const i = L.idx(x, 19); L.props[i] = PR[n]; L.gourds[i] = PR[n]; });
+  L.dummies = [['dummy', 13.5, 17.5], ['dummy_armored', 15.5, 17.5]]; sign(14, 19, 'TRAINING DUMMIES: EVERY HIT SHOWS ITS DAMAGE AND THE RUNNING TOTAL. THEY HEAL AFTER 3 SECONDS. THE RIGHT ONE WEARS FULL ARMOR.');
   sign(7, 21, 'GOURDS AND THE LIKE: ONLY A POMMEL STRIKE (SHIFT + HOLD ATTACK, THEN LET GO) SPLITS THEM.');
   L.set(18, h - 1, TL.CEXIT); L.set(18, h - 2, TL.EXIT); L.spawn = { x: 18.5, y: h - 3.5, a: -Math.PI / 2 };
   const ow = W.levels.ow; L.exit = { lvl: 'ow', x: ow.spawn.x, y: ow.spawn.y, a: ow.spawn.a };

@@ -10,3 +10,4 @@ defineDropTable('common', 34, [
   { item: 'fairy', w: 2.5 },
   { item: 'arrow', w: 10.5, when: anyoneHas('bow') },
 ]);
+defineDropTable('none', 1, []); // drops nothing (training dummies)
