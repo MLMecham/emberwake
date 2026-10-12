@@ -4031,6 +4031,16 @@ defineItem({ id: 'quiver', name: 'BIG QUIVER', sprite: 'quiver', team: true, deb
 defineItem({ id: 'bombarrows', name: 'SCROLL: BOMB ARROWS', sprite: 'scroll', team: true, debug: true, monk: { name: 'SCROLL: BLAST DARTS' },
   debugGrant(p) { p.items.bombarrow = true; },
   give(sim, p, ctx) { p.items.bombarrow = true; ctx.banner(); sim.ev({ t: 'dialog', pid: p.id, text: 'HOLD SHIFT AS YOU SHOOT TO TIE A BOMB TO THE ARROW. IT BURSTS WHERE IT LANDS, AND AN EYE IT HITS STAYS SHUT.' }); } });
+// SWORD TECHNIQUES. Everyone with a sword starts with the POMMEL STRIKE: Shift + hold attack flips the sword into reverse
+// grip, and letting go drives the hilt into whatever's in front of you (a long stun, little damage; ui/main.js, game/sim.js).
+// LUNGE: hold the reverse grip until it chimes, then let go to charge forward and slash 2-4 times (more with a better sword).
+defineItem({ id: 'lunge', name: 'SCROLL: LUNGE', sprite: 'scroll', team: true, debug: true,
+  debugGrant(p) { p.items.lunge = true; },
+  give(sim, p, ctx) { p.items.lunge = true; ctx.banner(); sim.ev({ t: 'dialog', pid: p.id, text: 'HOLD SHIFT AND ATTACK. KEEP HOLDING UNTIL THE BLADE SINGS, THEN LET GO: YOU LUNGE FORWARD AND CUT AGAIN AND AGAIN.' }); } });
+// HEAVY POMMEL: pommel strikes also knock a piece of armor off (once per foe, like a bomb; see stripArmor in game/sim.js).
+defineItem({ id: 'heavypommel', name: 'SCROLL: HEAVY POMMEL', sprite: 'scroll', team: true, debug: true,
+  debugGrant(p) { p.items.heavypommel = true; },
+  give(sim, p, ctx) { p.items.heavypommel = true; ctx.banner(); sim.ev({ t: 'dialog', pid: p.id, text: 'YOUR POMMEL STRIKE NOW CRACKS ARMOR. EACH FOE ONLY LOSES ONE PIECE TO IT, SO MIX IT WITH BOMBS.' }); } });
 
 })();
 // ---- src/content/items/tunics.js ----
@@ -4675,7 +4685,9 @@ const BUY_COOLDOWN = 0.8; // seconds between shop purchases for one player
 const FLY_TIME = 4, FLY_COOLDOWN = 2; // Gale Cloak: seconds aloft, and the rest after landing before it works again
 const POISON_FRAC = 0.05, POISON_FROG_CHANCE = 0.1; // poison frogs are 1 in 10 frogs // poison takes 5% of max health a tick
 const BOOMERANG_STUN = 3, STUN_LOCK = 6, BOOMERANG_DMG = 0.25; // boomerang: stun seconds, the longest a foe can be kept dizzy, chip damage
-const BACK_ANGLE = 2.1; // radians off a foe's facing that count as behind it (about 120 degrees)
+const BACK_ANGLE = 2.1;
+// sword techniques: the pommel strike (reverse grip), the lunge's slashes, and the backswing on every third hit
+const POMMEL_DMG = 0.25, POMMEL_STUN = 2.5, CHAIN_GAP = 2, BACKSWING_DELAY = 0.14; // radians off a foe's facing that count as behind it (about 120 degrees)
 const SHIELD_STUN = 0.9; // seconds a knight reels after a loaded shot hits its shield
 const FREEZE_TIME = 6, FREEZE_PATH = 6; // seconds frost-arrow ice lasts; how many tiles of water one arrow freezes along its flight
 const HAZARD_TICK = 0.5, ICE_KB = 1.5, SHALLOW_SLOW = 0.75; // how often lava/spikes/vents burn a grounded enemy; how much harder hits shove enemies standing on ice
@@ -4923,6 +4935,7 @@ class Sim {
       const L = this.W.levels[p.lvl];
       // hazard tiles
       if (p.chill > 0) p.chill -= dt; this.tickPoison(p);
+      this.updateBackswing(p);
       if (p.dbg) { p.arrows = Math.max(p.arrows, p.maxArrows || ARROWS_START); p.bombs = Math.max(p.bombs, p.maxBombs); p.items.bombs = true; p.potions = 2; p.items.potion = true; p.gems = Math.max(p.gems, 999); } // debug: never run out
       const t = L.get(Math.floor(p.x), Math.floor(p.y)); const ti = TINFO[t]; const boots = !!p.items.magmaboots;
       if (p.inv <= 0 && !this.flying(p) && ((ti.hurt && !(boots && ti.lava)) || (ti.vent && this.ventPhase() === 2 && !boots))) this.hurtPlayer(p, 1, null); // fliers are above it all
@@ -5233,8 +5246,9 @@ class Sim {
   playerAttack(p, a) {
     const L = this.W.levels[p.lvl];
     const swordDmg = SWORD_DMG[p.sword] || 1;
-    if (a.kind === 'sword' && p.sword === 0) return;
-    let range = 1.45, cone = 0.85, dmg = swordDmg;
+    if ((a.kind === 'sword' || a.kind === 'pommel' || a.kind === 'slash') && p.sword === 0) return;
+    if (a.kind === 'pommel') return this.pommelStrike(p, L);
+    let range = 1.45, cone = 0.85, dmg = swordDmg; const slash = a.kind === 'slash'; if (slash) { range = 1.65; cone = 1.0; } const hits = [];
     if (p.cls === 'monk') { range = 1.15; cone = 0.7; dmg = Math.max(1, swordDmg) * (a.kind === 'punch3' ? 2 : 1); }
     if (a.kind === 'wave') { this.fireProj('wave', p.lvl, p.x + Math.cos(p.a) * 0.4, p.y + Math.sin(p.a) * 0.4, p.a, 'p', p.id, { dmg: 3 + swordDmg * 2, life: 2.5 }); this.sfx('wave', p.lvl, p.x, p.y); return; }
     let hitAny = false;
@@ -5244,11 +5258,12 @@ class Sim {
         const def = enemyDef(e.type); const d = Math.sqrt(dist2(e.x, e.y, p.x, p.y));
         if (d > range + this.enemyRadius(e)) continue;
         const ang = Math.atan2(e.y - p.y, e.x - p.x); if (d > 0.5 && Math.abs(angDiff(p.a, ang)) > cone) continue;
-        if (this.damageEnemy(e, dmg, p, { pid: p.id })) hitAny = true;
+        if (this.damageEnemy(e, dmg, p, { pid: p.id, ignoreIframes: slash })) { hitAny = true; hits.push(e); }
         if (p.cls === 'monk' && a.kind === 'punch3' && !def.boss) { const [v, t] = this.knockFor(e, def, 14); e.kb = [Math.cos(p.a) * v, Math.sin(p.a) * v]; e.kbT = t || 0.2; e.stun = 0.5; }
       }
     }
     this.cutAt(L, p.x + Math.cos(p.a) * 0.75, p.y + Math.sin(p.a) * 0.75); this.cutAt(L, p.x + Math.cos(p.a) * 1.25, p.y + Math.sin(p.a) * 1.25);
+    if (a.kind === 'sword' && hitAny) this.chainHit(p, hits);
     if (hitAny && p.cls === 'monk') this.ev({ t: 'pow', lvl: p.lvl, x: p.x + Math.cos(p.a) * 0.9, y: p.y + Math.sin(p.a) * 0.9, big: a.kind === 'punch3' });
     // bush cutting / burn? sword cuts nothing; check bombable hint clink
     // beam at full health
@@ -5257,6 +5272,34 @@ class Sim {
       else this.fireProj(p.sword >= 4 ? 'dawnbeam' : 'beam', p.lvl, p.x + Math.cos(p.a) * 0.3, p.y + Math.sin(p.a) * 0.3, p.a, 'p', p.id, { dmg: swordDmg });
       this.sfx('beam', p.lvl, p.x, p.y);
     }
+  }
+  // POMMEL STRIKE: little damage and a long stun on whatever's right in front of you. A shield still blocks it from the front.
+  // With the Heavy Pommel scroll it also knocks a piece of armor off (once per foe). It's also the only thing that splits gourds.
+  pommelStrike(p, L) {
+    let hit = false;
+    for (const e of this.ents) {
+      if (e.k !== 'en' || e.lvl !== p.lvl || e.dead) continue; const def = enemyDef(e.type); const d = Math.sqrt(dist2(e.x, e.y, p.x, p.y));
+      if (d > 1.25 + this.enemyRadius(e)) continue; if (d > 0.5 && Math.abs(angDiff(p.a, Math.atan2(e.y - p.y, e.x - p.x))) > 0.6) continue;
+      hit = true;
+      if (p.items.heavypommel && e.armor > 0 && this.stripArmor(e, 'pommel', p)) { if (!def.boss) { e.stun = Math.max(e.stun || 0, POMMEL_STUN); e.stunFrom = this.time; } continue; }
+      if (this.damageEnemy(e, POMMEL_DMG, p, { pid: p.id, kbMul: 0.6 }) && !def.boss && !e.dead) { e.stun = Math.max(e.stun || 0, POMMEL_STUN); e.stunFrom = this.time; }
+    }
+    if (this.pommelTiles) this.pommelTiles(L, p);
+    this.sfx(hit ? 'pommel' : 'swing', p.lvl, p.x, p.y);
+  }
+  // Every third sword hit in a chain (hits less than CHAIN_GAP apart) readies a backswing. It fires on the first hit that
+  // leaves a foe standing (so a third hit that kills saves it for the next one), cutting that foe again a moment later.
+  chainHit(p, hits) {
+    if (this.time - (p.chainAt != null ? p.chainAt : -99) > CHAIN_GAP) p.chain = 0;
+    p.chain = (p.chain || 0) + 1; p.chainAt = this.time; if (p.chain >= 3) p.backArmed = true;
+    const alive = hits.find(e => !e.dead);
+    if (p.backArmed && alive) { p.backArmed = false; p.chain = 0; p.backswing = { at: this.time + BACKSWING_DELAY, eid: alive.id }; this.ev({ t: 'backswing', pid: p.id }); }
+  }
+  updateBackswing(p) {
+    const b = p.backswing; if (!b || this.time < b.at) return; p.backswing = null;
+    const e = this.ents.find(x => x.id === b.eid); if (!e || e.dead || e.lvl !== p.lvl) return;
+    if (Math.sqrt(dist2(e.x, e.y, p.x, p.y)) > 1.9 + this.enemyRadius(e)) return;
+    this.damageEnemy(e, SWORD_DMG[p.sword] || 1, p, { pid: p.id, ignoreIframes: true });
   }
   useItem(p, item, a) {
     const d = itemDef(item); if (!d || d.slot !== 'b' || !d.owned(p)) return;
@@ -5832,7 +5875,12 @@ function drawViewmodel(st) {
   }
   if (me.sword > 0) {
     let ang, hx, hy;
-    if (k >= 0) { ang = lerp(-0.4, -2.6, k); hx = lerp(W * 0.78, W * 0.42, k) + bx; hy = lerp(H - 22, H - 44, Math.sin(k * Math.PI)) + by; }
+    const rev = st.swingDir === -1; // the backswing (and every other lunge slash) runs the other way
+    const gk = Math.min(1, (st.grip || 0) / 0.15); // reverse grip: blade flipped down along your side, pommel toward the foe
+    const pk = st.pommelT != null ? Math.sin(Math.min(1, st.pommelT / 0.3) * Math.PI) : 0; // the pommel driving forward
+    if (k >= 0) { const kk = rev ? 1 - k : k; ang = lerp(-0.4, -2.6, kk); hx = lerp(W * 0.78, W * 0.42, kk) + bx; hy = lerp(H - 22, H - 44, Math.sin(kk * Math.PI)) + by; }
+    else if (gk > 0 || pk > 0) { const g = Math.max(gk, pk); ang = lerp(-0.95, 1.2, g); hx = lerp(W * 0.8, W * 0.7, g) - pk * W * 0.16 + bx; hy = lerp(H - 10, H - 34, g) - pk * 26 + by;
+      if (st.grip > 0.3) { hx += (Math.random() - 0.5) * Math.min(2, st.grip); hy += (Math.random() - 0.5) * Math.min(2, st.grip); } } // trembling as it builds
     else { ang = -0.95; hx = W * 0.8 + bx; hy = H - 10 + by; } // resting low at your side
     const len = 70; const tipX = hx + Math.cos(ang) * len, tipY = hy + Math.sin(ang) * len;
     const blade = me.sword === 1 ? rgb(170, 120, 60) : me.sword === 2 ? rgb(220, 226, 240) : me.sword === 3 ? rgb(130, 240, 255) : rgb(255, 236, 150);
@@ -5842,7 +5890,8 @@ function drawViewmodel(st) {
     const pa = ang + Math.PI / 2; thickLine(gx + Math.cos(pa) * 10, gy + Math.sin(pa) * 10, gx - Math.cos(pa) * 10, gy - Math.sin(pa) * 10, 4, rgb(230, 190, 60));
     if (me.sword >= 4) for (let i = 0; i < 5; i++) { const tt = Math.random(); px(lerp(gx, tipX, tt) + (Math.random() - 0.5) * 8, lerp(gy, tipY, tt) + (Math.random() - 0.5) * 8, Math.random() < 0.5 ? rgb(255, 255, 220) : rgb(255, 180, 60)); }
     if (me.sword === 3) for (let i = 0; i < 3; i++) { const tt = Math.random(); px(lerp(gx, tipX, tt) + (Math.random() - 0.5) * 6, lerp(gy, tipY, tt) + (Math.random() - 0.5) * 6, rgb(220, 255, 255)); }
-    if (k >= 0 && k < 1) { for (let i = 0; i < 5; i++) { const a2 = lerp(-0.4, ang, i / 5); thickLine(hx + Math.cos(a2) * 40, hy + Math.sin(a2) * 40, hx + Math.cos(a2) * 66, hy + Math.sin(a2) * 66, 1, rgb(255, 255, 255)); } }
+    if (st.lungeReady) for (let i = 0; i < 6; i++) { const tt = Math.random(); px(lerp(gx, tipX, tt) + (Math.random() - 0.5) * 10, lerp(gy, tipY, tt) + (Math.random() - 0.5) * 10, rgb(255, 255, 255)); } // ready to lunge: the blade glints
+    if (k >= 0 && k < 1) { for (let i = 0; i < 5; i++) { const a2 = lerp(rev ? -2.6 : -0.4, ang, i / 5); thickLine(hx + Math.cos(a2) * 40, hy + Math.sin(a2) * 40, hx + Math.cos(a2) * 66, hy + Math.sin(a2) * 66, 1, rgb(255, 255, 255)); } }
     // sword hand, drawn like the shield hand: the grip and pommel, then a curved forearm from the bottom-right
     // (shadow on its far edge, cuff, bare wrist), then four fingers wrapped around the grip with the thumb over them
     const dx = Math.cos(ang), dy = Math.sin(ang), qx = -dy, qy = dx; const OUT = rgb(20, 18, 28); const skinL = c32(hexToRgb('#f8d4b0'));
@@ -6109,6 +6158,14 @@ function sfx(name, vol) {
     case 'croak': tone(150, 0.18, 'square', 0.16 * v, 110); tone(120, 0.22, 'square', 0.14 * v, 90, AU.ctx.currentTime + 0.2); break; // a frog
     case 'bubble': tone(500, 0.12, 'sine', 0.1 * v, 900); tone(800, 0.06, 'sine', 0.06 * v, 1200, AU.ctx.currentTime + 0.1); break;
     case 'poison': tone(260, 0.15, 'sawtooth', 0.06 * v, 200); noise(0.12, 0.05 * v, 900); break; // a poison tick
+    case 'grip': tone(300, 0.06, 'triangle', 0.08 * v, 220); noise(0.05, 0.06 * v, 2500); break; // the sword flips into reverse grip
+    case 'pommel': noise(0.07, 0.28 * v, 900); tone(140, 0.1, 'square', 0.16 * v, 50); break; // the hilt driven home
+    case 'lungeready': seq([523, 784, 1047], 0.05, 'square', 0.08 * v); break; // held long enough to lunge
+    case 'lunge': noise(0.25, 0.22 * v, 4000); tone(900, 0.2, 'sawtooth', 0.07 * v, 300); break;
+    case 'gourd': tone(220, 0.06, 'square', 0.12 * v, 120); noise(0.12, 0.14 * v, 700); break; // a gourd splits
+    case 'thok': tone(160, 0.05, 'triangle', 0.1 * v, 120); break; // a gourd shrugs off a swing
+    case 'armor': tone(1600, 0.06, 'square', 0.1 * v, 900); noise(0.15, 0.16 * v, 5000); tone(500, 0.12, 'square', 0.08 * v, 250, AU.ctx.currentTime + 0.05); break; // armor flies off
+    case 'clank': tone(900, 0.07, 'square', 0.1 * v, 700); tone(600, 0.07, 'square', 0.06 * v, 500, AU.ctx.currentTime + 0.05); break; // armor that won't come off that way
     case 'nock': tone(700, 0.06, 'square', 0.1 * v, 900); tone(1050, 0.08, 'triangle', 0.08 * v, 1300, AU.ctx.currentTime + 0.06); break; // a second arrow nocked
     case 'eyeshut': tone(320, 0.12, 'square', 0.14 * v, 140); noise(0.1, 0.12 * v, 900); break; // an arrow shuts an eye
     case 'eyecreak': tone(140, 0.7, 'sawtooth', 0.08 * v, 260); noise(0.6, 0.05 * v, 400); break; // the eye is opening again
@@ -6485,6 +6542,7 @@ function handleEvent(e) {
     case 'get': if (e.pid === me || e.all) { Lc.get = { item: e.item, text: (e.pid === me ? '' : '') + e.text, t: 2.2 }; sfx(e.item === 'shard' ? 'fanfare' : 'get'); if (e.item === 'fists' && e.pid === me) unlockMonk(); } break;
     case 'down': if (e.pid === me) { Lc.downT = 0; sfx('die'); } break;
     case 'monk': if (e.pid === me) { Lc.flash = 1; Lc.flashC = rgb(255, 255, 255); G.profile.cls = 'monk'; saveProfile(); setTimeout(() => showDialog('YOUR SWORD CLATTERS TO THE FLOOR. YOUR FISTS HUM WITH POWER. PUNCH WITH ATTACK. HOLD ATTACK TO CHARGE A STARFALL WAVE. [SPACE] FLASH STEP. EVERY ITEM YOU OWN... IS NOW SOMETHING ELSE.'), 1600); } break;
+    case 'backswing': if (e.pid === me) { Lc.swing = 0; Lc.swingDir = -1; Lc.swingFast = false; sfx('swing'); Lc.atkVis = 0.2; } break; // every third hit: the blade comes back the other way
     case 'pow': if (e.lvl === Lc.lvl) Lc.pow.push({ x: e.x, y: e.y, t: 0, big: e.big, word: e.big ? ['KA-POW!', 'WHAM!', 'BOOM!'][Math.random() * 3 | 0] : ['POW!', 'BAM!', 'THWACK!', 'SMACK!'][Math.random() * 4 | 0] }); break;
     case 'shake': if (e.lvl === Lc.lvl && dist2(e.x, e.y, Lc.x, Lc.y) < 64) Lc.shake = 0.35; break;
     case 'flash': if (e.pid === me) { Lc.flash = 0.4; Lc.flashC = c32(hexToRgb(e.c)); } break;
@@ -6500,6 +6558,8 @@ function showDialog(text) { if (!G.local) return; G.local.dialog = { text, shown
 function loadFavs() { try { const a = JSON.parse(localStorage.getItem('emberwake_favs') || '[]'); return new Set(Array.isArray(a) ? a : []); } catch (e) { return new Set(); } }
 function toggleFav(id) { if (!G.favs) G.favs = loadFavs(); if (G.favs.has(id)) G.favs.delete(id); else G.favs.add(id); try { localStorage.setItem('emberwake_favs', JSON.stringify([...G.favs])); } catch (e) { } }
 function favList(owned) { if (!G.favs) G.favs = loadFavs(); const f = owned.filter(id => G.favs.has(id)); return f.length ? f : owned; }
+const POMMEL_MIN = 0.2, LUNGE_HOLD = 1.5, LUNGE_DUR = 0.22, LUNGE_SPD = 11; // reverse grip timings (seconds) and lunge speed (tiles/s)
+function raftOK(me, L, ti) { return !!me.items.raft && L.kind !== 'dungeon' && !ti.ocean; }
 function ownedBItems(me) { return me ? bItems().filter(d => d.owned(me)).map(d => d.id) : []; }
 function sendAction(a) {
   if (NET.role === 'host') G.sim.onAction(G.myId, a); else if (NET.hostConn) NET.hostConn.send({ t: 'a', a });
@@ -6533,12 +6593,17 @@ function updateLocal(dt, inp) {
   // movement
   const monk = me.cls === 'monk'; let spd = monk ? 4.0 : 3.6; IN.spaceDash = monk; // Space is the martial artist's dash
   const flying = me.fly > 0; // Gale Cloak: over water, lava, pits and vents like a bat
-  if (Lc.charge > 0.3) spd *= 0.5;
+  if (Lc.charge > 0.3 || Lc.gripT > 0.2) spd *= 0.5;
   if (me.chill) spd *= 0.55; // frozen by ice breath
   if (TINFO[L.get(Math.floor(Lc.x), Math.floor(Lc.y))].shallow && !(me.fly > 0)) spd *= 0.75; // wading
   if (Lc.dashCd > 0) Lc.dashCd -= dt;
   if (inp.dash && monk && Lc.dashCd <= 0) { Lc.dashT = 0.16; Lc.dashCd = 0.7; sfx('dash'); Lc.dashDir = Math.atan2(inp.str, inp.fwd || (inp.str ? 0 : 1)); }
   let mvx = (Math.cos(Lc.a) * inp.fwd + Math.cos(Lc.a + Math.PI / 2) * inp.str) * spd, mvy = (Math.sin(Lc.a) * inp.fwd + Math.sin(Lc.a + Math.PI / 2) * inp.str) * spd;
+  if (Lc.lunge && Lc.lunge.t < LUNGE_DUR && !Lc.lunge.stop) { // the lunge: a burst forward that stops at the edge of anything that would hurt
+    const da = Lc.lunge.dir, ax = Lc.x + Math.cos(da) * 0.55, ay = Lc.y + Math.sin(da) * 0.55; const ta = TINFO[L.get(Math.floor(ax), Math.floor(ay))];
+    if (!flying && (ta.pit || ta.hurt || (ta.water && !ta.frozen && !raftOK(me, L, ta)) || ta.lava || ta.vent)) Lc.lunge.stop = true;
+    else { mvx = Math.cos(da) * LUNGE_SPD; mvy = Math.sin(da) * LUNGE_SPD; }
+  }
   if (Lc.dashT > 0) { Lc.dashT -= dt; const da = Lc.a + (Lc.dashDir || 0); mvx = Math.cos(da) * 15; mvy = Math.sin(da) * 15; }
   // ice: you keep your momentum and steer slowly, so it's easy to slide into whatever is at the edge
   { const ti0 = TINFO[L.get(Math.floor(Lc.x), Math.floor(Lc.y))]; if (ti0.slippery && Lc.dashT <= 0 && !flying) { const k = Math.min(1, dt * 1.3); Lc.svx = lerp(Lc.svx || 0, mvx * 1.15, k); Lc.svy = lerp(Lc.svy || 0, mvy * 1.15, k); mvx = Lc.svx; mvy = Lc.svy; } else { Lc.svx = mvx; Lc.svy = mvy; } }
@@ -6605,7 +6670,7 @@ function updateLocal(dt, inp) {
   Lc.reviveTarget = (snap.pl || []).find(p => p[0] !== G.myId && !p[8] && p[1] === Lc.lvl && dist2(p[2], p[3], Lc.x, Lc.y) < REVIVE_R2) || null;
   if (inp.interact && Lc.reviveTarget) { const nw = performance.now(); if (nw - (Lc.reviveSent || 0) > 100) { Lc.reviveSent = nw; sendAction({ t: 'revive' }); } }
   // attack
-  Lc.atkCd -= dt; Lc.comboT -= dt; if (Lc.swing != null) { Lc.swing += dt; if (Lc.swing > 0.3) Lc.swing = null; } if (Lc.punch) { Lc.punch.t += dt; if (Lc.punch.t > 0.25) Lc.punch = null; }
+  Lc.atkCd -= dt; Lc.comboT -= dt; if (Lc.swing != null) { Lc.swing += dt * (Lc.swingFast ? 2.3 : 1); if (Lc.swing > 0.3) Lc.swing = null; } if (Lc.punch) { Lc.punch.t += dt; if (Lc.punch.t > 0.25) Lc.punch = null; }
   if (Lc.atkVis > 0) Lc.atkVis -= dt;
   if (monk) {
     if (inp.atkP && Lc.atkCd <= 0) {
@@ -6615,8 +6680,23 @@ function updateLocal(dt, inp) {
     }
     if (inp.atk) { Lc.held += dt; if (Lc.held > 0.3) { const before = Lc.charge; Lc.charge = Math.min(1.2, Lc.charge + dt); if (Math.floor(Lc.charge * 8) !== Math.floor(before * 8)) sfx('charge'); } }
     else { if (Lc.charge >= 0.8) { sendAction({ t: 'atk', kind: 'wave' }); Lc.shake = 0.25; Lc.flash = 0.15; Lc.flashC = rgb(160, 230, 255); Lc.punch = { side: 1, t: 0 }; } Lc.charge = 0; Lc.held = 0; }
+  } else if (Lc.gripT > 0) { // REVERSE GRIP (Shift + hold attack): let go for a pommel strike; hold to the chime (with the Lunge scroll) to lunge
+    const canLunge = !!me.items.lunge;
+    if (inp.atk) { const before = Lc.gripT; Lc.gripT += dt; if (canLunge && before < LUNGE_HOLD && Lc.gripT >= LUNGE_HOLD) sfx('lungeready'); }
+    else {
+      if (canLunge && Lc.gripT >= LUNGE_HOLD) { Lc.lunge = { t: 0, n: me.sword >= 3 ? 4 : me.sword + 1, next: 0.05, dir: Lc.a, side: 1 }; Lc.atkCd = 0.6; sfx('lunge'); Lc.shake = 0.15; }
+      else if (Lc.gripT >= POMMEL_MIN) { Lc.pommelT = 0; Lc.atkCd = 0.4; Lc.atkVis = 0.25; sendAction({ t: 'atk', kind: 'pommel' }); }
+      Lc.gripT = 0;
+    }
   } else if (inp.atkP && Lc.atkCd <= 0 && me.sword > 0) {
-    Lc.swing = 0; Lc.atkCd = 0.3; sfx('swing'); Lc.atkVis = 0.25; sendAction({ t: 'atk', kind: 'sword' });
+    if (inp.alt) { Lc.gripT = 0.001; sfx('grip'); } // Shift + attack: flip the sword into reverse grip
+    else { Lc.swing = 0; Lc.swingDir = 1; Lc.atkCd = 0.3; sfx('swing'); Lc.atkVis = 0.25; sendAction({ t: 'atk', kind: 'sword' }); }
+  }
+  if (Lc.pommelT != null) { Lc.pommelT += dt; if (Lc.pommelT > 0.3) Lc.pommelT = null; }
+  if (Lc.lunge) { // the lunge's slashes, alternating directions, a quick one every 0.11 s
+    const lg = Lc.lunge; lg.t += dt; lg.next -= dt;
+    if (lg.n > 0 && lg.next <= 0) { lg.n--; lg.next = 0.11; Lc.swing = 0; Lc.swingDir = lg.side; lg.side = -lg.side; Lc.swingFast = true; sfx('swing'); Lc.atkVis = 0.15; sendAction({ t: 'atk', kind: 'slash' }); }
+    if (lg.n <= 0 && lg.t > LUNGE_DUR) { Lc.lunge = null; Lc.swingFast = false; }
   }
   // Item button. Shift (or LB) held = the item's technique. The bow draws while held and fires on release; with the
   // Loaded Shot scroll, holding past LOAD_TIME nocks a second arrow ("hold = power").
@@ -6724,7 +6804,7 @@ function draw(dt) {
   // pow words
   for (const p of Lc.pow) { const sc = projectPt(cam, p.x, p.y); if (sc) { const c = p.big ? rgb(255, 230, 60) : rgb(255, 255, 255); text(p.word, sc.x - p.word.length * 3, sc.y - 30 - p.t * 30, Math.floor(p.t * 20) & 1 ? c : rgb(255, 80, 40)); } }
   const bossE = ents.find(e => e[8] >= 0);
-  const st = { me, bob: Lc.bob, moveK: Lc.moveK || 0, readyK: Lc.readyK || 0, blockT: Lc.blockT || 0, swing: Lc.swing, punch: Lc.punch, charge: Lc.charge, useFlash: Lc.useFlash, useSpr: Lc.useSpr, level: L, cam, players: snap ? snap.pl : [], myId: G.myId, team: snap ? snap.team : { keys: {}, maps: {}, comps: {}, shards: [], done: [] }, seen: G.seen[L.id] || new Uint8Array(L.w * L.h), seenOW: G.seen.ow || new Uint8Array(1), seenRooms: G.seenRooms, selItem: Lc.sel, pitch: Lc.pitch, lvlKind: L.kind, bossHp: bossE ? bossE[8] : -1, bossName: bossE ? ((enemyDef(bossE[1]) || enemyDef(String(bossE[1]).replace(/_sub$/, '')) || {}).title || null) : null, world: G.world };
+  const st = { me, bob: Lc.bob, moveK: Lc.moveK || 0, readyK: Lc.readyK || 0, blockT: Lc.blockT || 0, swing: Lc.swing, swingDir: Lc.swingDir || 1, grip: Lc.gripT || 0, pommelT: Lc.pommelT, lungeReady: !!(Lc.gripT >= LUNGE_HOLD && me && me.items.lunge), punch: Lc.punch, charge: Lc.charge, useFlash: Lc.useFlash, useSpr: Lc.useSpr, level: L, cam, players: snap ? snap.pl : [], myId: G.myId, team: snap ? snap.team : { keys: {}, maps: {}, comps: {}, shards: [], done: [] }, seen: G.seen[L.id] || new Uint8Array(L.w * L.h), seenOW: G.seen.ow || new Uint8Array(1), seenRooms: G.seenRooms, selItem: Lc.sel, pitch: Lc.pitch, lvlKind: L.kind, bossHp: bossE ? bossE[8] : -1, bossName: bossE ? ((enemyDef(bossE[1]) || enemyDef(String(bossE[1]).replace(/_sub$/, '')) || {}).title || null) : null, world: G.world };
   if (me && !down) drawViewmodel(st);
   if (me && me.cls === 'monk' && me.armor > 0 && !down) { const ac = me.armor === 2 ? rgb(255, 248, 200) : rgb(100, 190, 255); for (let i = 0; i < 18; i++) { const side = Math.random() < 0.5; const x = side ? (Math.random() < 0.5 ? Math.random() * 10 : R.W - Math.random() * 10) : Math.random() * R.W; const y = side ? Math.random() * R.H : R.H - Math.random() * 8; px(x, y, ac); } }
   if (Lc.dashT > 0) rectA(0, 0, R.W, R.H, rgb(200, 240, 255), 0.15);

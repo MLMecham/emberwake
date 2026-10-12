@@ -82,6 +82,14 @@ function sfx(name, vol) {
     case 'croak': tone(150, 0.18, 'square', 0.16 * v, 110); tone(120, 0.22, 'square', 0.14 * v, 90, AU.ctx.currentTime + 0.2); break; // a frog
     case 'bubble': tone(500, 0.12, 'sine', 0.1 * v, 900); tone(800, 0.06, 'sine', 0.06 * v, 1200, AU.ctx.currentTime + 0.1); break;
     case 'poison': tone(260, 0.15, 'sawtooth', 0.06 * v, 200); noise(0.12, 0.05 * v, 900); break; // a poison tick
+    case 'grip': tone(300, 0.06, 'triangle', 0.08 * v, 220); noise(0.05, 0.06 * v, 2500); break; // the sword flips into reverse grip
+    case 'pommel': noise(0.07, 0.28 * v, 900); tone(140, 0.1, 'square', 0.16 * v, 50); break; // the hilt driven home
+    case 'lungeready': seq([523, 784, 1047], 0.05, 'square', 0.08 * v); break; // held long enough to lunge
+    case 'lunge': noise(0.25, 0.22 * v, 4000); tone(900, 0.2, 'sawtooth', 0.07 * v, 300); break;
+    case 'gourd': tone(220, 0.06, 'square', 0.12 * v, 120); noise(0.12, 0.14 * v, 700); break; // a gourd splits
+    case 'thok': tone(160, 0.05, 'triangle', 0.1 * v, 120); break; // a gourd shrugs off a swing
+    case 'armor': tone(1600, 0.06, 'square', 0.1 * v, 900); noise(0.15, 0.16 * v, 5000); tone(500, 0.12, 'square', 0.08 * v, 250, AU.ctx.currentTime + 0.05); break; // armor flies off
+    case 'clank': tone(900, 0.07, 'square', 0.1 * v, 700); tone(600, 0.07, 'square', 0.06 * v, 500, AU.ctx.currentTime + 0.05); break; // armor that won't come off that way
     case 'nock': tone(700, 0.06, 'square', 0.1 * v, 900); tone(1050, 0.08, 'triangle', 0.08 * v, 1300, AU.ctx.currentTime + 0.06); break; // a second arrow nocked
     case 'eyeshut': tone(320, 0.12, 'square', 0.14 * v, 140); noise(0.1, 0.12 * v, 900); break; // an arrow shuts an eye
     case 'eyecreak': tone(140, 0.7, 'sawtooth', 0.08 * v, 260); noise(0.6, 0.05 * v, 400); break; // the eye is opening again

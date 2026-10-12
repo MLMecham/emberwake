@@ -81,6 +81,7 @@ function handleEvent(e) {
     case 'get': if (e.pid === me || e.all) { Lc.get = { item: e.item, text: (e.pid === me ? '' : '') + e.text, t: 2.2 }; sfx(e.item === 'shard' ? 'fanfare' : 'get'); if (e.item === 'fists' && e.pid === me) unlockMonk(); } break;
     case 'down': if (e.pid === me) { Lc.downT = 0; sfx('die'); } break;
     case 'monk': if (e.pid === me) { Lc.flash = 1; Lc.flashC = rgb(255, 255, 255); G.profile.cls = 'monk'; saveProfile(); setTimeout(() => showDialog('YOUR SWORD CLATTERS TO THE FLOOR. YOUR FISTS HUM WITH POWER. PUNCH WITH ATTACK. HOLD ATTACK TO CHARGE A STARFALL WAVE. [SPACE] FLASH STEP. EVERY ITEM YOU OWN... IS NOW SOMETHING ELSE.'), 1600); } break;
+    case 'backswing': if (e.pid === me) { Lc.swing = 0; Lc.swingDir = -1; Lc.swingFast = false; sfx('swing'); Lc.atkVis = 0.2; } break; // every third hit: the blade comes back the other way
     case 'pow': if (e.lvl === Lc.lvl) Lc.pow.push({ x: e.x, y: e.y, t: 0, big: e.big, word: e.big ? ['KA-POW!', 'WHAM!', 'BOOM!'][Math.random() * 3 | 0] : ['POW!', 'BAM!', 'THWACK!', 'SMACK!'][Math.random() * 4 | 0] }); break;
     case 'shake': if (e.lvl === Lc.lvl && dist2(e.x, e.y, Lc.x, Lc.y) < 64) Lc.shake = 0.35; break;
     case 'flash': if (e.pid === me) { Lc.flash = 0.4; Lc.flashC = c32(hexToRgb(e.c)); } break;
@@ -96,6 +97,8 @@ function showDialog(text) { if (!G.local) return; G.local.dialog = { text, shown
 function loadFavs() { try { const a = JSON.parse(localStorage.getItem('emberwake_favs') || '[]'); return new Set(Array.isArray(a) ? a : []); } catch (e) { return new Set(); } }
 function toggleFav(id) { if (!G.favs) G.favs = loadFavs(); if (G.favs.has(id)) G.favs.delete(id); else G.favs.add(id); try { localStorage.setItem('emberwake_favs', JSON.stringify([...G.favs])); } catch (e) { } }
 function favList(owned) { if (!G.favs) G.favs = loadFavs(); const f = owned.filter(id => G.favs.has(id)); return f.length ? f : owned; }
+const POMMEL_MIN = 0.2, LUNGE_HOLD = 1.5, LUNGE_DUR = 0.22, LUNGE_SPD = 11; // reverse grip timings (seconds) and lunge speed (tiles/s)
+function raftOK(me, L, ti) { return !!me.items.raft && L.kind !== 'dungeon' && !ti.ocean; }
 function ownedBItems(me) { return me ? bItems().filter(d => d.owned(me)).map(d => d.id) : []; }
 function sendAction(a) {
   if (NET.role === 'host') G.sim.onAction(G.myId, a); else if (NET.hostConn) NET.hostConn.send({ t: 'a', a });
@@ -129,12 +132,17 @@ function updateLocal(dt, inp) {
   // movement
   const monk = me.cls === 'monk'; let spd = monk ? 4.0 : 3.6; IN.spaceDash = monk; // Space is the martial artist's dash
   const flying = me.fly > 0; // Gale Cloak: over water, lava, pits and vents like a bat
-  if (Lc.charge > 0.3) spd *= 0.5;
+  if (Lc.charge > 0.3 || Lc.gripT > 0.2) spd *= 0.5;
   if (me.chill) spd *= 0.55; // frozen by ice breath
   if (TINFO[L.get(Math.floor(Lc.x), Math.floor(Lc.y))].shallow && !(me.fly > 0)) spd *= 0.75; // wading
   if (Lc.dashCd > 0) Lc.dashCd -= dt;
   if (inp.dash && monk && Lc.dashCd <= 0) { Lc.dashT = 0.16; Lc.dashCd = 0.7; sfx('dash'); Lc.dashDir = Math.atan2(inp.str, inp.fwd || (inp.str ? 0 : 1)); }
   let mvx = (Math.cos(Lc.a) * inp.fwd + Math.cos(Lc.a + Math.PI / 2) * inp.str) * spd, mvy = (Math.sin(Lc.a) * inp.fwd + Math.sin(Lc.a + Math.PI / 2) * inp.str) * spd;
+  if (Lc.lunge && Lc.lunge.t < LUNGE_DUR && !Lc.lunge.stop) { // the lunge: a burst forward that stops at the edge of anything that would hurt
+    const da = Lc.lunge.dir, ax = Lc.x + Math.cos(da) * 0.55, ay = Lc.y + Math.sin(da) * 0.55; const ta = TINFO[L.get(Math.floor(ax), Math.floor(ay))];
+    if (!flying && (ta.pit || ta.hurt || (ta.water && !ta.frozen && !raftOK(me, L, ta)) || ta.lava || ta.vent)) Lc.lunge.stop = true;
+    else { mvx = Math.cos(da) * LUNGE_SPD; mvy = Math.sin(da) * LUNGE_SPD; }
+  }
   if (Lc.dashT > 0) { Lc.dashT -= dt; const da = Lc.a + (Lc.dashDir || 0); mvx = Math.cos(da) * 15; mvy = Math.sin(da) * 15; }
   // ice: you keep your momentum and steer slowly, so it's easy to slide into whatever is at the edge
   { const ti0 = TINFO[L.get(Math.floor(Lc.x), Math.floor(Lc.y))]; if (ti0.slippery && Lc.dashT <= 0 && !flying) { const k = Math.min(1, dt * 1.3); Lc.svx = lerp(Lc.svx || 0, mvx * 1.15, k); Lc.svy = lerp(Lc.svy || 0, mvy * 1.15, k); mvx = Lc.svx; mvy = Lc.svy; } else { Lc.svx = mvx; Lc.svy = mvy; } }
@@ -201,7 +209,7 @@ function updateLocal(dt, inp) {
   Lc.reviveTarget = (snap.pl || []).find(p => p[0] !== G.myId && !p[8] && p[1] === Lc.lvl && dist2(p[2], p[3], Lc.x, Lc.y) < REVIVE_R2) || null;
   if (inp.interact && Lc.reviveTarget) { const nw = performance.now(); if (nw - (Lc.reviveSent || 0) > 100) { Lc.reviveSent = nw; sendAction({ t: 'revive' }); } }
   // attack
-  Lc.atkCd -= dt; Lc.comboT -= dt; if (Lc.swing != null) { Lc.swing += dt; if (Lc.swing > 0.3) Lc.swing = null; } if (Lc.punch) { Lc.punch.t += dt; if (Lc.punch.t > 0.25) Lc.punch = null; }
+  Lc.atkCd -= dt; Lc.comboT -= dt; if (Lc.swing != null) { Lc.swing += dt * (Lc.swingFast ? 2.3 : 1); if (Lc.swing > 0.3) Lc.swing = null; } if (Lc.punch) { Lc.punch.t += dt; if (Lc.punch.t > 0.25) Lc.punch = null; }
   if (Lc.atkVis > 0) Lc.atkVis -= dt;
   if (monk) {
     if (inp.atkP && Lc.atkCd <= 0) {
@@ -211,8 +219,23 @@ function updateLocal(dt, inp) {
     }
     if (inp.atk) { Lc.held += dt; if (Lc.held > 0.3) { const before = Lc.charge; Lc.charge = Math.min(1.2, Lc.charge + dt); if (Math.floor(Lc.charge * 8) !== Math.floor(before * 8)) sfx('charge'); } }
     else { if (Lc.charge >= 0.8) { sendAction({ t: 'atk', kind: 'wave' }); Lc.shake = 0.25; Lc.flash = 0.15; Lc.flashC = rgb(160, 230, 255); Lc.punch = { side: 1, t: 0 }; } Lc.charge = 0; Lc.held = 0; }
+  } else if (Lc.gripT > 0) { // REVERSE GRIP (Shift + hold attack): let go for a pommel strike; hold to the chime (with the Lunge scroll) to lunge
+    const canLunge = !!me.items.lunge;
+    if (inp.atk) { const before = Lc.gripT; Lc.gripT += dt; if (canLunge && before < LUNGE_HOLD && Lc.gripT >= LUNGE_HOLD) sfx('lungeready'); }
+    else {
+      if (canLunge && Lc.gripT >= LUNGE_HOLD) { Lc.lunge = { t: 0, n: me.sword >= 3 ? 4 : me.sword + 1, next: 0.05, dir: Lc.a, side: 1 }; Lc.atkCd = 0.6; sfx('lunge'); Lc.shake = 0.15; }
+      else if (Lc.gripT >= POMMEL_MIN) { Lc.pommelT = 0; Lc.atkCd = 0.4; Lc.atkVis = 0.25; sendAction({ t: 'atk', kind: 'pommel' }); }
+      Lc.gripT = 0;
+    }
   } else if (inp.atkP && Lc.atkCd <= 0 && me.sword > 0) {
-    Lc.swing = 0; Lc.atkCd = 0.3; sfx('swing'); Lc.atkVis = 0.25; sendAction({ t: 'atk', kind: 'sword' });
+    if (inp.alt) { Lc.gripT = 0.001; sfx('grip'); } // Shift + attack: flip the sword into reverse grip
+    else { Lc.swing = 0; Lc.swingDir = 1; Lc.atkCd = 0.3; sfx('swing'); Lc.atkVis = 0.25; sendAction({ t: 'atk', kind: 'sword' }); }
+  }
+  if (Lc.pommelT != null) { Lc.pommelT += dt; if (Lc.pommelT > 0.3) Lc.pommelT = null; }
+  if (Lc.lunge) { // the lunge's slashes, alternating directions, a quick one every 0.11 s
+    const lg = Lc.lunge; lg.t += dt; lg.next -= dt;
+    if (lg.n > 0 && lg.next <= 0) { lg.n--; lg.next = 0.11; Lc.swing = 0; Lc.swingDir = lg.side; lg.side = -lg.side; Lc.swingFast = true; sfx('swing'); Lc.atkVis = 0.15; sendAction({ t: 'atk', kind: 'slash' }); }
+    if (lg.n <= 0 && lg.t > LUNGE_DUR) { Lc.lunge = null; Lc.swingFast = false; }
   }
   // Item button. Shift (or LB) held = the item's technique. The bow draws while held and fires on release; with the
   // Loaded Shot scroll, holding past LOAD_TIME nocks a second arrow ("hold = power").
@@ -320,7 +343,7 @@ function draw(dt) {
   // pow words
   for (const p of Lc.pow) { const sc = projectPt(cam, p.x, p.y); if (sc) { const c = p.big ? rgb(255, 230, 60) : rgb(255, 255, 255); text(p.word, sc.x - p.word.length * 3, sc.y - 30 - p.t * 30, Math.floor(p.t * 20) & 1 ? c : rgb(255, 80, 40)); } }
   const bossE = ents.find(e => e[8] >= 0);
-  const st = { me, bob: Lc.bob, moveK: Lc.moveK || 0, readyK: Lc.readyK || 0, blockT: Lc.blockT || 0, swing: Lc.swing, punch: Lc.punch, charge: Lc.charge, useFlash: Lc.useFlash, useSpr: Lc.useSpr, level: L, cam, players: snap ? snap.pl : [], myId: G.myId, team: snap ? snap.team : { keys: {}, maps: {}, comps: {}, shards: [], done: [] }, seen: G.seen[L.id] || new Uint8Array(L.w * L.h), seenOW: G.seen.ow || new Uint8Array(1), seenRooms: G.seenRooms, selItem: Lc.sel, pitch: Lc.pitch, lvlKind: L.kind, bossHp: bossE ? bossE[8] : -1, bossName: bossE ? ((enemyDef(bossE[1]) || enemyDef(String(bossE[1]).replace(/_sub$/, '')) || {}).title || null) : null, world: G.world };
+  const st = { me, bob: Lc.bob, moveK: Lc.moveK || 0, readyK: Lc.readyK || 0, blockT: Lc.blockT || 0, swing: Lc.swing, swingDir: Lc.swingDir || 1, grip: Lc.gripT || 0, pommelT: Lc.pommelT, lungeReady: !!(Lc.gripT >= LUNGE_HOLD && me && me.items.lunge), punch: Lc.punch, charge: Lc.charge, useFlash: Lc.useFlash, useSpr: Lc.useSpr, level: L, cam, players: snap ? snap.pl : [], myId: G.myId, team: snap ? snap.team : { keys: {}, maps: {}, comps: {}, shards: [], done: [] }, seen: G.seen[L.id] || new Uint8Array(L.w * L.h), seenOW: G.seen.ow || new Uint8Array(1), seenRooms: G.seenRooms, selItem: Lc.sel, pitch: Lc.pitch, lvlKind: L.kind, bossHp: bossE ? bossE[8] : -1, bossName: bossE ? ((enemyDef(bossE[1]) || enemyDef(String(bossE[1]).replace(/_sub$/, '')) || {}).title || null) : null, world: G.world };
   if (me && !down) drawViewmodel(st);
   if (me && me.cls === 'monk' && me.armor > 0 && !down) { const ac = me.armor === 2 ? rgb(255, 248, 200) : rgb(100, 190, 255); for (let i = 0; i < 18; i++) { const side = Math.random() < 0.5; const x = side ? (Math.random() < 0.5 ? Math.random() * 10 : R.W - Math.random() * 10) : Math.random() * R.W; const y = side ? Math.random() * R.H : R.H - Math.random() * 8; px(x, y, ac); } }
   if (Lc.dashT > 0) rectA(0, 0, R.W, R.H, rgb(200, 240, 255), 0.15);

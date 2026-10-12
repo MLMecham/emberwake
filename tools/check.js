@@ -433,6 +433,30 @@ attempt('boomerangs and knight backs', () => {
   k.f = 0; __ok(view() === 'knight_back', 'facing away: its back');
   __ok(Content.hints.some(t => /KNIGHTS TURN SLOWLY/.test(t)), 'the old men know about knights');
 });
+attempt('sword: pommel, slashes and the backswing', () => {
+  const sim = freshSim(); const p = sim.players.p1; p.god = false; p.sword = 2; p.a = 0; p.hp = 1; // not at full health: no sword beams
+  const foe = (x, hp) => { const e = sim.spawnEnemy('skeleton', p.lvl, p.x + x, p.y, {}); e.spawnFx = 0; e.hp = hp; e.f = Math.PI; return e; };
+  const clear = () => { for (const e of sim.ents) if (e.k === 'en') e.dead = true; sim.ents = sim.ents.filter(e => !e.dead); };
+  clear();
+  // pommel: a long stun and very little damage
+  let sk = foe(1, 10); sim.playerAttack(p, { kind: 'pommel' }); __ok(sk.stun >= POMMEL_STUN - 0.01 && sk.hp > 9.5, 'pommel strike stuns with little damage');
+  // a shield still blocks it from the front
+  clear(); const kn = sim.spawnEnemy('knight', p.lvl, p.x + 1, p.y, {}); kn.spawnFx = 0; kn.f = Math.PI; const kh = kn.hp; sim.playerAttack(p, { kind: 'pommel' }); __ok(kn.hp === kh && !(kn.stun > 1), 'a shield blocks the pommel from the front');
+  // lunge slashes ignore the hit cooldown so every slash lands
+  clear(); sk = foe(1, 20); sim.playerAttack(p, { kind: 'slash' }); sim.playerAttack(p, { kind: 'slash' }); __ok(sk.hp === 20 - 2 * SWORD_DMG[2], 'every lunge slash lands');
+  // backswing: the third hit readies it, and it lands a moment later on the foe that's still standing
+  clear(); sk = foe(1, 20); p.chain = 0; p.backArmed = false;
+  const swing = () => { sk.hurt = 0; sim.playerAttack(p, { kind: 'sword' }); };
+  swing(); swing(); __ok(!p.backswing, 'no backswing on the first two hits');
+  swing(); __ok(p.backswing, 'the third hit readies a backswing');
+  const before = sk.hp; sim.time += 0.2; sim.updateBackswing(p); __ok(sk.hp === before - SWORD_DMG[2], 'the backswing cuts the same foe again');
+  // a third hit that kills saves it for the next hit
+  clear(); p.chain = 0; p.backArmed = false; sk = foe(1, 20); swing(); swing(); sk.hp = 1; swing(); __ok(sk.dead && !p.backswing && p.backArmed, 'a kill on the third hit saves the backswing');
+  sk = foe(1, 20); swing(); __ok(p.backswing && !p.backArmed, 'the saved backswing fires on the next hit that leaves a foe standing');
+  // the chain resets after a pause
+  clear(); p.chain = 0; p.backArmed = false; p.backswing = null; sk = foe(1, 20); swing(); swing(); sim.time += CHAIN_GAP + 0.5; swing(); __ok(!p.backswing && p.chain === 1, 'a pause breaks the chain');
+  __ok(Content.items.lunge && Content.items.heavypommel, 'the sword scrolls exist');
+});
 attempt('tideglass opening', () => {
   for (const [seed, mode] of [[7319, 'adv'], [1234, 'rogue'], [99, 'rogue'], [4242, 'adv']]) {
     const W = genWorld(seed, mode); const D = W.levels.d6; const st = D.startRoom; const r2 = st.children[0]; const r3 = r2.children[0];

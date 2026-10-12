@@ -14,3 +14,13 @@ defineItem({ id: 'quiver', name: 'BIG QUIVER', sprite: 'quiver', team: true, deb
 defineItem({ id: 'bombarrows', name: 'SCROLL: BOMB ARROWS', sprite: 'scroll', team: true, debug: true, monk: { name: 'SCROLL: BLAST DARTS' },
   debugGrant(p) { p.items.bombarrow = true; },
   give(sim, p, ctx) { p.items.bombarrow = true; ctx.banner(); sim.ev({ t: 'dialog', pid: p.id, text: 'HOLD SHIFT AS YOU SHOOT TO TIE A BOMB TO THE ARROW. IT BURSTS WHERE IT LANDS, AND AN EYE IT HITS STAYS SHUT.' }); } });
+// SWORD TECHNIQUES. Everyone with a sword starts with the POMMEL STRIKE: Shift + hold attack flips the sword into reverse
+// grip, and letting go drives the hilt into whatever's in front of you (a long stun, little damage; ui/main.js, game/sim.js).
+// LUNGE: hold the reverse grip until it chimes, then let go to charge forward and slash 2-4 times (more with a better sword).
+defineItem({ id: 'lunge', name: 'SCROLL: LUNGE', sprite: 'scroll', team: true, debug: true,
+  debugGrant(p) { p.items.lunge = true; },
+  give(sim, p, ctx) { p.items.lunge = true; ctx.banner(); sim.ev({ t: 'dialog', pid: p.id, text: 'HOLD SHIFT AND ATTACK. KEEP HOLDING UNTIL THE BLADE SINGS, THEN LET GO: YOU LUNGE FORWARD AND CUT AGAIN AND AGAIN.' }); } });
+// HEAVY POMMEL: pommel strikes also knock a piece of armor off (once per foe, like a bomb; see stripArmor in game/sim.js).
+defineItem({ id: 'heavypommel', name: 'SCROLL: HEAVY POMMEL', sprite: 'scroll', team: true, debug: true,
+  debugGrant(p) { p.items.heavypommel = true; },
+  give(sim, p, ctx) { p.items.heavypommel = true; ctx.banner(); sim.ev({ t: 'dialog', pid: p.id, text: 'YOUR POMMEL STRIKE NOW CRACKS ARMOR. EACH FOE ONLY LOSES ONE PIECE TO IT, SO MIX IT WITH BOMBS.' }); } });

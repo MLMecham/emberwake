@@ -33,7 +33,9 @@ const BUY_COOLDOWN = 0.8; // seconds between shop purchases for one player
 const FLY_TIME = 4, FLY_COOLDOWN = 2; // Gale Cloak: seconds aloft, and the rest after landing before it works again
 const POISON_FRAC = 0.05, POISON_FROG_CHANCE = 0.1; // poison frogs are 1 in 10 frogs // poison takes 5% of max health a tick
 const BOOMERANG_STUN = 3, STUN_LOCK = 6, BOOMERANG_DMG = 0.25; // boomerang: stun seconds, the longest a foe can be kept dizzy, chip damage
-const BACK_ANGLE = 2.1; // radians off a foe's facing that count as behind it (about 120 degrees)
+const BACK_ANGLE = 2.1;
+// sword techniques: the pommel strike (reverse grip), the lunge's slashes, and the backswing on every third hit
+const POMMEL_DMG = 0.25, POMMEL_STUN = 2.5, CHAIN_GAP = 2, BACKSWING_DELAY = 0.14; // radians off a foe's facing that count as behind it (about 120 degrees)
 const SHIELD_STUN = 0.9; // seconds a knight reels after a loaded shot hits its shield
 const FREEZE_TIME = 6, FREEZE_PATH = 6; // seconds frost-arrow ice lasts; how many tiles of water one arrow freezes along its flight
 const HAZARD_TICK = 0.5, ICE_KB = 1.5, SHALLOW_SLOW = 0.75; // how often lava/spikes/vents burn a grounded enemy; how much harder hits shove enemies standing on ice
@@ -281,6 +283,7 @@ class Sim {
       const L = this.W.levels[p.lvl];
       // hazard tiles
       if (p.chill > 0) p.chill -= dt; this.tickPoison(p);
+      this.updateBackswing(p);
       if (p.dbg) { p.arrows = Math.max(p.arrows, p.maxArrows || ARROWS_START); p.bombs = Math.max(p.bombs, p.maxBombs); p.items.bombs = true; p.potions = 2; p.items.potion = true; p.gems = Math.max(p.gems, 999); } // debug: never run out
       const t = L.get(Math.floor(p.x), Math.floor(p.y)); const ti = TINFO[t]; const boots = !!p.items.magmaboots;
       if (p.inv <= 0 && !this.flying(p) && ((ti.hurt && !(boots && ti.lava)) || (ti.vent && this.ventPhase() === 2 && !boots))) this.hurtPlayer(p, 1, null); // fliers are above it all
@@ -591,8 +594,9 @@ class Sim {
   playerAttack(p, a) {
     const L = this.W.levels[p.lvl];
     const swordDmg = SWORD_DMG[p.sword] || 1;
-    if (a.kind === 'sword' && p.sword === 0) return;
-    let range = 1.45, cone = 0.85, dmg = swordDmg;
+    if ((a.kind === 'sword' || a.kind === 'pommel' || a.kind === 'slash') && p.sword === 0) return;
+    if (a.kind === 'pommel') return this.pommelStrike(p, L);
+    let range = 1.45, cone = 0.85, dmg = swordDmg; const slash = a.kind === 'slash'; if (slash) { range = 1.65; cone = 1.0; } const hits = [];
     if (p.cls === 'monk') { range = 1.15; cone = 0.7; dmg = Math.max(1, swordDmg) * (a.kind === 'punch3' ? 2 : 1); }
     if (a.kind === 'wave') { this.fireProj('wave', p.lvl, p.x + Math.cos(p.a) * 0.4, p.y + Math.sin(p.a) * 0.4, p.a, 'p', p.id, { dmg: 3 + swordDmg * 2, life: 2.5 }); this.sfx('wave', p.lvl, p.x, p.y); return; }
     let hitAny = false;
@@ -602,11 +606,12 @@ class Sim {
         const def = enemyDef(e.type); const d = Math.sqrt(dist2(e.x, e.y, p.x, p.y));
         if (d > range + this.enemyRadius(e)) continue;
         const ang = Math.atan2(e.y - p.y, e.x - p.x); if (d > 0.5 && Math.abs(angDiff(p.a, ang)) > cone) continue;
-        if (this.damageEnemy(e, dmg, p, { pid: p.id })) hitAny = true;
+        if (this.damageEnemy(e, dmg, p, { pid: p.id, ignoreIframes: slash })) { hitAny = true; hits.push(e); }
         if (p.cls === 'monk' && a.kind === 'punch3' && !def.boss) { const [v, t] = this.knockFor(e, def, 14); e.kb = [Math.cos(p.a) * v, Math.sin(p.a) * v]; e.kbT = t || 0.2; e.stun = 0.5; }
       }
     }
     this.cutAt(L, p.x + Math.cos(p.a) * 0.75, p.y + Math.sin(p.a) * 0.75); this.cutAt(L, p.x + Math.cos(p.a) * 1.25, p.y + Math.sin(p.a) * 1.25);
+    if (a.kind === 'sword' && hitAny) this.chainHit(p, hits);
     if (hitAny && p.cls === 'monk') this.ev({ t: 'pow', lvl: p.lvl, x: p.x + Math.cos(p.a) * 0.9, y: p.y + Math.sin(p.a) * 0.9, big: a.kind === 'punch3' });
     // bush cutting / burn? sword cuts nothing; check bombable hint clink
     // beam at full health
@@ -615,6 +620,34 @@ class Sim {
       else this.fireProj(p.sword >= 4 ? 'dawnbeam' : 'beam', p.lvl, p.x + Math.cos(p.a) * 0.3, p.y + Math.sin(p.a) * 0.3, p.a, 'p', p.id, { dmg: swordDmg });
       this.sfx('beam', p.lvl, p.x, p.y);
     }
+  }
+  // POMMEL STRIKE: little damage and a long stun on whatever's right in front of you. A shield still blocks it from the front.
+  // With the Heavy Pommel scroll it also knocks a piece of armor off (once per foe). It's also the only thing that splits gourds.
+  pommelStrike(p, L) {
+    let hit = false;
+    for (const e of this.ents) {
+      if (e.k !== 'en' || e.lvl !== p.lvl || e.dead) continue; const def = enemyDef(e.type); const d = Math.sqrt(dist2(e.x, e.y, p.x, p.y));
+      if (d > 1.25 + this.enemyRadius(e)) continue; if (d > 0.5 && Math.abs(angDiff(p.a, Math.atan2(e.y - p.y, e.x - p.x))) > 0.6) continue;
+      hit = true;
+      if (p.items.heavypommel && e.armor > 0 && this.stripArmor(e, 'pommel', p)) { if (!def.boss) { e.stun = Math.max(e.stun || 0, POMMEL_STUN); e.stunFrom = this.time; } continue; }
+      if (this.damageEnemy(e, POMMEL_DMG, p, { pid: p.id, kbMul: 0.6 }) && !def.boss && !e.dead) { e.stun = Math.max(e.stun || 0, POMMEL_STUN); e.stunFrom = this.time; }
+    }
+    if (this.pommelTiles) this.pommelTiles(L, p);
+    this.sfx(hit ? 'pommel' : 'swing', p.lvl, p.x, p.y);
+  }
+  // Every third sword hit in a chain (hits less than CHAIN_GAP apart) readies a backswing. It fires on the first hit that
+  // leaves a foe standing (so a third hit that kills saves it for the next one), cutting that foe again a moment later.
+  chainHit(p, hits) {
+    if (this.time - (p.chainAt != null ? p.chainAt : -99) > CHAIN_GAP) p.chain = 0;
+    p.chain = (p.chain || 0) + 1; p.chainAt = this.time; if (p.chain >= 3) p.backArmed = true;
+    const alive = hits.find(e => !e.dead);
+    if (p.backArmed && alive) { p.backArmed = false; p.chain = 0; p.backswing = { at: this.time + BACKSWING_DELAY, eid: alive.id }; this.ev({ t: 'backswing', pid: p.id }); }
+  }
+  updateBackswing(p) {
+    const b = p.backswing; if (!b || this.time < b.at) return; p.backswing = null;
+    const e = this.ents.find(x => x.id === b.eid); if (!e || e.dead || e.lvl !== p.lvl) return;
+    if (Math.sqrt(dist2(e.x, e.y, p.x, p.y)) > 1.9 + this.enemyRadius(e)) return;
+    this.damageEnemy(e, SWORD_DMG[p.sword] || 1, p, { pid: p.id, ignoreIframes: true });
   }
   useItem(p, item, a) {
     const d = itemDef(item); if (!d || d.slot !== 'b' || !d.owned(p)) return;
