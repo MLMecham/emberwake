@@ -35,6 +35,9 @@ label { font-size:11px; color:var(--dim); display:block; margin:10px 0 4px; }
 .bag .row2 button.on { border-color:var(--gold); color:var(--gold); background:#3a2c14; }
 .bag .row2 button canvas { width:32px; height:32px; image-rendering:pixelated; flex:none; }
 .bag .row2 button small { display:block; color:var(--dim); font-size:10px; letter-spacing:0; text-transform:none; }
+.bag .row2 .fav { margin-left:auto; font-size:20px; color:var(--dim); padding:0 4px; cursor:pointer; flex:none; }
+.bag .row2 .fav.on { color:var(--gold); }
+.bag .favnote { display:block; color:var(--dim); font-size:10px; margin-top:6px; }
 .bag .row2 .tag { flex:1 1 140px; display:flex; align-items:center; gap:8px; font-size:12px; padding:4px 6px; border:1px dashed #57486e; }
 input[type=text], textarea { font:inherit; width:100%; background:#000; color:var(--gold); border:2px solid #57486e; padding:8px; font-size:13px; text-transform:uppercase; }
 textarea { font-size:10px; height:52px; text-transform:none; word-break:break-all; }
@@ -193,8 +196,8 @@ summary:hover { color:var(--gold); }
     <h2>HOW TO PLAY</h2>
     <div class="keys">
       <b>WASD</b><span>MOVE / STRAFE</span><b>MOUSE / ARROWS</b><span>LOOK (CLICK TO LOCK MOUSE)</span>
-      <b>CLICK / SPACE</b><span>ATTACK (A) - SPACE DASHES FOR SOME HEROES...</span><b>RIGHT-CLICK / E</b><span>USE ITEM (B). HOLD FOR POWER (THE BOW FIRES WHEN YOU LET GO)</span><b>SHIFT + ITEM</b><span>THE ITEM'S TECHNIQUE, ONCE YOU LEARN ONE</span>
-      <b>Q / R / WHEEL / 1-7</b><span>SWITCH ITEM</span><b>F (HOLD)</b><span>READ SIGNS / HELP UP A FALLEN FRIEND</span>
+      <b>CLICK / SPACE</b><span>ATTACK (A) - SPACE DASHES FOR SOME HEROES...</span><b>RIGHT-CLICK / E</b><span>USE ITEM (B). HOLD FOR POWER (THE BOW FIRES WHEN YOU LET GO)</span><b>SHIFT + ITEM</b><span>THE ITEM'S TECHNIQUE, ONCE YOU LEARN ONE</span><b>SHIFT + ATTACK (HOLD)</b><span>REVERSE GRIP: LET GO FOR A POMMEL STRIKE</span>
+      <b>WHEEL / R / 1-4</b><span>SWITCH BETWEEN FAVORITE ITEMS (STAR THEM IN THE INVENTORY)</span><b>Q + WHEEL</b><span>SWITCH BETWEEN ALL ITEMS</span><b>F (HOLD)</b><span>READ SIGNS / HELP UP A FALLEN FRIEND</span>
       <b>M / TAB</b><span>MAP</span><b>I</b><span>INVENTORY: GEAR, ITEMS, UPGRADES</span><b>ESC</b><span>MENU</span>
       <b>GAMEPAD</b><span>STICKS MOVE/LOOK, A/RT ATTACK, X/LT ITEM, Y/RB SWITCH, B USE, START MENU, SELECT MAP, LB HELD = SHIFT, D-PAD SWITCH</span>
     </div>

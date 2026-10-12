@@ -80,7 +80,7 @@ function handleEvent(e) {
     case 'dialog': if (e.pid === me) showDialog(e.text); break;
     case 'get': if (e.pid === me || e.all) { Lc.get = { item: e.item, text: (e.pid === me ? '' : '') + e.text, t: 2.2 }; sfx(e.item === 'shard' ? 'fanfare' : 'get'); if (e.item === 'fists' && e.pid === me) unlockMonk(); } break;
     case 'down': if (e.pid === me) { Lc.downT = 0; sfx('die'); } break;
-    case 'monk': if (e.pid === me) { Lc.flash = 1; Lc.flashC = rgb(255, 255, 255); G.profile.cls = 'monk'; saveProfile(); setTimeout(() => showDialog('YOUR SWORD CLATTERS TO THE FLOOR. YOUR FISTS HUM WITH POWER. PUNCH WITH ATTACK. HOLD ATTACK TO CHARGE A STARFALL WAVE. [SHIFT] FLASH STEP. EVERY ITEM YOU OWN... IS NOW SOMETHING ELSE.'), 1600); } break;
+    case 'monk': if (e.pid === me) { Lc.flash = 1; Lc.flashC = rgb(255, 255, 255); G.profile.cls = 'monk'; saveProfile(); setTimeout(() => showDialog('YOUR SWORD CLATTERS TO THE FLOOR. YOUR FISTS HUM WITH POWER. PUNCH WITH ATTACK. HOLD ATTACK TO CHARGE A STARFALL WAVE. [SPACE] FLASH STEP. EVERY ITEM YOU OWN... IS NOW SOMETHING ELSE.'), 1600); } break;
     case 'pow': if (e.lvl === Lc.lvl) Lc.pow.push({ x: e.x, y: e.y, t: 0, big: e.big, word: e.big ? ['KA-POW!', 'WHAM!', 'BOOM!'][Math.random() * 3 | 0] : ['POW!', 'BAM!', 'THWACK!', 'SMACK!'][Math.random() * 4 | 0] }); break;
     case 'shake': if (e.lvl === Lc.lvl && dist2(e.x, e.y, Lc.x, Lc.y) < 64) Lc.shake = 0.35; break;
     case 'flash': if (e.pid === me) { Lc.flash = 0.4; Lc.flashC = c32(hexToRgb(e.c)); } break;
@@ -92,6 +92,10 @@ function pushMsg(text, dur) { G.msgs.push({ text, t: dur || 4 }); if (G.msgs.len
 function showDialog(text) { if (!G.local) return; G.local.dialog = { text, shown: 0, lines: wrapText(text, Math.floor((R.W - 30) / 6)) }; }
 
 // ---------- local player update ----------
+// favorite items live in this browser only (a per-player convenience); every read and write is guarded
+function loadFavs() { try { const a = JSON.parse(localStorage.getItem('emberwake_favs') || '[]'); return new Set(Array.isArray(a) ? a : []); } catch (e) { return new Set(); } }
+function toggleFav(id) { if (!G.favs) G.favs = loadFavs(); if (G.favs.has(id)) G.favs.delete(id); else G.favs.add(id); try { localStorage.setItem('emberwake_favs', JSON.stringify([...G.favs])); } catch (e) { } }
+function favList(owned) { if (!G.favs) G.favs = loadFavs(); const f = owned.filter(id => G.favs.has(id)); return f.length ? f : owned; }
 function ownedBItems(me) { return me ? bItems().filter(d => d.owned(me)).map(d => d.id) : []; }
 function sendAction(a) {
   if (NET.role === 'host') G.sim.onAction(G.myId, a); else if (NET.hostConn) NET.hostConn.send({ t: 'a', a });
@@ -115,8 +119,11 @@ function updateLocal(dt, inp) {
   if (!me.alive) { if (me.respawnIn === 0 && inp.enterP && Lc.downT > 1) { sendAction({ t: 'respawn' }); Lc.downT = 0; } /* never automatic: you can keep waiting for a friend */ Lc.downT += dt; Lc.swing = null; Lc.charge = 0; Lc.pitch = lerp(Lc.pitch, 25, dt * 3); Lc.a += inp.turn * 0.3; return; }
   // selected item validity
   const owned = ownedBItems(me); if (!owned.includes(Lc.sel)) Lc.sel = owned.includes(me.sel) ? me.sel : owned[0] || null;
-  if (inp.cycle && owned.length) { let i = owned.indexOf(Lc.sel); i = (i + (inp.cycle > 0 ? 1 : -1) + owned.length) % owned.length; Lc.sel = owned[i]; sfx('menu'); sendAction({ t: 'sel', item: Lc.sel }); }
-  if (inp.slot && owned[inp.slot - 1]) { Lc.sel = owned[inp.slot - 1]; sfx('menu'); }
+  { // favorites: the wheel only steps through starred items (all of them if none are starred); Q + wheel steps through all
+    const favs = favList(owned); const pick = (list, step) => { if (!list.length) return; let i = list.indexOf(Lc.sel); i = i < 0 ? (step > 0 ? 0 : list.length - 1) : (i + (step > 0 ? 1 : -1) + list.length) % list.length; Lc.sel = list[i]; sfx('menu'); sendAction({ t: 'sel', item: Lc.sel }); };
+    if (inp.cycle) pick(favs, inp.cycle); if (inp.cycleAll) pick(owned, inp.cycleAll);
+    if (inp.slot && favs[inp.slot - 1]) { Lc.sel = favs[inp.slot - 1]; sfx('menu'); sendAction({ t: 'sel', item: Lc.sel }); }
+  }
   // turning
   Lc.a += inp.turn; Lc.pitch = clamp(Lc.pitch + inp.pitch, -50, 50); if (!IN.locked && !IN.mouseL && !IN.mouseR) Lc.pitch *= 0.95;
   // movement
@@ -423,7 +430,9 @@ function renderBag() {
     if (me.items.silver) btn(r, 'arrow_silver', 'SILVER ' + D, 'DOUBLE DAMAGE. ONLY THEY END THE HOLLOW KING', cur === 'silver', () => sendAction({ t: 'equip', slot: 'arrows', kind: 'silver' }));
   }
   const owned = ownedBItems(me);
-  if (page === 'items' && owned.length) { const r = sec('ITEM BUTTON (RIGHT-CLICK / E) - HOLD FOR POWER, SHIFT FOR TECHNIQUE'); for (const id of owned) { const d = itemDef(id); const sub = id === 'bow' ? [me.items.loaded ? 'HOLD: LOADED SHOT' : 'FIRES WHEN YOU LET GO', me.items.bombarrow ? 'SHIFT: BOMB ARROW' : ''].filter(Boolean).join(' / ') : id === 'galecloak' ? 'FLY OVER ANYTHING FOR ' + FLY_TIME + 's' : d.useAlt ? 'SHIFT: TECHNIQUE' : null; btn(r, itemSprite(id, me.cls), itemName(id, me.cls), sub, Lc_sel() === id, () => { G.local.sel = id; sendAction({ t: 'sel', item: id }); }); } }
+  if (page === 'items' && owned.length) { const r = sec('ITEM BUTTON (RIGHT-CLICK / E) - HOLD FOR POWER, SHIFT FOR TECHNIQUE'); for (const id of owned) { const d = itemDef(id); const sub = id === 'bow' ? [me.items.loaded ? 'HOLD: LOADED SHOT' : 'FIRES WHEN YOU LET GO', me.items.bombarrow ? 'SHIFT: BOMB ARROW' : ''].filter(Boolean).join(' / ') : id === 'galecloak' ? 'FLY OVER ANYTHING FOR ' + FLY_TIME + 's' : d.useAlt ? 'SHIFT: TECHNIQUE' : null; btn(r, itemSprite(id, me.cls), itemName(id, me.cls), sub, Lc_sel() === id, () => { G.local.sel = id; sendAction({ t: 'sel', item: id }); });
+      if (!G.favs) G.favs = loadFavs(); const star = document.createElement('span'); star.className = 'fav' + (G.favs.has(id) ? ' on' : ''); star.textContent = G.favs.has(id) ? '\u2605' : '\u2606'; star.title = 'FAVORITE: THE SCROLL WHEEL ONLY STEPS THROUGH FAVORITES'; star.onclick = (ev) => { ev.stopPropagation(); toggleFav(id); sfx('menu'); renderBag(); }; r.lastChild.appendChild(star); }
+    const n = document.createElement('small'); n.className = 'favnote'; n.textContent = 'STAR YOUR FAVORITES: THE WHEEL STEPS THROUGH THEM, KEYS 1-4 PICK THEM, Q + WHEEL STEPS THROUGH EVERYTHING'; body.appendChild(n); }
   const ups = []; if ((me.maxArrows || ARROWS_START) > ARROWS_START) ups.push(['quiver', itemName('quiver', me.cls), 'HOLDS ' + me.maxArrows]);
   if (me.items.loaded) ups.push(['scroll', itemName('loadedshot', me.cls), 'HOLD THE ITEM BUTTON WITH THE BOW']);
   if (me.items.bombarrow) ups.push(['scroll', itemName('bombarrows', me.cls), 'SHIFT + BOW: COSTS AN ARROW AND A BOMB']);

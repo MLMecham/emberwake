@@ -26,7 +26,7 @@ function initInput(canvas) {
 }
 let _padPrev = {};
 function readInput(dt) {
-  const k = IN.keys, p = IN.pressed; const o = { fwd: 0, str: 0, turn: 0, pitch: 0, atk: false, atkP: false, item: false, cycle: 0, interact: false, map: false, pause: false, dash: false, anyP: false };
+  const k = IN.keys, p = IN.pressed; const o = { fwd: 0, str: 0, turn: 0, pitch: 0, atk: false, atkP: false, item: false, cycle: 0, cycleAll: 0, interact: false, map: false, pause: false, dash: false, anyP: false };
   if (k.KeyW || k.ArrowUp) o.fwd += 1; if (k.KeyS || k.ArrowDown) o.fwd -= 1; if (k.KeyD) o.str += 1; if (k.KeyA) o.str -= 1;
   if (k.ArrowLeft) o.turn -= 2.6 * dt; if (k.ArrowRight) o.turn += 2.6 * dt;
   o.turn += IN.mouseDX * 0.0028 * IN.sens; o.pitch -= IN.mouseDY * 0.25 * IN.sens * (IN.invertY ? -1 : 1);
@@ -34,11 +34,16 @@ function readInput(dt) {
   // Space attacks for the sword hero and dashes for the martial artist (IN.spaceDash, set by ui/main.js each frame)
   o.atk = (!IN.spaceDash && k.Space) || k.KeyJ || IN.mouseL; o.atkP = (!IN.spaceDash && p.Space) || p.KeyJ || p.Mouse0;
   o.item = p.KeyE || p.KeyK || p.Mouse2; o.itemHeld = k.KeyE || k.KeyK || IN.mouseR;
-  o.cycle = (p.KeyQ ? -1 : 0) + (p.KeyR ? 1 : 0) + IN.wheel; IN.wheel = 0;
+  // Wheel and R step through your favorite items (all items if none are starred). Holding Q while scrolling steps
+  // through everything; a tap of Q on its own steps back one favorite.
+  if (k.KeyQ) { if (IN.wheel) { o.cycleAll = IN.wheel; IN.qScrolled = true; } }
+  else if (IN.qWas && !IN.qScrolled) o.cycle -= 1;
+  if (!k.KeyQ) IN.qScrolled = false; IN.qWas = !!k.KeyQ;
+  if (!k.KeyQ) o.cycle += IN.wheel; o.cycle += p.KeyR ? 1 : 0; IN.wheel = 0;
   o.interact = k.KeyF; o.interactP = p.KeyF;
   o.map = p.KeyM || p.Tab; o.pause = p.Escape || p.KeyP; o.dash = !!(IN.spaceDash && p.Space); o.alt = !!(k.ShiftLeft || k.ShiftRight); o.inv = p.KeyI; // Shift + item = the item's technique
   o.confirm = p.Enter || p.Space || p.KeyF || p.Mouse0; o.enterP = !!p.Enter;
-  for (let i = 1; i <= 7; i++) if (p['Digit' + i]) o.slot = i;
+  for (let i = 1; i <= 4; i++) if (p['Digit' + i]) o.slot = i; // 1-4: your first four favorites
   // gamepad
   const pads = navigator.getGamepads ? navigator.getGamepads() : []; const gp = pads && Array.from(pads).find(x => x && x.connected);
   if (gp) {
