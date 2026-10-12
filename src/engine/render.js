@@ -561,7 +561,7 @@ function drawBigMap(st) {
       if (r.item && st.seenRooms.has(L.id + ':' + id)) blit(SPR[itemSprite(r.item)], rx + 2, ry + 1, 1);
       // the map points to the compass, the compass to the map, and both together to the dungeon's treasure ('?').
       // Debug mode shows them all.
-      const dbg = st.me && st.me.dbg, held = (it) => st.me && (st.me.items[it] || (it === 'plate' && st.me.armorMax >= 2) || (it === 'bombbag' && st.me.maxBombs > 8));
+      const dbg = st.me && st.me.dbg, held = (it) => st.me && (st.me.items[it] || (it === 'plate' && st.me.armorMax >= 2) || (it === 'bombbag' && st.me.maxBombs > 1));
       if (r.compass && !hasComp && (hasMap || dbg)) blit(SPR[itemSprite('compass')], rx + cw - 17, ry + 1, 1);
       if (r.map && !hasMap && (hasComp || dbg)) blit(SPR[itemSprite('map')], rx + cw - 17, ry + 1, 1);
       if (r.item && !held(r.item) && ((hasMap && hasComp) || dbg) && !st.seenRooms.has(L.id + ':' + id)) text('?', rx + cw / 2 - 2, ry + ch / 2 - 3, Math.floor(R.time * 2) & 1 ? rgb(255, 220, 120) : rgb(255, 255, 255));

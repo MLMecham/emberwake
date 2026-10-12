@@ -37,9 +37,9 @@ const BIOMES = ['plains', 'forest', 'mountain', 'lake', 'desert', 'graveyard', '
 // treasures come from content/dungeons.js. These helpers keep the old shapes for the generator.
 const dungeonName = (d) => (Content.dungeons[d] || {}).name || ('LEVEL ' + d);
 // The caves scattered across the overworld (besides the starting sword cave). Kinds are defined in content/caves.js.
-const CAVE_MIX = ['shop1', 'shop2', 'armor', 'potion', 'sword1', 'sword2', 'heart', 'heart', 'gift', 'gift', 'gift', 'hint', 'hint', 'dojo', 'potion', 'shop1'];
+const CAVE_MIX = ['shop1', 'shop2', 'armor', 'potion', 'sword1', 'sword2', 'heart', 'heart', 'gift', 'gift', 'gift', 'hint', 'hint', 'dojo', 'potion', 'shop1', 'bombshop'];
 // Caves that are hidden behind a bombable wall or a burnable bush.
-const SECRET_CAVES = ['heart', 'gift', 'dojo', 'sword2'];
+const SECRET_CAVES = ['heart', 'gift', 'dojo', 'sword2', 'bombshop'];
 
 // ---- tide rooms (content/gimmicks/eyes.js) ----
 // L.rigs[roomId] = { cells: [tile idx of tide water], eyes: [tile idx of timed eyes] }; L.eyeLinks[eye idx] says what an eye does.
@@ -110,6 +110,9 @@ function genTestZone(W) {
   for (let y = 11; y <= 15; y++) for (let x = 24; x <= 32; x++) if ((x + y) % 2 === 0) L.set(x, y, TL.VENT); sign(28, 16, 'VENTS BLOW ON A 3 SECOND BEAT.');
   // the open floor below is for spawning foes (pause > debug > SPAWN)
   sign(18, 18, 'OPEN FLOOR: SPAWN FOES HERE FROM THE PAUSE MENU (DEBUG).');
+  // a row of breakables (pommel strike: Shift + hold attack, let go); they grow back
+  L.gourds = {}; [['GOURD', 3], ['CORAL', 5], ['SLAG', 7], ['BONEPILE', 9], ['CRYSTAL', 11]].forEach(([n, x]) => { if (PR[n] == null) return; const i = L.idx(x, 19); L.props[i] = PR[n]; L.gourds[i] = PR[n]; });
+  sign(7, 21, 'GOURDS AND THE LIKE: ONLY A POMMEL STRIKE (SHIFT + HOLD ATTACK, THEN LET GO) SPLITS THEM.');
   L.set(18, h - 1, TL.CEXIT); L.set(18, h - 2, TL.EXIT); L.spawn = { x: 18.5, y: h - 3.5, a: -Math.PI / 2 };
   const ow = W.levels.ow; L.exit = { lvl: 'ow', x: ow.spawn.x, y: ow.spawn.y, a: ow.spawn.a };
   L.gimmicks = ['glass', 'vents'];
@@ -557,10 +560,26 @@ function genDungeon(W, d, rnd) {
     r.shutter = (rnd() < 0.25 || r.key) && !r.needsBow; // never seal someone without a bow in with foes across the water
   }
   for (const g of gimmicks) if (g.level) g.level(L, gctx);
+  placeGourds(W, L, d, start, boss);
   L.gimmicks = def.gimmicks || [];
   L.spawn = { x: start.rx * DSX + 6.5, y: start.ry * DSY + 6.2, a: -Math.PI / 2 };
   L.bossRoom = boss.id;
   const ent = W.dungeons[d]; L.exit = ent ? { lvl: 'ow', x: ent.x + 0.5, y: ent.y + 1.6, a: Math.PI / 2 } : { lvl: 'ow', x: W.levels.ow.spawn.x, y: W.levels.ow.spawn.y, a: 0 };
+}
+// Gourds and the like (content/gourds.js): a few on the floor of some rooms, plus any a gimmick asked for (room.gourdAt,
+// room-relative). Their own random stream, so adding them doesn't move anything else. L.gourds remembers where they grow.
+function placeGourds(W, L, d, start, boss) {
+  const prop = PR[Content.breakableFor[d] || 'BONEPILE']; if (prop == null) return;
+  const rnd = mulberry32((W.seed | 0) * 13 + d * 101); L.gourds = {};
+  const put = (x, y) => { const i = L.idx(x, y); if (L.tiles[i] !== TL.DFLOOR || L.props[i]) return false; L.props[i] = prop; L.gourds[i] = prop; return true; };
+  const rooms = Object.values(L.rooms).filter(Boolean);
+  for (const r of rooms) for (const [x, y] of (r.gourdAt || [])) put(r.rx * DSX + x, r.ry * DSY + y);
+  if (L.gourdsOnlyAsked) return; // e.g. Bramble Keep: only where the keep wants them
+  const pick = rnd.shuffle(rooms.filter(r => r !== start && r !== boss && !r.hidden && !r.item && !r.custom && !r.gourdAt));
+  for (const r of pick.slice(0, Math.max(2, Math.round(rooms.length / 5)))) { // about one room in five
+    const ix = r.rx * DSX, iy = r.ry * DSY; const n = rnd() < 0.3 ? 2 : 1;
+    for (let k = 0; k < n; k++) for (let t = 0; t < 12; t++) { const x = 2 + rnd.int(9), y = 2 + rnd.int(5); if (x === 6 || y === 4) continue; if (put(ix + x, iy + y)) break; } // off the paths between doors
+  }
 }
 // A walled-off nook in a boss room's top-right corner, opened by shooting the eye on its wall. def.bossEye = [items inside].
 function bossEyeAlcove(L, r, items) {

@@ -2,7 +2,7 @@
 // Only the host runs this. Clients send their position and actions; the host sends back snapshots.
 'use strict';
 // Enemy, item, projectile and elite definitions live in src/content and are looked up through core/registry.js.
-const SAVE_VERSION = 6;
+const SAVE_VERSION = 7;
 // Bring an old save up to date. v1 -> v2: dungeons were redrawn as shapes, so dungeon tile changes, cleared rooms,
 // keys and maps from v1 no longer fit; overworld progress, items and shards are kept. Tile/prop ids are remapped by name.
 function migrateSave(s) {
@@ -24,6 +24,9 @@ function migrateSave(s) {
     for (const d of ['d3', 'd6']) { delete s.mods[d]; for (const t of ['cleared', 'taken']) for (const k of Object.keys(s.team[t] || {})) if (k.startsWith(d + ':')) delete s.team[t][k]; for (const t of ['keys', 'maps', 'comps']) if (s.team[t]) delete s.team[t][d]; }
     for (const c in (s.players || {})) { const pl = s.players[c]; if (pl.lvl === 'd3' || pl.lvl === 'd6') pl.respawn = true; }
   }
+  if ((s.v || 1) < 7) { // v7: no bag now means 1 bomb; the old Bramble Keep bag (16) is now the 8 bag
+    for (const c in (s.players || {})) { const pl = s.players[c]; if ((pl.maxBombs || 0) > 8) { pl.items = pl.items || {}; pl.items.bombbag = true; } }
+  }
   if (s.tileNames) for (const lvl in s.mods) for (const i in s.mods[lvl]) { const m = s.mods[lvl][i]; const tn = s.tileNames[m[0]]; if (tn && TL[tn] != null) m[0] = TL[tn]; const pn = s.propNames && s.propNames[m[1]]; if (pn) { const pi = PROPS.indexOf(pn); if (pi >= 0) m[1] = pi; } }
   return s;
 }
@@ -34,10 +37,13 @@ const FLY_TIME = 4, FLY_COOLDOWN = 2; // Gale Cloak: seconds aloft, and the rest
 const POISON_FRAC = 0.05, POISON_FROG_CHANCE = 0.1; // poison frogs are 1 in 10 frogs // poison takes 5% of max health a tick
 const BOOMERANG_STUN = 3, STUN_LOCK = 6, BOOMERANG_DMG = 0.25; // boomerang: stun seconds, the longest a foe can be kept dizzy, chip damage
 const BACK_ANGLE = 2.1;
-// sword techniques: the pommel strike (reverse grip), the lunge's slashes, and the backswing on every third hit
 // ARMOR (def.armor 0-3, e.armor now): each level blocks ARMOR_STEP of the damage. Bombs and the Heavy Pommel knock one level off
 // instead of hurting, but each of those ways only works once per foe (e.stripped), so a fight can't be just one trick.
 const ARMOR_STEP = 0.25;
+const GOURD_REGROW = 40; // seconds before a split gourd can grow back (and only with nobody within 6 tiles)
+// how many bombs you can carry: 1 without a bag, 8 with the Bramble Keep bag, 16 with the second one (sold in a grotto)
+const bombCap = (p) => p.items.bombbag2 ? 16 : p.items.bombbag ? 8 : 1;
+// sword techniques: the pommel strike (reverse grip), the lunge's slashes, and the backswing on every third hit
 const POMMEL_DMG = 0.25, POMMEL_STUN = 2.5, CHAIN_GAP = 2, BACKSWING_DELAY = 0.14; // radians off a foe's facing that count as behind it (about 120 degrees)
 const SHIELD_STUN = 0.9; // seconds a knight reels after a loaded shot hits its shield
 const FREEZE_TIME = 6, FREEZE_PATH = 6; // seconds frost-arrow ice lasts; how many tiles of water one arrow freezes along its flight
@@ -49,7 +55,7 @@ const partyMul = (n) => PARTY_HP[Math.min(4, Math.max(1, n))];
 
 function newPlayer(id, name, color, cls) {
   return {
-    id, name, color, cls: cls || 'sword', lvl: 'ow', x: 0, y: 0, a: 0, hp: 12, maxHp: 12, gems: 0, bombs: 0, maxBombs: 8, arrows: 0, maxArrows: ARROWS_START, sword: 0, armor: 0,
+    id, name, color, cls: cls || 'sword', lvl: 'ow', x: 0, y: 0, a: 0, hp: 12, maxHp: 12, gems: 0, bombs: 0, maxBombs: 1, arrows: 0, maxArrows: ARROWS_START, sword: 0, armor: 0,
     items: {}, potions: 0, alive: true, inv: 0, revive: 0, sel: 'boomerang', atk: 0, lastSeen: 0, warpIdx: 0, kills: 0,
   };
 }
@@ -59,7 +65,7 @@ class Sim {
     this.W = world; this.players = {}; this.ents = []; this.mods = {}; this.modVer = 1; this.events = []; this.rigShots = {}; this.thaws = {}; // thaws: 'lvl' -> { tile idx: when it melts }.
     // rigShots: 'lvl:room' -> when its timed eye was last shot
     this.team = { keys: {}, maps: {}, comps: {}, shards: [], done: [], relics: [], taken: {}, cleared: {}, clearedAt: {} };
-    this.groups = {}; this.time = 0; this.levelInit = {}; this.over = 0; this.won = false; this.mode = world.mode;
+    this.groups = {}; this.gourdRegrow = []; this.time = 0; this.levelInit = {}; this.over = 0; this.won = false; this.mode = world.mode;
     if (save) this.loadSave(save);
   }
   // ---- players ----
@@ -70,7 +76,7 @@ class Sim {
       p = saved ? Object.assign(newPlayer(id, name, color, cls), saved, { id, name }) : newPlayer(id, name, color, cls);
       if (!saved) { // late joiners get team progression
         const any = Object.values(this.players)[0];
-        if (any) { p.items = Object.assign({}, any.items); p.sword = Math.max(any.sword, any.swordMax || 0); p.maxHp = any.maxHp; p.maxArrows = any.maxArrows || ARROWS_START; p.hp = p.maxHp; if (any.armor === 2) p.armor = 2; if (p.items.bombbag) p.bombs = 4; }
+        if (any) { p.items = Object.assign({}, any.items); p.sword = Math.max(any.sword, any.swordMax || 0); p.maxHp = any.maxHp; p.maxArrows = any.maxArrows || ARROWS_START; p.hp = p.maxHp; if (any.armor === 2) p.armor = 2; p.maxBombs = bombCap(p); if (p.items.bombbag) p.bombs = 4; }
       }
       const host = Object.values(this.players)[0];
       const sp = host && host.alive ? host : null;
@@ -286,7 +292,7 @@ class Sim {
       const L = this.W.levels[p.lvl];
       // hazard tiles
       if (p.chill > 0) p.chill -= dt; this.tickPoison(p);
-      this.updateBackswing(p);
+      this.updateBackswing(p); p.maxBombs = bombCap(p); if (p.bombs > p.maxBombs) p.bombs = p.maxBombs;
       if (p.dbg) { p.arrows = Math.max(p.arrows, p.maxArrows || ARROWS_START); p.bombs = Math.max(p.bombs, p.maxBombs); p.items.bombs = true; p.potions = 2; p.items.potion = true; p.gems = Math.max(p.gems, 999); } // debug: never run out
       const t = L.get(Math.floor(p.x), Math.floor(p.y)); const ti = TINFO[t]; const boots = !!p.items.magmaboots;
       if (p.inv <= 0 && !this.flying(p) && ((ti.hurt && !(boots && ti.lava)) || (ti.vent && this.ventPhase() === 2 && !boots))) this.hurtPlayer(p, 1, null); // fliers are above it all
@@ -615,6 +621,9 @@ class Sim {
       }
     }
     this.cutAt(L, p.x + Math.cos(p.a) * 0.75, p.y + Math.sin(p.a) * 0.75); this.cutAt(L, p.x + Math.cos(p.a) * 1.25, p.y + Math.sin(p.a) * 1.25);
+    // TODO(monk rework): remove. The martial artist has no pommel strike yet, so his punches split gourds instead (he'd be stuck in Bramble Keep otherwise).
+    if (p.cls === 'monk') { for (const d of [0.6, 1.1]) this.breakGourd(L, p.x + Math.cos(p.a) * d, p.y + Math.sin(p.a) * d); }
+    else for (const d of [0.6, 1.1]) { const i = L.idx(Math.floor(p.x + Math.cos(p.a) * d), Math.floor(p.y + Math.sin(p.a) * d)); if (Content.breakables[L.props[i]]) { this.sfx('thok', p.lvl, p.x, p.y); break; } } // a swing just bounces off
     if (a.kind === 'sword' && hitAny) this.chainHit(p, hits);
     if (hitAny && p.cls === 'monk') this.ev({ t: 'pow', lvl: p.lvl, x: p.x + Math.cos(p.a) * 0.9, y: p.y + Math.sin(p.a) * 0.9, big: a.kind === 'punch3' });
     // bush cutting / burn? sword cuts nothing; check bombable hint clink
@@ -624,6 +633,22 @@ class Sim {
       else this.fireProj(p.sword >= 4 ? 'dawnbeam' : 'beam', p.lvl, p.x + Math.cos(p.a) * 0.3, p.y + Math.sin(p.a) * 0.3, p.a, 'p', p.id, { dmg: swordDmg });
       this.sfx('beam', p.lvl, p.x, p.y);
     }
+  }
+  // split a gourd (or a dungeon's own breakable) at x, y: it drops its thing and grows back later, once nobody's near
+  breakGourd(L, x, y) {
+    const i = L.idx(Math.floor(x), Math.floor(y)); const b = Content.breakables[L.props[i]]; if (!b) return false;
+    this.setTile(L.id, i, null, PR.NONE); this.gourdRegrow.push({ lvl: L.id, i, prop: L.gourds && L.gourds[i] != null ? L.gourds[i] : PR[b.name], at: this.time + GOURD_REGROW });
+    const cx = Math.floor(x) + 0.5, cy = Math.floor(y) + 0.5; this.sfx('gourd', L.id, cx, cy); this.spawn({ k: 'fx', lvl: L.id, x: cx, y: cy, spr: 'puff', life: 0.3, sc: 0.7 });
+    const item = b.drop(Math.random); if (item) this.dropItem(item, L.id, cx, cy);
+    return true;
+  }
+  updateGourds() {
+    if (!this.gourdRegrow.length) return;
+    this.gourdRegrow = this.gourdRegrow.filter(g => {
+      if (this.time < g.at) return true; const L = this.W.levels[g.lvl]; const x = g.i % L.w + 0.5, y = Math.floor(g.i / L.w) + 0.5;
+      if (Object.values(this.players).some(p => p.lvl === g.lvl && dist2(p.x, p.y, x, y) < 36)) return true; // not while someone's watching
+      if (L.props[g.i] === PR.NONE) this.setTile(g.lvl, g.i, null, g.prop); return false;
+    });
   }
   // knock one piece of armor off. `method` ('bomb', 'pommel', ...) only works once per foe: a second time just clanks.
   stripArmor(e, method, src) {
@@ -645,7 +670,7 @@ class Sim {
       if (p.items.heavypommel && e.armor > 0 && this.stripArmor(e, 'pommel', p)) { if (!def.boss) { e.stun = Math.max(e.stun || 0, POMMEL_STUN); e.stunFrom = this.time; } continue; }
       if (this.damageEnemy(e, POMMEL_DMG, p, { pid: p.id, kbMul: 0.6 }) && !def.boss && !e.dead) { e.stun = Math.max(e.stun || 0, POMMEL_STUN); e.stunFrom = this.time; }
     }
-    if (this.pommelTiles) this.pommelTiles(L, p);
+    for (const d of [0.6, 1.1]) this.breakGourd(L, p.x + Math.cos(p.a) * d, p.y + Math.sin(p.a) * d);
     this.sfx(hit ? 'pommel' : 'swing', p.lvl, p.x, p.y);
   }
   // Every third sword hit in a chain (hits less than CHAIN_GAP apart) readies a backswing. It fires on the first hit that
@@ -793,7 +818,7 @@ class Sim {
     if (d.team) for (const o of Object.values(this.players)) d.give(this, o, ctx); else d.give(this, p, ctx);
   }
   tick(dt) {
-    this.update(dt);
+    this.update(dt); this.updateGourds();
     if (this.pendingExit && this.time > this.pendingExit.at) {
       const L = this.W.levels[this.pendingExit.lvl];
       for (const p of Object.values(this.players)) if (p.lvl === L.id) { p.alive = true; p.hp = p.maxHp; this.teleport(p, 'ow', L.exit.x, L.exit.y, L.exit.a); }
@@ -839,6 +864,7 @@ class Sim {
   loadSave(s) {
     s = migrateSave(s);
     Object.assign(this.team, s.team); this.team.relics = this.team.relics || []; this.team.clearedAt = {}; this.mods = s.mods || {}; this.savedPlayers = s.players || {};
+    for (const lvl in this.mods) { const L = this.W.levels[lvl]; if (L && L.gourds) for (const i in this.mods[lvl]) if (L.gourds[i] != null && this.mods[lvl][i][1] !== L.gourds[i]) delete this.mods[lvl][i]; } // split gourds grow back
     for (const lvl in this.mods) { const L = this.W.levels[lvl]; if (!L) continue; for (const i in this.mods[lvl]) { const [t, pr] = this.mods[lvl][i]; L.tiles[i] = t; L.props[i] = pr; } }
     // never restore closed shutters
     for (const lvl in this.mods) for (const i in this.mods[lvl]) if (this.mods[lvl][i][0] === TL.SHUTTER) { this.W.levels[lvl].tiles[i] = TL.OPENDOOR; this.mods[lvl][i][0] = TL.OPENDOOR; }

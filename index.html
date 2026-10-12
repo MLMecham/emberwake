@@ -2086,6 +2086,7 @@ defineCave('armor', { name: 'ARMORY', npc: 'merchant', text: 'LINKED STEEL RINGS
 defineCave('potion', { name: 'POTION SHOP', npc: 'oldman', text: 'DRINK WHEN THE DARK CLOSES IN.', stock: [{ x: 4, item: 'potion', price: 40 }, { x: 8, item: 'potion2', price: 68 }] });
 defineCave('heart', { name: 'SECRET CAVE', npc: 'oldman', text: 'TAKE ANY ONE YOU WANT.', stock: [{ x: 4, item: 'hcont', price: 0, gift: true, choose: true }, { x: 8, item: 'potion', price: 0, gift: true, choose: true }] });
 defineCave('gift', { name: 'SECRET CAVE', npc: 'merchant', text: 'IT\'S A SECRET TO EVERYONE... TAKE THIS.', stock: [{ x: 6, item: ['gems30', 'gems50', 'gems100'], price: 0, gift: true }] });
+defineCave('bombshop', { name: 'GROTTO SHOP', npc: 'merchant', text: 'HEH. DIGGERS ALWAYS FIND ME. CARRY TWICE THE POWDER.', stock: [{ x: 4, item: 'bombbag2', price: 120 }, { x: 8, item: 'bombs', price: 20 }] });
 defineCave('hint', { name: 'OLD MAN', npc: 'oldman', text: null /* a random line from the hints below */, stock: [] });
 defineCave('dojo', { name: 'DOJO', npc: 'master', text: 'HOH! A STEEL SWORD? THE STRONGEST WEAPON IS ATTACHED TO YOUR WRISTS. STEP ONTO THE MAT... IF YOU DARE.', stock: [{ x: 6, item: 'fists', price: 0, gift: true, unique: true }] });
 defineHints([
@@ -2391,6 +2392,42 @@ defineHints([
   'THE HEARTH HAS THREE LOCKS: A FANG OF FROST, A HEART OF EMBER, AND ONE THAT WAS STOLEN LONG AGO.',
   'THE WYRMLINGS IN THE NUMBERED GATES ARE ONLY CHILDREN. THEIR PARENTS ARE FAR LARGER.',
 ]);
+
+})();
+// ---- src/content/gourds.js ----
+(function () {
+// ===== content/gourds.js : powder gourds and the other dungeons' breakables =====
+// Low things on the floor you can walk right over. Only a pommel strike (Shift + attack) splits one; a sword swing just
+// makes it go *thok*. Bramble Keep grows powder gourds, which drop a bomb. The other dungeons have their own kind that
+// now and then drops gems or a heart. Broken ones grow back once nobody's near (game/sim.js breakGourd, updateGourds).
+// Placement: game/world.js placeGourds (a few per dungeon); Bramble Keep puts one before every wall you must bomb.
+'use strict';
+defineSprite('gourd', [
+  '................', '................', '................', '................', '................', '................', '................', '................',
+  '................', '.......Ek.......', '......kEk.......', '....kkoooykk....', '...koooooooyk...', '...kooYoooYok...', '...kYoooYoooYk..', '....kkYYYYYkk...']);
+defineSprite('coral', [
+  '................', '................', '................', '................', '................', '................', '................', '................',
+  '.....k....k.....', '....kmk..kmk.k..', '....kmk.kmk.kmk.', '..k..kmkmk.kmk..', '.kmk.kmmmkkmk...', '..kmkkmmmmmk....', '...kkmmmmmk.....', '..kkkkkkkkkkk...']);
+defineSprite('slag', [
+  '................', '................', '................', '................', '................', '................', '................', '................',
+  '................', '................', '.....kkkkk......', '....kGGGGGkk....', '...kGxGGGGGGk...', '..kGGGGxGGxGk...', '..kGxGGGGGGGGk..', '...kkkkkkkkkk...']);
+defineSprite('bonepile', [
+  '................', '................', '................', '................', '................', '................', '................', '................',
+  '................', '......kkkk......', '.....kzzzzk.....', '.....kzkzkk.kk..', '..kk.kzzzzkkzzk.', '.kzzkkkkkkzzzk..', '..kkzzzzzzzzk...', '..kkkkkkkkkkkk..']);
+defineSprite('crystal', [
+  '................', '................', '................', '................', '................', '................', '................', '.......k........',
+  '......kck.......', '......kck..k....', '..k...kvck.kck..', '.kck..kvck.kvk..', '.kvck.kvck.kvck.', '.kvcckcvckkcvck.', '..kcckccckkcck..', '.kkkkkkkkkkkkkk.']);
+const BREAKABLES = { // prop name -> [sprite, what it drops]
+  GOURD: ['gourd', () => 'bomb'],
+  CORAL: ['coral', (rnd) => { const r = rnd(); return r < 0.15 ? 'heart' : r < 0.4 ? 'gem1' : null; }],
+  SLAG: ['slag', (rnd) => { const r = rnd(); return r < 0.15 ? 'heart' : r < 0.4 ? 'gem1' : null; }],
+  BONEPILE: ['bonepile', (rnd) => { const r = rnd(); return r < 0.15 ? 'heart' : r < 0.4 ? 'gem1' : null; }],
+  CRYSTAL: ['crystal', (rnd) => { const r = rnd(); return r < 0.15 ? 'heart' : r < 0.45 ? 'gem5' : null; }],
+};
+Content.breakables = {};
+for (const name in BREAKABLES) { const [spr, drop] = BREAKABLES[name]; const id = defineProp(name, spr, { solid: false, scale: 0.85 }); Content.breakables[id] = { name, drop }; }
+// which kind each dungeon grows (by dungeon number); anything not listed grows bone piles
+Content.breakableFor = { 2: 'GOURD', 3: 'CORAL', 6: 'CORAL', 4: 'SLAG', 11: 'SLAG', 12: 'SLAG', 10: 'CRYSTAL' };
 
 })();
 // ---- src/content/projectiles.js ----
@@ -3648,11 +3685,18 @@ defineItem({
 });
 // dropped by enemies
 defineItem({ id: 'bomb', name: 'BOMBS', sprite: 'bomb', give(sim, p) { p.bombs = Math.min(p.maxBombs, p.bombs + 4); sim.sfx('gem', p.lvl); } });
-// dungeon 2 treasure: carry 16, shared with the party
+// Without a bag you can carry 1 bomb (game/sim.js bombCap). Dungeon 2 treasure: carry 8, shared with the party.
 defineItem({
   id: 'bombbag', name: 'BOMB BAG', sprite: 'bomb', team: true, debug: true,
-  give(sim, p, ctx) { p.items.bombs = true; p.maxBombs = 16; p.bombs = Math.max(p.bombs, 8); ctx.banner(); },
-  debugGrant(p) { p.items.bombs = true; p.maxBombs = 16; },
+  give(sim, p, ctx) { p.items.bombs = true; p.items.bombbag = true; p.maxBombs = bombCap(p); p.bombs = Math.max(p.bombs, 8); ctx.banner(); },
+  debugGrant(p) { p.items.bombs = true; p.items.bombbag = true; },
+});
+// the second bag, sold in a hidden grotto shop (content/caves.js 'bombshop'): carry 16
+defineItem({
+  id: 'bombbag2', name: 'BIG BOMB BAG', sprite: 'bomb', team: true, debug: true,
+  full: (p) => !!p.items.bombbag2, // the shop won't sell it twice
+  give(sim, p, ctx) { p.items.bombs = true; p.items.bombbag2 = true; p.maxBombs = bombCap(p); p.bombs = p.maxBombs; ctx.banner(); },
+  debugGrant(p) { p.items.bombs = true; p.items.bombbag2 = true; },
 });
 defineEntity('bomb', {
   update(sim, e, dt) {
@@ -4130,9 +4174,9 @@ const BIOMES = ['plains', 'forest', 'mountain', 'lake', 'desert', 'graveyard', '
 // treasures come from content/dungeons.js. These helpers keep the old shapes for the generator.
 const dungeonName = (d) => (Content.dungeons[d] || {}).name || ('LEVEL ' + d);
 // The caves scattered across the overworld (besides the starting sword cave). Kinds are defined in content/caves.js.
-const CAVE_MIX = ['shop1', 'shop2', 'armor', 'potion', 'sword1', 'sword2', 'heart', 'heart', 'gift', 'gift', 'gift', 'hint', 'hint', 'dojo', 'potion', 'shop1'];
+const CAVE_MIX = ['shop1', 'shop2', 'armor', 'potion', 'sword1', 'sword2', 'heart', 'heart', 'gift', 'gift', 'gift', 'hint', 'hint', 'dojo', 'potion', 'shop1', 'bombshop'];
 // Caves that are hidden behind a bombable wall or a burnable bush.
-const SECRET_CAVES = ['heart', 'gift', 'dojo', 'sword2'];
+const SECRET_CAVES = ['heart', 'gift', 'dojo', 'sword2', 'bombshop'];
 
 // ---- tide rooms (content/gimmicks/eyes.js) ----
 // L.rigs[roomId] = { cells: [tile idx of tide water], eyes: [tile idx of timed eyes] }; L.eyeLinks[eye idx] says what an eye does.
@@ -4203,6 +4247,9 @@ function genTestZone(W) {
   for (let y = 11; y <= 15; y++) for (let x = 24; x <= 32; x++) if ((x + y) % 2 === 0) L.set(x, y, TL.VENT); sign(28, 16, 'VENTS BLOW ON A 3 SECOND BEAT.');
   // the open floor below is for spawning foes (pause > debug > SPAWN)
   sign(18, 18, 'OPEN FLOOR: SPAWN FOES HERE FROM THE PAUSE MENU (DEBUG).');
+  // a row of breakables (pommel strike: Shift + hold attack, let go); they grow back
+  L.gourds = {}; [['GOURD', 3], ['CORAL', 5], ['SLAG', 7], ['BONEPILE', 9], ['CRYSTAL', 11]].forEach(([n, x]) => { if (PR[n] == null) return; const i = L.idx(x, 19); L.props[i] = PR[n]; L.gourds[i] = PR[n]; });
+  sign(7, 21, 'GOURDS AND THE LIKE: ONLY A POMMEL STRIKE (SHIFT + HOLD ATTACK, THEN LET GO) SPLITS THEM.');
   L.set(18, h - 1, TL.CEXIT); L.set(18, h - 2, TL.EXIT); L.spawn = { x: 18.5, y: h - 3.5, a: -Math.PI / 2 };
   const ow = W.levels.ow; L.exit = { lvl: 'ow', x: ow.spawn.x, y: ow.spawn.y, a: ow.spawn.a };
   L.gimmicks = ['glass', 'vents'];
@@ -4650,10 +4697,26 @@ function genDungeon(W, d, rnd) {
     r.shutter = (rnd() < 0.25 || r.key) && !r.needsBow; // never seal someone without a bow in with foes across the water
   }
   for (const g of gimmicks) if (g.level) g.level(L, gctx);
+  placeGourds(W, L, d, start, boss);
   L.gimmicks = def.gimmicks || [];
   L.spawn = { x: start.rx * DSX + 6.5, y: start.ry * DSY + 6.2, a: -Math.PI / 2 };
   L.bossRoom = boss.id;
   const ent = W.dungeons[d]; L.exit = ent ? { lvl: 'ow', x: ent.x + 0.5, y: ent.y + 1.6, a: Math.PI / 2 } : { lvl: 'ow', x: W.levels.ow.spawn.x, y: W.levels.ow.spawn.y, a: 0 };
+}
+// Gourds and the like (content/gourds.js): a few on the floor of some rooms, plus any a gimmick asked for (room.gourdAt,
+// room-relative). Their own random stream, so adding them doesn't move anything else. L.gourds remembers where they grow.
+function placeGourds(W, L, d, start, boss) {
+  const prop = PR[Content.breakableFor[d] || 'BONEPILE']; if (prop == null) return;
+  const rnd = mulberry32((W.seed | 0) * 13 + d * 101); L.gourds = {};
+  const put = (x, y) => { const i = L.idx(x, y); if (L.tiles[i] !== TL.DFLOOR || L.props[i]) return false; L.props[i] = prop; L.gourds[i] = prop; return true; };
+  const rooms = Object.values(L.rooms).filter(Boolean);
+  for (const r of rooms) for (const [x, y] of (r.gourdAt || [])) put(r.rx * DSX + x, r.ry * DSY + y);
+  if (L.gourdsOnlyAsked) return; // e.g. Bramble Keep: only where the keep wants them
+  const pick = rnd.shuffle(rooms.filter(r => r !== start && r !== boss && !r.hidden && !r.item && !r.custom && !r.gourdAt));
+  for (const r of pick.slice(0, Math.max(2, Math.round(rooms.length / 5)))) { // about one room in five
+    const ix = r.rx * DSX, iy = r.ry * DSY; const n = rnd() < 0.3 ? 2 : 1;
+    for (let k = 0; k < n; k++) for (let t = 0; t < 12; t++) { const x = 2 + rnd.int(9), y = 2 + rnd.int(5); if (x === 6 || y === 4) continue; if (put(ix + x, iy + y)) break; } // off the paths between doors
+  }
 }
 // A walled-off nook in a boss room's top-right corner, opened by shooting the eye on its wall. def.bossEye = [items inside].
 function bossEyeAlcove(L, r, items) {
@@ -4676,7 +4739,7 @@ function roomBounds(L, room) {
 // Only the host runs this. Clients send their position and actions; the host sends back snapshots.
 'use strict';
 // Enemy, item, projectile and elite definitions live in src/content and are looked up through core/registry.js.
-const SAVE_VERSION = 6;
+const SAVE_VERSION = 7;
 // Bring an old save up to date. v1 -> v2: dungeons were redrawn as shapes, so dungeon tile changes, cleared rooms,
 // keys and maps from v1 no longer fit; overworld progress, items and shards are kept. Tile/prop ids are remapped by name.
 function migrateSave(s) {
@@ -4698,6 +4761,9 @@ function migrateSave(s) {
     for (const d of ['d3', 'd6']) { delete s.mods[d]; for (const t of ['cleared', 'taken']) for (const k of Object.keys(s.team[t] || {})) if (k.startsWith(d + ':')) delete s.team[t][k]; for (const t of ['keys', 'maps', 'comps']) if (s.team[t]) delete s.team[t][d]; }
     for (const c in (s.players || {})) { const pl = s.players[c]; if (pl.lvl === 'd3' || pl.lvl === 'd6') pl.respawn = true; }
   }
+  if ((s.v || 1) < 7) { // v7: no bag now means 1 bomb; the old Bramble Keep bag (16) is now the 8 bag
+    for (const c in (s.players || {})) { const pl = s.players[c]; if ((pl.maxBombs || 0) > 8) { pl.items = pl.items || {}; pl.items.bombbag = true; } }
+  }
   if (s.tileNames) for (const lvl in s.mods) for (const i in s.mods[lvl]) { const m = s.mods[lvl][i]; const tn = s.tileNames[m[0]]; if (tn && TL[tn] != null) m[0] = TL[tn]; const pn = s.propNames && s.propNames[m[1]]; if (pn) { const pi = PROPS.indexOf(pn); if (pi >= 0) m[1] = pi; } }
   return s;
 }
@@ -4708,10 +4774,13 @@ const FLY_TIME = 4, FLY_COOLDOWN = 2; // Gale Cloak: seconds aloft, and the rest
 const POISON_FRAC = 0.05, POISON_FROG_CHANCE = 0.1; // poison frogs are 1 in 10 frogs // poison takes 5% of max health a tick
 const BOOMERANG_STUN = 3, STUN_LOCK = 6, BOOMERANG_DMG = 0.25; // boomerang: stun seconds, the longest a foe can be kept dizzy, chip damage
 const BACK_ANGLE = 2.1;
-// sword techniques: the pommel strike (reverse grip), the lunge's slashes, and the backswing on every third hit
 // ARMOR (def.armor 0-3, e.armor now): each level blocks ARMOR_STEP of the damage. Bombs and the Heavy Pommel knock one level off
 // instead of hurting, but each of those ways only works once per foe (e.stripped), so a fight can't be just one trick.
 const ARMOR_STEP = 0.25;
+const GOURD_REGROW = 40; // seconds before a split gourd can grow back (and only with nobody within 6 tiles)
+// how many bombs you can carry: 1 without a bag, 8 with the Bramble Keep bag, 16 with the second one (sold in a grotto)
+const bombCap = (p) => p.items.bombbag2 ? 16 : p.items.bombbag ? 8 : 1;
+// sword techniques: the pommel strike (reverse grip), the lunge's slashes, and the backswing on every third hit
 const POMMEL_DMG = 0.25, POMMEL_STUN = 2.5, CHAIN_GAP = 2, BACKSWING_DELAY = 0.14; // radians off a foe's facing that count as behind it (about 120 degrees)
 const SHIELD_STUN = 0.9; // seconds a knight reels after a loaded shot hits its shield
 const FREEZE_TIME = 6, FREEZE_PATH = 6; // seconds frost-arrow ice lasts; how many tiles of water one arrow freezes along its flight
@@ -4723,7 +4792,7 @@ const partyMul = (n) => PARTY_HP[Math.min(4, Math.max(1, n))];
 
 function newPlayer(id, name, color, cls) {
   return {
-    id, name, color, cls: cls || 'sword', lvl: 'ow', x: 0, y: 0, a: 0, hp: 12, maxHp: 12, gems: 0, bombs: 0, maxBombs: 8, arrows: 0, maxArrows: ARROWS_START, sword: 0, armor: 0,
+    id, name, color, cls: cls || 'sword', lvl: 'ow', x: 0, y: 0, a: 0, hp: 12, maxHp: 12, gems: 0, bombs: 0, maxBombs: 1, arrows: 0, maxArrows: ARROWS_START, sword: 0, armor: 0,
     items: {}, potions: 0, alive: true, inv: 0, revive: 0, sel: 'boomerang', atk: 0, lastSeen: 0, warpIdx: 0, kills: 0,
   };
 }
@@ -4733,7 +4802,7 @@ class Sim {
     this.W = world; this.players = {}; this.ents = []; this.mods = {}; this.modVer = 1; this.events = []; this.rigShots = {}; this.thaws = {}; // thaws: 'lvl' -> { tile idx: when it melts }.
     // rigShots: 'lvl:room' -> when its timed eye was last shot
     this.team = { keys: {}, maps: {}, comps: {}, shards: [], done: [], relics: [], taken: {}, cleared: {}, clearedAt: {} };
-    this.groups = {}; this.time = 0; this.levelInit = {}; this.over = 0; this.won = false; this.mode = world.mode;
+    this.groups = {}; this.gourdRegrow = []; this.time = 0; this.levelInit = {}; this.over = 0; this.won = false; this.mode = world.mode;
     if (save) this.loadSave(save);
   }
   // ---- players ----
@@ -4744,7 +4813,7 @@ class Sim {
       p = saved ? Object.assign(newPlayer(id, name, color, cls), saved, { id, name }) : newPlayer(id, name, color, cls);
       if (!saved) { // late joiners get team progression
         const any = Object.values(this.players)[0];
-        if (any) { p.items = Object.assign({}, any.items); p.sword = Math.max(any.sword, any.swordMax || 0); p.maxHp = any.maxHp; p.maxArrows = any.maxArrows || ARROWS_START; p.hp = p.maxHp; if (any.armor === 2) p.armor = 2; if (p.items.bombbag) p.bombs = 4; }
+        if (any) { p.items = Object.assign({}, any.items); p.sword = Math.max(any.sword, any.swordMax || 0); p.maxHp = any.maxHp; p.maxArrows = any.maxArrows || ARROWS_START; p.hp = p.maxHp; if (any.armor === 2) p.armor = 2; p.maxBombs = bombCap(p); if (p.items.bombbag) p.bombs = 4; }
       }
       const host = Object.values(this.players)[0];
       const sp = host && host.alive ? host : null;
@@ -4960,7 +5029,7 @@ class Sim {
       const L = this.W.levels[p.lvl];
       // hazard tiles
       if (p.chill > 0) p.chill -= dt; this.tickPoison(p);
-      this.updateBackswing(p);
+      this.updateBackswing(p); p.maxBombs = bombCap(p); if (p.bombs > p.maxBombs) p.bombs = p.maxBombs;
       if (p.dbg) { p.arrows = Math.max(p.arrows, p.maxArrows || ARROWS_START); p.bombs = Math.max(p.bombs, p.maxBombs); p.items.bombs = true; p.potions = 2; p.items.potion = true; p.gems = Math.max(p.gems, 999); } // debug: never run out
       const t = L.get(Math.floor(p.x), Math.floor(p.y)); const ti = TINFO[t]; const boots = !!p.items.magmaboots;
       if (p.inv <= 0 && !this.flying(p) && ((ti.hurt && !(boots && ti.lava)) || (ti.vent && this.ventPhase() === 2 && !boots))) this.hurtPlayer(p, 1, null); // fliers are above it all
@@ -5289,6 +5358,9 @@ class Sim {
       }
     }
     this.cutAt(L, p.x + Math.cos(p.a) * 0.75, p.y + Math.sin(p.a) * 0.75); this.cutAt(L, p.x + Math.cos(p.a) * 1.25, p.y + Math.sin(p.a) * 1.25);
+    // TODO(monk rework): remove. The martial artist has no pommel strike yet, so his punches split gourds instead (he'd be stuck in Bramble Keep otherwise).
+    if (p.cls === 'monk') { for (const d of [0.6, 1.1]) this.breakGourd(L, p.x + Math.cos(p.a) * d, p.y + Math.sin(p.a) * d); }
+    else for (const d of [0.6, 1.1]) { const i = L.idx(Math.floor(p.x + Math.cos(p.a) * d), Math.floor(p.y + Math.sin(p.a) * d)); if (Content.breakables[L.props[i]]) { this.sfx('thok', p.lvl, p.x, p.y); break; } } // a swing just bounces off
     if (a.kind === 'sword' && hitAny) this.chainHit(p, hits);
     if (hitAny && p.cls === 'monk') this.ev({ t: 'pow', lvl: p.lvl, x: p.x + Math.cos(p.a) * 0.9, y: p.y + Math.sin(p.a) * 0.9, big: a.kind === 'punch3' });
     // bush cutting / burn? sword cuts nothing; check bombable hint clink
@@ -5298,6 +5370,22 @@ class Sim {
       else this.fireProj(p.sword >= 4 ? 'dawnbeam' : 'beam', p.lvl, p.x + Math.cos(p.a) * 0.3, p.y + Math.sin(p.a) * 0.3, p.a, 'p', p.id, { dmg: swordDmg });
       this.sfx('beam', p.lvl, p.x, p.y);
     }
+  }
+  // split a gourd (or a dungeon's own breakable) at x, y: it drops its thing and grows back later, once nobody's near
+  breakGourd(L, x, y) {
+    const i = L.idx(Math.floor(x), Math.floor(y)); const b = Content.breakables[L.props[i]]; if (!b) return false;
+    this.setTile(L.id, i, null, PR.NONE); this.gourdRegrow.push({ lvl: L.id, i, prop: L.gourds && L.gourds[i] != null ? L.gourds[i] : PR[b.name], at: this.time + GOURD_REGROW });
+    const cx = Math.floor(x) + 0.5, cy = Math.floor(y) + 0.5; this.sfx('gourd', L.id, cx, cy); this.spawn({ k: 'fx', lvl: L.id, x: cx, y: cy, spr: 'puff', life: 0.3, sc: 0.7 });
+    const item = b.drop(Math.random); if (item) this.dropItem(item, L.id, cx, cy);
+    return true;
+  }
+  updateGourds() {
+    if (!this.gourdRegrow.length) return;
+    this.gourdRegrow = this.gourdRegrow.filter(g => {
+      if (this.time < g.at) return true; const L = this.W.levels[g.lvl]; const x = g.i % L.w + 0.5, y = Math.floor(g.i / L.w) + 0.5;
+      if (Object.values(this.players).some(p => p.lvl === g.lvl && dist2(p.x, p.y, x, y) < 36)) return true; // not while someone's watching
+      if (L.props[g.i] === PR.NONE) this.setTile(g.lvl, g.i, null, g.prop); return false;
+    });
   }
   // knock one piece of armor off. `method` ('bomb', 'pommel', ...) only works once per foe: a second time just clanks.
   stripArmor(e, method, src) {
@@ -5319,7 +5407,7 @@ class Sim {
       if (p.items.heavypommel && e.armor > 0 && this.stripArmor(e, 'pommel', p)) { if (!def.boss) { e.stun = Math.max(e.stun || 0, POMMEL_STUN); e.stunFrom = this.time; } continue; }
       if (this.damageEnemy(e, POMMEL_DMG, p, { pid: p.id, kbMul: 0.6 }) && !def.boss && !e.dead) { e.stun = Math.max(e.stun || 0, POMMEL_STUN); e.stunFrom = this.time; }
     }
-    if (this.pommelTiles) this.pommelTiles(L, p);
+    for (const d of [0.6, 1.1]) this.breakGourd(L, p.x + Math.cos(p.a) * d, p.y + Math.sin(p.a) * d);
     this.sfx(hit ? 'pommel' : 'swing', p.lvl, p.x, p.y);
   }
   // Every third sword hit in a chain (hits less than CHAIN_GAP apart) readies a backswing. It fires on the first hit that
@@ -5467,7 +5555,7 @@ class Sim {
     if (d.team) for (const o of Object.values(this.players)) d.give(this, o, ctx); else d.give(this, p, ctx);
   }
   tick(dt) {
-    this.update(dt);
+    this.update(dt); this.updateGourds();
     if (this.pendingExit && this.time > this.pendingExit.at) {
       const L = this.W.levels[this.pendingExit.lvl];
       for (const p of Object.values(this.players)) if (p.lvl === L.id) { p.alive = true; p.hp = p.maxHp; this.teleport(p, 'ow', L.exit.x, L.exit.y, L.exit.a); }
@@ -5513,6 +5601,7 @@ class Sim {
   loadSave(s) {
     s = migrateSave(s);
     Object.assign(this.team, s.team); this.team.relics = this.team.relics || []; this.team.clearedAt = {}; this.mods = s.mods || {}; this.savedPlayers = s.players || {};
+    for (const lvl in this.mods) { const L = this.W.levels[lvl]; if (L && L.gourds) for (const i in this.mods[lvl]) if (L.gourds[i] != null && this.mods[lvl][i][1] !== L.gourds[i]) delete this.mods[lvl][i]; } // split gourds grow back
     for (const lvl in this.mods) { const L = this.W.levels[lvl]; if (!L) continue; for (const i in this.mods[lvl]) { const [t, pr] = this.mods[lvl][i]; L.tiles[i] = t; L.props[i] = pr; } }
     // never restore closed shutters
     for (const lvl in this.mods) for (const i in this.mods[lvl]) if (this.mods[lvl][i][0] === TL.SHUTTER) { this.W.levels[lvl].tiles[i] = TL.OPENDOOR; this.mods[lvl][i][0] = TL.OPENDOOR; }
@@ -6083,7 +6172,7 @@ function drawBigMap(st) {
       if (r.item && st.seenRooms.has(L.id + ':' + id)) blit(SPR[itemSprite(r.item)], rx + 2, ry + 1, 1);
       // the map points to the compass, the compass to the map, and both together to the dungeon's treasure ('?').
       // Debug mode shows them all.
-      const dbg = st.me && st.me.dbg, held = (it) => st.me && (st.me.items[it] || (it === 'plate' && st.me.armorMax >= 2) || (it === 'bombbag' && st.me.maxBombs > 8));
+      const dbg = st.me && st.me.dbg, held = (it) => st.me && (st.me.items[it] || (it === 'plate' && st.me.armorMax >= 2) || (it === 'bombbag' && st.me.maxBombs > 1));
       if (r.compass && !hasComp && (hasMap || dbg)) blit(SPR[itemSprite('compass')], rx + cw - 17, ry + 1, 1);
       if (r.map && !hasMap && (hasComp || dbg)) blit(SPR[itemSprite('map')], rx + cw - 17, ry + 1, 1);
       if (r.item && !held(r.item) && ((hasMap && hasComp) || dbg) && !st.seenRooms.has(L.id + ':' + id)) text('?', rx + cw / 2 - 2, ry + ch / 2 - 3, Math.floor(R.time * 2) & 1 ? rgb(255, 220, 120) : rgb(255, 255, 255));

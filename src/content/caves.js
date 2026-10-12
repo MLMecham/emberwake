@@ -13,6 +13,7 @@ defineCave('armor', { name: 'ARMORY', npc: 'merchant', text: 'LINKED STEEL RINGS
 defineCave('potion', { name: 'POTION SHOP', npc: 'oldman', text: 'DRINK WHEN THE DARK CLOSES IN.', stock: [{ x: 4, item: 'potion', price: 40 }, { x: 8, item: 'potion2', price: 68 }] });
 defineCave('heart', { name: 'SECRET CAVE', npc: 'oldman', text: 'TAKE ANY ONE YOU WANT.', stock: [{ x: 4, item: 'hcont', price: 0, gift: true, choose: true }, { x: 8, item: 'potion', price: 0, gift: true, choose: true }] });
 defineCave('gift', { name: 'SECRET CAVE', npc: 'merchant', text: 'IT\'S A SECRET TO EVERYONE... TAKE THIS.', stock: [{ x: 6, item: ['gems30', 'gems50', 'gems100'], price: 0, gift: true }] });
+defineCave('bombshop', { name: 'GROTTO SHOP', npc: 'merchant', text: 'HEH. DIGGERS ALWAYS FIND ME. CARRY TWICE THE POWDER.', stock: [{ x: 4, item: 'bombbag2', price: 120 }, { x: 8, item: 'bombs', price: 20 }] });
 defineCave('hint', { name: 'OLD MAN', npc: 'oldman', text: null /* a random line from the hints below */, stock: [] });
 defineCave('dojo', { name: 'DOJO', npc: 'master', text: 'HOH! A STEEL SWORD? THE STRONGEST WEAPON IS ATTACHED TO YOUR WRISTS. STEP ONTO THE MAT... IF YOU DARE.', stock: [{ x: 6, item: 'fists', price: 0, gift: true, unique: true }] });
 defineHints([

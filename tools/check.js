@@ -477,6 +477,30 @@ attempt('armor', () => {
   __ok(view() === 'skeleton_a1', 'down to the breastplate');
   __ok(Content.enemies.skeleton_a1 && Content.enemies.skeleton_a2, 'all three armored skeletons exist');
 });
+attempt('bombs and gourds', () => {
+  const sim = freshSim(); const p = sim.players.p1; p.god = false; p.items = {}; p.bombs = 0; sim.tick(1 / 60);
+  __ok(p.maxBombs === 1, 'one bomb without a bag');
+  sim.giveItem(p, 'bombbag', false); sim.tick(1 / 60); __ok(p.maxBombs === 8, 'the Bramble Keep bag carries 8');
+  sim.giveItem(p, 'bombbag2', false); sim.tick(1 / 60); __ok(p.maxBombs === 16, 'the grotto bag carries 16');
+  let shop = 0; for (const seed of [7319, 99, 4242]) { const W = genWorld(seed, 'adv'); if (W.levels.ow.regions.some(r => r.features.some(f => f.kind === 'bombshop' && f.secret !== 'open'))) shop++; }
+  __ok(shop === 3, 'every land hides a grotto shop (' + shop + '/3)');
+  // every dungeon grows its own breakables
+  const W = sim.W; for (const d of [1, 2, 3, 4, 6, 10]) { const L = W.levels['d' + d]; __ok(L.gourds && Object.keys(L.gourds).length > 0, 'dungeon ' + d + ' has breakables'); }
+  __ok(Object.values(W.levels.d2.gourds)[0] === PR.GOURD && Object.values(W.levels.d3.gourds)[0] === PR.CORAL, 'gourds in Bramble Keep, coral in the Sunken Stair');
+  // a sword swing bounces off a gourd; a pommel strike splits it and it drops a bomb; walking over one is fine
+  const L = W.levels.d2; const gi = +Object.keys(L.gourds)[0]; const gx = gi % L.w, gy = Math.floor(gi / L.w);
+  __ok(!L.solidAt(gx + 0.5, gy + 0.5), 'you can walk over a gourd');
+  sim.teleport(p, 'd2', gx + 0.5, gy + 1.3, -Math.PI / 2); p.sword = 2;
+  sim.playerAttack(p, { kind: 'sword' }); __ok(L.props[gi] === PR.GOURD, 'a sword swing does not split a gourd');
+  sim.playerAttack(p, { kind: 'pommel' }); __ok(L.props[gi] === PR.NONE, 'a pommel strike splits it');
+  __ok(sim.ents.some(e => e.k === 'pick' && e.item === 'bomb' && e.lvl === 'd2'), 'a powder gourd drops a bomb');
+  // it grows back once nobody is near, and a save never keeps it broken
+  const save = sim.makeSave(); sim.time += GOURD_REGROW + 1; sim.updateGourds(); __ok(L.props[gi] === PR.NONE, 'not while you stand there');
+  p.x += 20; sim.updateGourds(); __ok(L.props[gi] === PR.GOURD, 'grows back once you leave');
+  const sim2 = new Sim(genWorld(7319, 'adv'), save); __ok(sim2.W.levels.d2.props[gi] === PR.GOURD, 'a save never keeps a gourd broken');
+  // monks punch them open (until his rework)
+  L.props[gi] = PR.GOURD; const m = sim.players.p2; sim.teleport(m, 'd2', gx + 0.5, gy + 1.3, -Math.PI / 2); sim.playerAttack(m, { kind: 'punch' }); __ok(L.props[gi] === PR.NONE, 'a monk punch splits it');
+});
 attempt('tideglass opening', () => {
   for (const [seed, mode] of [[7319, 'adv'], [1234, 'rogue'], [99, 'rogue'], [4242, 'adv']]) {
     const W = genWorld(seed, mode); const D = W.levels.d6; const st = D.startRoom; const r2 = st.children[0]; const r3 = r2.children[0];
