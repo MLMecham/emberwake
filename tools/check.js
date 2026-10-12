@@ -586,6 +586,11 @@ attempt('beams, disarming, hooked frogs, loaded bomb arrows', () => {
   sim.useItem(p, 'bow', { alt: true, loaded: 3 }); const ba = sim.ents.find(e => e.k === 'proj' && e.bomb); __ok(ba && ba.spr === 'arrow3_bomb' && ba.dmg === 6 && p.arrows === 7 && p.bombs === 2, 'a triple bomb arrow');
   clear(); sim.useItem(p, 'bow', { alt: true, loaded: 2 }); __ok(sim.ents.find(e => e.k === 'proj' && e.bomb).spr === 'arrow2_bomb', 'a double bomb arrow');
   __ok(Content.hints.some(t => /BOOMERANG CURVES/.test(t)), 'the old men know about boomerangs and shields');
+  // bomb arrows use the arrow kind you picked, and the blast lands on top of the arrow's own hit
+  clear(); p.items.silver = true; p.arrowType = 'silver'; p.arrows = 10; p.bombs = 3; sim.useItem(p, 'bow', { alt: true, loaded: 3 }); __ok(sim.ents.find(e => e.k === 'proj' && e.bomb).dmg === 12, 'a triple silver bomb arrow hits as hard as a triple silver arrow');
+  clear(); p.arrowType = 'plain'; const dm = sim.spawnEnemy('dummy', p.lvl, p.x + 3, p.y, {}); dm.spawnFx = 0; p.a = 0; sim.useItem(p, 'bow', { alt: true, loaded: 1 });
+  for (let i = 0; i < 60; i++) { for (const e of sim.ents.slice()) if (e.k === 'proj' || e.k === 'bomb') sim.updateEnt(e, 1 / 60); sim.ents = sim.ents.filter(e => !e.dead); }
+  __ok(dm.maxHp - dm.hp === 2 + 4, 'a bomb arrow: the arrow (2) and then the blast (4) both land (' + (dm.maxHp - dm.hp) + ')');
 });
 attempt('training dummies', () => {
   const sim = freshSim(); const p = sim.players.p1; p.god = false; p.sword = 2; p.hp = 1;
@@ -605,7 +610,7 @@ attempt('training dummies', () => {
 attempt('round props: diagonal gaps are walkable', () => {
   const W = genWorld(7319, 'adv'); const L = W.levels.ow; const x0 = Math.floor(L.spawn.x) + 2, y0 = Math.floor(L.spawn.y) + 2;
   for (let y = y0 - 1; y <= y0 + 2; y++) for (let x = x0 - 1; x <= x0 + 2; x++) { L.tiles[L.idx(x, y)] = TL.GRASS; L.props[L.idx(x, y)] = 0; }
-  const body = (cx, cy) => [[-0.22, -0.22], [0.22, -0.22], [-0.22, 0.22], [0.22, 0.22]].some(([ox, oy]) => L.solidAt(cx + ox, cy + oy));
+  const body = (cx, cy) => [-0.22, 0, 0.22].some(ox => [-0.22, 0, 0.22].some(oy => L.solidAt(cx + ox, cy + oy))); // the client's 3x3 body check
   L.props[L.idx(x0, y0)] = PR.TREE; L.props[L.idx(x0 + 1, y0 + 1)] = PR.BOULDER;
   __ok(!body(x0 + 1, y0 + 1), 'you fit through the gap between two props that only touch at a corner');
   __ok(body(x0 + 0.5, y0 + 0.5) && L.solidAt(x0 + 0.5, y0 + 0.5), 'but not through a prop');
@@ -615,6 +620,11 @@ attempt('round props: diagonal gaps are walkable', () => {
   L.props[L.idx(x0 + 1, y0)] = 0; L.props[L.idx(x0 + 1, y0 + 1)] = PR.BOULDER; let px = x0 + 1.5, py = y0 + 0.5;
   for (let i = 0; i < 200; i++) { const nx = px - 0.01, ny = py + 0.01; if (!body(nx, py)) px = nx; if (!body(px, ny)) py = ny; }
   __ok(px < x0 + 0.8 && py > y0 + 1.2, 'walking from one open corner to the other gets through (' + px.toFixed(2) + ',' + py.toFixed(2) + ')');
+  // small props (graves, signs, bushes...) are round: you can walk between two side by side, but never through one
+  for (let y = y0 - 1; y <= y0 + 2; y++) for (let x = x0 - 1; x <= x0 + 2; x++) L.props[L.idx(x, y)] = 0;
+  L.props[L.idx(x0, y0)] = PR.GRAVE; L.props[L.idx(x0 + 1, y0)] = PR.SIGN; let gy = y0 - 0.7;
+  for (let i = 0; i < 200; i++) { const ny = gy + 0.01; if (!body(x0 + 1, ny)) gy = ny; } __ok(gy > y0 + 1.2, 'you fit between a grave and a sign side by side');
+  let thru = false; for (let t = -0.4; t <= 1.4; t += 0.02) if (!body(x0 + 0.5, y0 + 0.5 + t) && Math.abs(t) < 0.3) thru = true; __ok(!thru, 'but never through one');
 });
 attempt('tideglass opening', () => {
   for (const [seed, mode] of [[7319, 'adv'], [1234, 'rogue'], [99, 'rogue'], [4242, 'adv']]) {

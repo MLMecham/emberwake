@@ -621,10 +621,11 @@ defTile(TL.HEARTHGATE = 38, { solid: true, wall: 'hearthgate', hearthGate: true 
 // props drawn as sprites on tiles
 const PROPS = [null, 'tree', 'pine', 'boulder', 'bush', 'cactus', 'grave', 'statue', 'sign', 'flame', 'pedestal'];
 const PR = { NONE: 0, TREE: 1, PINE: 2, BOULDER: 3, BUSH: 4, CACTUS: 5, GRAVE: 6, STATUE: 7, SIGN: 8, FLAME: 9, PEDESTAL: 10 };
+const PROP_ROUND_R = 0.27; // small props (round: true: bushes, cacti, graves, statues, signs, flames) block only a circle this big, so you can walk between two side by side
 const PROP_K = 0.53; // a solid prop blocks the diamond |dx| + |dy| < PROP_K around its tile's center (game/world.js solidAt); tuned to the 0.22 hero radius
 const PROP_INFO = {
-  1: { solid: true, scale: 1.5 }, 2: { solid: true, scale: 1.6 }, 3: { solid: true, scale: 1.0 }, 4: { solid: true, scale: 0.9, burn: true },
-  5: { solid: true, scale: 1.1 }, 6: { solid: true, scale: 0.9 }, 7: { solid: true, scale: 1.1 }, 8: { solid: true, scale: 0.8 }, 9: { solid: true, scale: 0.7 }, 10: { solid: false, scale: 0.6 },
+  1: { solid: true, scale: 1.5 }, 2: { solid: true, scale: 1.6 }, 3: { solid: true, scale: 1.0 }, 4: { solid: true, scale: 0.9, burn: true, round: true },
+  5: { solid: true, scale: 1.1, round: true }, 6: { solid: true, scale: 0.9, round: true }, 7: { solid: true, scale: 1.1, round: true }, 8: { solid: true, scale: 0.8, round: true }, 9: { solid: true, scale: 0.7, round: true }, 10: { solid: false, scale: 0.6 },
 };
 // Register a new prop: defineProp('TORCH', 'brazier', { solid: true, scale: 0.7 }) -> PR.TORCH, drawn with sprite 'brazier'.
 function defineProp(name, sprite, info) { if (PR[name] != null) throw new Error('prop ' + name + ' defined twice'); const id = PROPS.length; PROPS.push(sprite); PR[name] = id; PROP_INFO[id] = Object.assign({ solid: false, scale: 1 }, info); return id; }
@@ -2572,7 +2573,7 @@ defineSprite('brazier', [
   '.....kGGGGk.....',
   '....kkkkkkkk....',
 ]);
-defineProp('TORCH', 'brazier', { solid: true, scale: 0.7, unlit: true }); // a lit torch becomes the FLAME prop, which gives light
+defineProp('TORCH', 'brazier', { solid: true, scale: 0.7, unlit: true, round: true }); // a lit torch becomes the FLAME prop, which gives light
 defineGimmick('darkness', {
   // braziers in every room's corners; the entrance's are already burning so you can see where you are
   level(L) {
@@ -3778,7 +3779,7 @@ defineEntity('bomb', {
     sim.spawn({ k: 'fx', lvl: e.lvl, x: e.x, y: e.y, spr: 'boom', life: 0.45, sc: R, z: 0.2 });
     sim.sfx('boom', e.lvl, e.x, e.y); sim.ev({ t: 'shake', lvl: e.lvl, x: e.x, y: e.y });
     // armored foes lose a piece of armor instead of taking damage, the first time a bomb (or bomb arrow) gets them
-    for (const en of sim.ents) if (en.k === 'en' && en.lvl === e.lvl && !en.dead && dist2(en.x, en.y, e.x, e.y) < R * R) { if (en.armor > 0 && sim.stripArmor(en, 'bomb', e)) continue; sim.damageEnemy(en, e.nova ? 6 : 4, e, { pid: e.pid, pierceShield: true }); }
+    for (const en of sim.ents) if (en.k === 'en' && en.lvl === e.lvl && !en.dead && dist2(en.x, en.y, e.x, e.y) < R * R) { if (en.armor > 0 && sim.stripArmor(en, 'bomb', e)) continue; sim.damageEnemy(en, e.nova ? 6 : 4, e, { pid: e.pid, pierceShield: true, ignoreIframes: true }); } // a blast always lands, even right after another hit (a bomb arrow's own arrow)
     // crack open bombable walls in range
     const tx = Math.floor(e.x), ty = Math.floor(e.y); let found = false;
     for (let dy = -2; dy <= 2; dy++) for (let dx = -2; dx <= 2; dx++) {
@@ -3880,8 +3881,8 @@ defineItem({
     if (sim.ents.some(e => e.k === 'proj' && e.pid === p.id && (e.type === 'arrow' || e.type === 'dart'))) return;
     // a loaded bomb arrow: every nocked arrow flies together with the one bomb (still one burst)
     const want = a && a.loaded === true ? 2 : Math.floor(+(a && a.loaded) || 1); const n = Math.max(1, Math.min(want, nockMax(p), p.arrows));
-    p.arrows -= n; p.bombs--;
-    sim.fireProj(p.cls === 'monk' ? 'dart' : 'arrow', p.lvl, p.x, p.y, p.a, 'p', p.id, Object.assign({ dmg: 2 * n, bomb: true, spr: n > 2 ? 'arrow3_bomb' : n > 1 ? 'arrow2_bomb' : 'arrow_bomb' }, n > 1 ? { kbMul: n > 2 ? 2.1 : 1.6, shieldBreak: true } : {})); sim.sfx('arrow', p.lvl);
+    p.arrows -= n; p.bombs--; const kind = arrowKind(p); const silver = kind === 'silver', frost = kind === 'frost'; // the arrows you picked: silver hits twice as hard, frost freezes
+    sim.fireProj(p.cls === 'monk' ? 'dart' : 'arrow', p.lvl, p.x, p.y, p.a, 'p', p.id, Object.assign({ dmg: (silver ? 4 : 2) * n, silver, frost }, frost ? { iceLeft: FREEZE_PATH } : {}, { bomb: true, spr: n > 2 ? 'arrow3_bomb' : n > 1 ? 'arrow2_bomb' : 'arrow_bomb' }, n > 1 ? { kbMul: n > 2 ? 2.1 : 1.6, shieldBreak: true } : {})); sim.sfx('arrow', p.lvl);
   },
   use(sim, p, a) {
     // Loaded Shot (items/techniques.js): each Loaded Shot scroll lets you nock one more arrow (2, then 3), whichever you found first
@@ -4301,7 +4302,7 @@ class Level {
     if (ti.solid) return true;
     // solid props (trees, boulders, cacti, graves, statues...) block a diamond, not the whole tile: two of them touching only at
     // a corner leave a gap you can walk through, the way it looks. Side by side they still make a solid wall.
-    const p = this.props[y * this.w + x]; if (p && PROP_INFO[p].solid) return Math.abs(fx - x - 0.5) + Math.abs(fy - y - 0.5) < PROP_K;
+    const p = this.props[y * this.w + x]; if (p && PROP_INFO[p].solid) { const dx = fx - x - 0.5, dy = fy - y - 0.5; return PROP_INFO[p].round ? dx * dx + dy * dy < PROP_ROUND_R * PROP_ROUND_R : Math.abs(dx) + Math.abs(dy) < PROP_K; } // small props: a circle; trees and boulders: a diamond
     return false;
   }
 }
@@ -6865,6 +6866,7 @@ function showDialog(text) { if (!G.local) return; G.local.dialog = { text, shown
 function loadFavs() { try { const a = JSON.parse(localStorage.getItem('emberwake_favs') || '[]'); return new Set(Array.isArray(a) ? a : []); } catch (e) { return new Set(); } }
 function toggleFav(id) { if (!G.favs) G.favs = loadFavs(); if (G.favs.has(id)) G.favs.delete(id); else G.favs.add(id); try { localStorage.setItem('emberwake_favs', JSON.stringify([...G.favs])); } catch (e) { } }
 function favList(owned) { if (!G.favs) G.favs = loadFavs(); const f = owned.filter(id => G.favs.has(id)); return f.length ? f : owned; }
+const BODY_PTS = [-0.22, 0, 0.22].flatMap(ox => [-0.22, 0, 0.22].map(oy => [ox, oy])); // the hero's collision box, sampled 3x3 (corners, edge middles, center) so small round props can't hide between the corners
 const POMMEL_MIN = 0.2, LUNGE_HOLD = 1.5, LUNGE_DUR = 0.22, LUNGE_SPD = 11; // reverse grip timings (seconds) and lunge speed (tiles/s)
 function raftOK(me, L, ti) { return !!me.items.raft && L.kind !== 'dungeon' && !ti.ocean; }
 function ownedBItems(me) { return me ? bItems().filter(d => d.owned(me)).map(d => d.id) : []; }
@@ -6926,7 +6928,7 @@ function updateLocal(dt, inp) {
   const raft = !!me.items.raft && L.kind !== 'dungeon'; const rad = 0.22; const sop = { raft, fly: flying, mx: Lc.x, my: Lc.y }; // the raft only works on open water
   // tide water that rose under the edge of you doesn't pin you in place: you can step off it (into it, you sink)
   const wetEdge = new Set(); for (const [ox, oy] of [[-rad, -rad], [rad, -rad], [-rad, rad], [rad, rad]]) { const tx = Math.floor(Lc.x + ox), ty = Math.floor(Lc.y + oy); if (TINFO[L.get(tx, ty)].water && L.solidAt(tx, ty, sop)) wetEdge.add(ty * L.w + tx); }
-  const solid = (x, y) => { for (const [ox, oy] of [[-rad, -rad], [rad, -rad], [-rad, rad], [rad, rad]]) { const tx = Math.floor(x + ox), ty = Math.floor(y + oy); if (wetEdge.has(ty * L.w + tx)) continue; if (L.solidAt(x + ox, y + oy, sop)) return true; } return false; };
+  const solid = (x, y) => { for (const [ox, oy] of BODY_PTS) { const tx = Math.floor(x + ox), ty = Math.floor(y + oy); if (wetEdge.has(ty * L.w + tx)) continue; if (L.solidAt(x + ox, y + oy, sop)) return true; } return false; };
   const nx = Lc.x + mvx * dt, ny = Lc.y + mvy * dt; let blockedX = false, blockedY = false;
   if (!solid(nx, Lc.y)) Lc.x = nx; else { blockedX = true; Lc.svx = 0; }
   if (!solid(Lc.x, ny)) Lc.y = ny; else { blockedY = true; Lc.svy = 0; }
@@ -7014,7 +7016,7 @@ function updateLocal(dt, inp) {
     if (inp.item) Lc.loadT = 0.001;
     if (Lc.loadT > 0 && inp.atkP) Lc.loadT = 0; // swinging or punching lets the drawn arrow go slack (no shot); so does switching items
     if (Lc.loadT > 0) {
-      if (inp.itemHeld) { const before = nocked(); Lc.loadT += dt; const n = nocked(); if (n > before) sfx('nock'); Lc.useFlash = 0.3; Lc.useSpr = n > 1 ? (me.cls === 'monk' ? 'beam' : (n > 2 ? 'arrow3' : 'arrow2') + (inp.alt && me.items.bombarrow && me.bombs > 0 ? '_bomb' : '')) : itemSprite('bow', me.cls); }
+      if (inp.itemHeld) { const before = nocked(); Lc.loadT += dt; const n = nocked(); if (n > before) sfx('nock'); Lc.useFlash = 0.3; const bombOn = inp.alt && me.items.bombarrow && me.bombs > 0 && me.cls !== 'monk'; Lc.useSpr = bombOn ? (n > 2 ? 'arrow3' : n > 1 ? 'arrow2' : 'arrow') + '_bomb' : n > 1 ? (me.cls === 'monk' ? 'beam' : n > 2 ? 'arrow3' : 'arrow2') : itemSprite('bow', me.cls); }
       else { sendAction({ t: 'use', item: 'bow', loaded: nocked(), alt: !!inp.alt }); Lc.useFlash = 0.3; Lc.useSpr = itemSprite('bow', me.cls); Lc.loadT = 0; }
     }
   } else { Lc.loadT = 0; if (inp.item && Lc.sel) { sendAction({ t: 'use', item: Lc.sel, alt: !!inp.alt }); Lc.useFlash = 0.3; Lc.useSpr = itemSprite(Lc.sel, me.cls); } }

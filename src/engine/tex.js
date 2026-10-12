@@ -173,10 +173,11 @@ defTile(TL.HEARTHGATE = 38, { solid: true, wall: 'hearthgate', hearthGate: true 
 // props drawn as sprites on tiles
 const PROPS = [null, 'tree', 'pine', 'boulder', 'bush', 'cactus', 'grave', 'statue', 'sign', 'flame', 'pedestal'];
 const PR = { NONE: 0, TREE: 1, PINE: 2, BOULDER: 3, BUSH: 4, CACTUS: 5, GRAVE: 6, STATUE: 7, SIGN: 8, FLAME: 9, PEDESTAL: 10 };
+const PROP_ROUND_R = 0.27; // small props (round: true: bushes, cacti, graves, statues, signs, flames) block only a circle this big, so you can walk between two side by side
 const PROP_K = 0.53; // a solid prop blocks the diamond |dx| + |dy| < PROP_K around its tile's center (game/world.js solidAt); tuned to the 0.22 hero radius
 const PROP_INFO = {
-  1: { solid: true, scale: 1.5 }, 2: { solid: true, scale: 1.6 }, 3: { solid: true, scale: 1.0 }, 4: { solid: true, scale: 0.9, burn: true },
-  5: { solid: true, scale: 1.1 }, 6: { solid: true, scale: 0.9 }, 7: { solid: true, scale: 1.1 }, 8: { solid: true, scale: 0.8 }, 9: { solid: true, scale: 0.7 }, 10: { solid: false, scale: 0.6 },
+  1: { solid: true, scale: 1.5 }, 2: { solid: true, scale: 1.6 }, 3: { solid: true, scale: 1.0 }, 4: { solid: true, scale: 0.9, burn: true, round: true },
+  5: { solid: true, scale: 1.1, round: true }, 6: { solid: true, scale: 0.9, round: true }, 7: { solid: true, scale: 1.1, round: true }, 8: { solid: true, scale: 0.8, round: true }, 9: { solid: true, scale: 0.7, round: true }, 10: { solid: false, scale: 0.6 },
 };
 // Register a new prop: defineProp('TORCH', 'brazier', { solid: true, scale: 0.7 }) -> PR.TORCH, drawn with sprite 'brazier'.
 function defineProp(name, sprite, info) { if (PR[name] != null) throw new Error('prop ' + name + ' defined twice'); const id = PROPS.length; PROPS.push(sprite); PR[name] = id; PROP_INFO[id] = Object.assign({ solid: false, scale: 1 }, info); return id; }

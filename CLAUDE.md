@@ -133,7 +133,8 @@ Read this first in a new chat. It's the context from the long first build sessio
   - Webcam/QR pairing was removed.
 
 ## Gotchas
-- Solid props (trees, boulders, cacti, graves...) block a diamond around the tile center (`PROP_K` in tex.js, `solidAt` in world.js), not the whole tile, so two props touching only at a corner leave a walkable gap. Wall tiles still block whole tiles.
+- Solid props don't block their whole tile (`solidAt` in world.js, sizes in tex.js). Trees, pines and boulders block a diamond (`PROP_K`): side by side they're a wall, corner to corner you can slip between. Small props (`round: true`: bushes, cacti, graves, statues, signs, flames, torches) block a small circle (`PROP_ROUND_R`), so you can walk between two side by side. The hero's body is checked at 3x3 points (`BODY_PTS` in main.js) so nothing small slips between its corners. Wall tiles still block whole tiles.
+- Explosions always land (`ignoreIframes`), even right after another hit, e.g. a bomb arrow's own arrow.
 - Sprite pixels are unsigned (`Uint32Array`) but `c32()`/`rgb()` return signed ints. Compare with `c32(x) >>> 0`.
 - Dead entities stay in `sim.ents` until the next tick. Tests that call `useItem` repeatedly should filter out dead projectiles first.
 - The opening dialog pauses the sim. In browser tests, set `G.local.dialog = null` first.

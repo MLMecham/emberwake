@@ -11,7 +11,7 @@ defineSprite('brazier', [
   '.....kGGGGk.....',
   '....kkkkkkkk....',
 ]);
-defineProp('TORCH', 'brazier', { solid: true, scale: 0.7, unlit: true }); // a lit torch becomes the FLAME prop, which gives light
+defineProp('TORCH', 'brazier', { solid: true, scale: 0.7, unlit: true, round: true }); // a lit torch becomes the FLAME prop, which gives light
 defineGimmick('darkness', {
   // braziers in every room's corners; the entrance's are already burning so you can see where you are
   level(L) {

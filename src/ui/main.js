@@ -97,6 +97,7 @@ function showDialog(text) { if (!G.local) return; G.local.dialog = { text, shown
 function loadFavs() { try { const a = JSON.parse(localStorage.getItem('emberwake_favs') || '[]'); return new Set(Array.isArray(a) ? a : []); } catch (e) { return new Set(); } }
 function toggleFav(id) { if (!G.favs) G.favs = loadFavs(); if (G.favs.has(id)) G.favs.delete(id); else G.favs.add(id); try { localStorage.setItem('emberwake_favs', JSON.stringify([...G.favs])); } catch (e) { } }
 function favList(owned) { if (!G.favs) G.favs = loadFavs(); const f = owned.filter(id => G.favs.has(id)); return f.length ? f : owned; }
+const BODY_PTS = [-0.22, 0, 0.22].flatMap(ox => [-0.22, 0, 0.22].map(oy => [ox, oy])); // the hero's collision box, sampled 3x3 (corners, edge middles, center) so small round props can't hide between the corners
 const POMMEL_MIN = 0.2, LUNGE_HOLD = 1.5, LUNGE_DUR = 0.22, LUNGE_SPD = 11; // reverse grip timings (seconds) and lunge speed (tiles/s)
 function raftOK(me, L, ti) { return !!me.items.raft && L.kind !== 'dungeon' && !ti.ocean; }
 function ownedBItems(me) { return me ? bItems().filter(d => d.owned(me)).map(d => d.id) : []; }
@@ -158,7 +159,7 @@ function updateLocal(dt, inp) {
   const raft = !!me.items.raft && L.kind !== 'dungeon'; const rad = 0.22; const sop = { raft, fly: flying, mx: Lc.x, my: Lc.y }; // the raft only works on open water
   // tide water that rose under the edge of you doesn't pin you in place: you can step off it (into it, you sink)
   const wetEdge = new Set(); for (const [ox, oy] of [[-rad, -rad], [rad, -rad], [-rad, rad], [rad, rad]]) { const tx = Math.floor(Lc.x + ox), ty = Math.floor(Lc.y + oy); if (TINFO[L.get(tx, ty)].water && L.solidAt(tx, ty, sop)) wetEdge.add(ty * L.w + tx); }
-  const solid = (x, y) => { for (const [ox, oy] of [[-rad, -rad], [rad, -rad], [-rad, rad], [rad, rad]]) { const tx = Math.floor(x + ox), ty = Math.floor(y + oy); if (wetEdge.has(ty * L.w + tx)) continue; if (L.solidAt(x + ox, y + oy, sop)) return true; } return false; };
+  const solid = (x, y) => { for (const [ox, oy] of BODY_PTS) { const tx = Math.floor(x + ox), ty = Math.floor(y + oy); if (wetEdge.has(ty * L.w + tx)) continue; if (L.solidAt(x + ox, y + oy, sop)) return true; } return false; };
   const nx = Lc.x + mvx * dt, ny = Lc.y + mvy * dt; let blockedX = false, blockedY = false;
   if (!solid(nx, Lc.y)) Lc.x = nx; else { blockedX = true; Lc.svx = 0; }
   if (!solid(Lc.x, ny)) Lc.y = ny; else { blockedY = true; Lc.svy = 0; }
@@ -246,7 +247,7 @@ function updateLocal(dt, inp) {
     if (inp.item) Lc.loadT = 0.001;
     if (Lc.loadT > 0 && inp.atkP) Lc.loadT = 0; // swinging or punching lets the drawn arrow go slack (no shot); so does switching items
     if (Lc.loadT > 0) {
-      if (inp.itemHeld) { const before = nocked(); Lc.loadT += dt; const n = nocked(); if (n > before) sfx('nock'); Lc.useFlash = 0.3; Lc.useSpr = n > 1 ? (me.cls === 'monk' ? 'beam' : (n > 2 ? 'arrow3' : 'arrow2') + (inp.alt && me.items.bombarrow && me.bombs > 0 ? '_bomb' : '')) : itemSprite('bow', me.cls); }
+      if (inp.itemHeld) { const before = nocked(); Lc.loadT += dt; const n = nocked(); if (n > before) sfx('nock'); Lc.useFlash = 0.3; const bombOn = inp.alt && me.items.bombarrow && me.bombs > 0 && me.cls !== 'monk'; Lc.useSpr = bombOn ? (n > 2 ? 'arrow3' : n > 1 ? 'arrow2' : 'arrow') + '_bomb' : n > 1 ? (me.cls === 'monk' ? 'beam' : n > 2 ? 'arrow3' : 'arrow2') : itemSprite('bow', me.cls); }
       else { sendAction({ t: 'use', item: 'bow', loaded: nocked(), alt: !!inp.alt }); Lc.useFlash = 0.3; Lc.useSpr = itemSprite('bow', me.cls); Lc.loadT = 0; }
     }
   } else { Lc.loadT = 0; if (inp.item && Lc.sel) { sendAction({ t: 'use', item: Lc.sel, alt: !!inp.alt }); Lc.useFlash = 0.3; Lc.useSpr = itemSprite(Lc.sel, me.cls); } }

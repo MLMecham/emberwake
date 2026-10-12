@@ -13,8 +13,8 @@ defineItem({
     if (sim.ents.some(e => e.k === 'proj' && e.pid === p.id && (e.type === 'arrow' || e.type === 'dart'))) return;
     // a loaded bomb arrow: every nocked arrow flies together with the one bomb (still one burst)
     const want = a && a.loaded === true ? 2 : Math.floor(+(a && a.loaded) || 1); const n = Math.max(1, Math.min(want, nockMax(p), p.arrows));
-    p.arrows -= n; p.bombs--;
-    sim.fireProj(p.cls === 'monk' ? 'dart' : 'arrow', p.lvl, p.x, p.y, p.a, 'p', p.id, Object.assign({ dmg: 2 * n, bomb: true, spr: n > 2 ? 'arrow3_bomb' : n > 1 ? 'arrow2_bomb' : 'arrow_bomb' }, n > 1 ? { kbMul: n > 2 ? 2.1 : 1.6, shieldBreak: true } : {})); sim.sfx('arrow', p.lvl);
+    p.arrows -= n; p.bombs--; const kind = arrowKind(p); const silver = kind === 'silver', frost = kind === 'frost'; // the arrows you picked: silver hits twice as hard, frost freezes
+    sim.fireProj(p.cls === 'monk' ? 'dart' : 'arrow', p.lvl, p.x, p.y, p.a, 'p', p.id, Object.assign({ dmg: (silver ? 4 : 2) * n, silver, frost }, frost ? { iceLeft: FREEZE_PATH } : {}, { bomb: true, spr: n > 2 ? 'arrow3_bomb' : n > 1 ? 'arrow2_bomb' : 'arrow_bomb' }, n > 1 ? { kbMul: n > 2 ? 2.1 : 1.6, shieldBreak: true } : {})); sim.sfx('arrow', p.lvl);
   },
   use(sim, p, a) {
     // Loaded Shot (items/techniques.js): each Loaded Shot scroll lets you nock one more arrow (2, then 3), whichever you found first

@@ -29,7 +29,7 @@ class Level {
     if (ti.solid) return true;
     // solid props (trees, boulders, cacti, graves, statues...) block a diamond, not the whole tile: two of them touching only at
     // a corner leave a gap you can walk through, the way it looks. Side by side they still make a solid wall.
-    const p = this.props[y * this.w + x]; if (p && PROP_INFO[p].solid) return Math.abs(fx - x - 0.5) + Math.abs(fy - y - 0.5) < PROP_K;
+    const p = this.props[y * this.w + x]; if (p && PROP_INFO[p].solid) { const dx = fx - x - 0.5, dy = fy - y - 0.5; return PROP_INFO[p].round ? dx * dx + dy * dy < PROP_ROUND_R * PROP_ROUND_R : Math.abs(dx) + Math.abs(dy) < PROP_K; } // small props: a circle; trees and boulders: a diamond
     return false;
   }
 }
