@@ -28,7 +28,10 @@ Not built yet. Parked here so they don't get lost. Newest at the bottom.
 - **Metal boomerang.** A metal-coated boomerang upgrade: heavier hits (maybe breaks a level of armor, or cuts webs and brambles on the way). A good third step after the wide throw and the second boomerang.
 - **Boomerang path:** built (wide throw, then a second boomerang), debug only. Still to decide: where in the world each one is found.
 - Hidden in grottos. The **candle** should be the way to find them (lighting a hidden grotto), so the candle stays useful for beginners.
-- **Fire rod → magic rod.** Fire this early is too strong (free, fast, spammable projectiles, and great against ice enemies). Make it a plain magic rod. Scrolls then add fire or ice to it, which pushes elemental magic later in the game.
+- **Magic wand: built** (debug only for the orbs and spells). Still to place: the Flame Orb (near Cinder Caldera?), the Storm Orb (a later dungeon?), and the three spell scrolls (grottos).
+- **The Tandem Casting grotto.** A hidden grotto where two wizards cast in tandem (linked by a crackling beam, a long warning, then a nasty combined spell). Beating them drops the TANDEM CASTING scroll.
+- **Wizards casting in tandem (late game only, dungeons 8, 9 and the Hearth).** Pairs of wizards link up for about 1.2 s and fire a combined spell (a closing ring of fireballs, a lightning blast where their aims cross). Break it by stepping into the link, hitting or stunning either one, or knocking a staff away.
+- **Fire and thunder combos.** Combined Flame Wall becomes a ring of fire around the area between the casters; combined Lightning Lance becomes a Thunderstrike where the beams cross that leaps to every foe in the room. Later maybe mixed combos (fire + thunder).
 - **Built, debug only (still need a place in the world):** Lunge and Heavy Pommel scrolls, Loaded Shot 2 (triple shot), Great Quiver (50), Gale Slam scroll, armored skeletons.
 - **Bomb arrows scroll.** Damage of an arrow plus one bomb, with the bomb's effects on enemies. Permanently closes eye targets, so some eye timers can be very short. That's safe because eyes are timers that always need hitting again, never one-way switches.
 

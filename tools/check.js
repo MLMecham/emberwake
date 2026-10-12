@@ -626,6 +626,41 @@ attempt('round props: diagonal gaps are walkable', () => {
   for (let i = 0; i < 200; i++) { const ny = gy + 0.01; if (!body(x0 + 1, ny)) gy = ny; } __ok(gy > y0 + 1.2, 'you fit between a grave and a sign side by side');
   let thru = false; for (let t = -0.4; t <= 1.4; t += 0.02) if (!body(x0 + 0.5, y0 + 0.5 + t) && Math.abs(t) < 0.3) thru = true; __ok(!thru, 'but never through one');
 });
+attempt('magic wand, spells and casting together', () => {
+  const sim = freshSim(); const a = sim.players.p1, b = sim.players.p2; b.cls = 'sword'; for (const p of [a, b]) { p.god = false; p.items.rod = true; p.hp = 1; }
+  const clear = () => { for (const e of sim.ents) if (e.k === 'en' || e.k === 'proj' || e.k === 'chant' || e.k === 'fire') e.dead = true; sim.ents = sim.ents.filter(e => !e.dead); };
+  const proj = () => sim.ents.find(e => e.k === 'proj' && !e.dead);
+  // force bolt by default; a cooldown, no meter
+  clear(); a.a = 0; sim.useItem(a, 'rod', {}); __ok(proj() && proj().type === 'forcebolt' && proj().kbMul === 3, 'the wand hurls a force bolt');
+  clear(); sim.useItem(a, 'rod', {}); __ok(!proj(), 'then it needs a moment');
+  sim.time += 1; clear(); sim.giveItem(a, 'flameorb', false); sim.onAction('p1', { t: 'equip', slot: 'wand', kind: 'fire' }); sim.useItem(a, 'rod', {}); __ok(proj() && proj().type === 'rodbolt' && proj().fireTrail, 'with the flame orb: fire');
+  sim.time += 2; clear(); sim.giveItem(a, 'stormorb', false); sim.onAction('p1', { t: 'equip', slot: 'wand', kind: 'thunder' }); sim.useItem(a, 'rod', {}); __ok(proj() && proj().type === 'bolt' && proj().chainLeft === 2, 'with the storm orb: a leaping bolt');
+  // a force bolt shoves hard
+  sim.time += 2; clear(); sim.onAction('p1', { t: 'equip', slot: 'wand', kind: 'plain' }); const sk = sim.spawnEnemy('skeleton', a.lvl, a.x + 1.5, a.y, {}); sk.spawnFx = 0; sk.hp = 20; sim.useItem(a, 'rod', {});
+  for (let i = 0; i < 30; i++) { for (const e of sim.ents.slice()) if (e.k === 'proj') sim.updateEnt(e, 1 / 60); sim.ents = sim.ents.filter(e => !e.dead); } __ok(sk.kb && Math.hypot(sk.kb[0], sk.kb[1]) > 15 && sk.stun > 0, 'a force bolt shoves and stuns');
+  // Shift without the spell: just a bolt. With it: a chant, then the wave
+  sim.time += 2; clear(); sim.useItem(a, 'rod', { alt: true }); __ok(proj() && !sim.ents.some(e => e.k === 'chant'), 'no spell learned: Shift just fires');
+  sim.time += 2; clear(); a.items.forcewave = true; const near = sim.spawnEnemy('skeleton', a.lvl, a.x + 1.5, a.y, {}); near.spawnFx = 0; near.hp = 20;
+  sim.useItem(a, 'rod', { alt: true }); const ch = sim.ents.find(e => e.k === 'chant'); __ok(ch && ch.members.length === 1, 'Shift starts a chant');
+  ch.t = ch.life; sim.updateEnt(ch, 1 / 60); __ok(near.hp === 19 && near.stun >= 1, 'a solo force wave');
+  sim.useItem(a, 'rod', { alt: true }); __ok(!sim.ents.some(e => e.k === 'chant' && !e.dead), 'then a cooldown');
+  // two casters, same spell, both knowing Tandem Casting: one combined Gale Burst
+  sim.time += 8; clear(); a.items.tandem = b.items.tandem = true; b.items.forcewave = true; b.wandEl = 'plain'; b.x = a.x + 2; b.y = a.y; b.lvl = a.lvl;
+  const kn = sim.spawnEnemy('knight', a.lvl, a.x + 1, a.y + 4, {}); kn.spawnFx = 0; kn.hp = 30;
+  sim.useItem(a, 'rod', { alt: true }); sim.useItem(b, 'rod', { alt: true }); const c2 = sim.ents.find(e => e.k === 'chant' && !e.dead);
+  __ok(c2 && c2.members.length === 2 && sim.ents.filter(e => e.k === 'chant' && !e.dead).length === 1, 'the friend joins the chant instead of starting another');
+  c2.t = c2.life; sim.updateEnt(c2, 1 / 60); __ok(kn.disarmed && kn.hp === 28, 'GALE BURST: reaches further, hits harder, knocks the shield away (' + kn.hp + ')');
+  __ok((b.spellReady || 0) - sim.time <= 1.01, 'joining costs nothing');
+  // without Tandem Casting each casts alone
+  sim.time += 8; clear(); a.items.tandem = false; sim.useItem(a, 'rod', { alt: true }); sim.useItem(b, 'rod', { alt: true }); __ok(sim.ents.filter(e => e.k === 'chant' && !e.dead).length === 2, 'no tandem scroll: two separate chants');
+  // flame wall and lightning lance
+  sim.time += 8; clear(); a.items.flamewall = true; sim.onAction('p1', { t: 'equip', slot: 'wand', kind: 'fire' }); sim.useItem(a, 'rod', { alt: true }); let c3 = sim.ents.find(e => e.k === 'chant' && !e.dead); c3.t = c3.life; sim.updateEnt(c3, 1 / 60);
+  __ok(sim.ents.filter(e => e.k === 'fire' && !e.dead).length >= 3, 'a flame wall');
+  sim.time += 8; clear(); a.items.lightninglance = true; sim.onAction('p1', { t: 'equip', slot: 'wand', kind: 'thunder' }); sim.useItem(a, 'rod', { alt: true }); c3 = sim.ents.find(e => e.k === 'chant' && !e.dead); c3.t = c3.life; sim.updateEnt(c3, 1 / 60);
+  __ok(proj() && proj().type === 'lance', 'a lightning lance');
+  // old saves: the fire rod keeps its fire
+  const sv = sim.makeSave(); sv.v = 7; for (const c in sv.players) { sv.players[c].items = { rod: true }; delete sv.players[c].wandEl; } const s2 = new Sim(genWorld(7319, 'adv'), sv); const pl = Object.values(s2.savedPlayers)[0]; __ok(pl.items.wandfire && pl.wandEl === 'fire', 'an old fire rod becomes the wand with fire');
+});
 attempt('tideglass opening', () => {
   for (const [seed, mode] of [[7319, 'adv'], [1234, 'rogue'], [99, 'rogue'], [4242, 'adv']]) {
     const W = genWorld(seed, mode); const D = W.levels.d6; const st = D.startRoom; const r2 = st.children[0]; const r3 = r2.children[0];

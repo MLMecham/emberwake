@@ -454,8 +454,14 @@ function renderBag() {
     if (me.items.frostarrows) btn(r, 'arrow_ice', 'FROST ' + D, 'FREEZE FOES AND FRESH WATER', cur === 'frost', () => sendAction({ t: 'equip', slot: 'arrows', kind: 'frost' }));
     if (me.items.silver) btn(r, 'arrow_silver', 'SILVER ' + D, 'DOUBLE DAMAGE. ONLY THEY END THE HOLLOW KING', cur === 'silver', () => sendAction({ t: 'equip', slot: 'arrows', kind: 'silver' }));
   }
+  if (page === 'gear' && me.items.rod && me.cls !== 'monk' && (me.items.wandfire || me.items.wandthunder)) { // the magic wand's element, like an arrow kind
+    const cur = me.wandEl || 'plain'; const r = sec('WAND MAGIC (SHIFT CASTS ITS SPELL, IF YOU KNOW IT)');
+    btn(r, 'forcebolt', 'FORCE', me.items.forcewave ? 'SHOVES. SPELL: FORCE WAVE' : 'SHOVES FOES AWAY', cur === 'plain', () => sendAction({ t: 'equip', slot: 'wand', kind: 'plain' }));
+    if (me.items.wandfire) btn(r, 'orb_fire', 'FIRE', me.items.flamewall ? 'BURNS. SPELL: FLAME WALL' : 'BURNS, LIGHTS TORCHES', cur === 'fire', () => sendAction({ t: 'equip', slot: 'wand', kind: 'fire' }));
+    if (me.items.wandthunder) btn(r, 'orb_thunder', 'STORM', me.items.lightninglance ? 'LEAPS FOE TO FOE. SPELL: LIGHTNING LANCE' : 'LEAPS FROM FOE TO FOE', cur === 'thunder', () => sendAction({ t: 'equip', slot: 'wand', kind: 'thunder' }));
+  }
   const owned = ownedBItems(me);
-  if (page === 'items' && owned.length) { const r = sec('ITEM BUTTON (RIGHT-CLICK / E) - HOLD FOR POWER, SHIFT FOR TECHNIQUE'); for (const id of owned) { const d = itemDef(id); const sub = id === 'bow' ? [me.items.loaded || me.items.loaded2 ? 'HOLD: LOADED SHOT' : 'FIRES WHEN YOU LET GO', me.items.bombarrow ? 'SHIFT: BOMB ARROW' : ''].filter(Boolean).join(' / ') : id === 'galecloak' ? 'FLY OVER ANYTHING FOR ' + FLY_TIME + 's. PRESS AGAIN TO DROP' + (me.items.cloakslam ? ' AND SLAM' : '') : d.useAlt ? 'SHIFT: TECHNIQUE' : null; btn(r, itemSprite(id, me.cls), itemName(id, me.cls), sub, Lc_sel() === id, () => { G.local.sel = id; sendAction({ t: 'sel', item: id }); });
+  if (page === 'items' && owned.length) { const r = sec('ITEM BUTTON (RIGHT-CLICK / E) - HOLD FOR POWER, SHIFT FOR TECHNIQUE'); for (const id of owned) { const d = itemDef(id); const sub = id === 'bow' ? [me.items.loaded || me.items.loaded2 ? 'HOLD: LOADED SHOT' : 'FIRES WHEN YOU LET GO', me.items.bombarrow ? 'SHIFT: BOMB ARROW' : ''].filter(Boolean).join(' / ') : id === 'rod' && me.cls !== 'monk' ? ({ plain: 'FORCE', fire: 'FIRE', thunder: 'STORM' }[me.wandEl || 'plain'] || 'FORCE') + ' MAGIC. SHIFT: ITS SPELL' : id === 'galecloak' ? 'FLY OVER ANYTHING FOR ' + FLY_TIME + 's. PRESS AGAIN TO DROP' + (me.items.cloakslam ? ' AND SLAM' : '') : d.useAlt ? 'SHIFT: TECHNIQUE' : null; btn(r, itemSprite(id, me.cls), itemName(id, me.cls), sub, Lc_sel() === id, () => { G.local.sel = id; sendAction({ t: 'sel', item: id }); });
       if (!G.favs) G.favs = loadFavs(); const star = document.createElement('span'); star.className = 'fav' + (G.favs.has(id) ? ' on' : ''); star.textContent = G.favs.has(id) ? '\u2605' : '\u2606'; star.title = 'FAVORITE: THE SCROLL WHEEL ONLY STEPS THROUGH FAVORITES'; star.onclick = (ev) => { ev.stopPropagation(); toggleFav(id); sfx('menu'); renderBag(); }; r.lastChild.appendChild(star); }
     const n = document.createElement('small'); n.className = 'favnote'; n.textContent = 'STAR YOUR FAVORITES: THE WHEEL STEPS THROUGH THEM, KEYS 1-4 PICK THEM, Q + WHEEL STEPS THROUGH EVERYTHING'; body.appendChild(n); }
   const ups = []; if ((me.maxArrows || ARROWS_START) > ARROWS_START) ups.push(['quiver', itemName('quiver', me.cls), 'HOLDS ' + me.maxArrows]);
@@ -463,6 +469,8 @@ function renderBag() {
   if (me.items.loaded2) ups.push(['scroll', itemName('tripleshot', me.cls), 'ONE MORE ARROW ON THE STRING']);
   if (me.items.lunge) ups.push(['scroll', itemName('lunge', me.cls), 'SHIFT + HOLD ATTACK UNTIL IT CHIMES, THEN LET GO']);
   if (me.items.heavypommel) ups.push(['scroll', itemName('heavypommel', me.cls), 'POMMEL STRIKES CRACK ARMOR']);
+  if (me.items.wandfire) ups.push(['orb_fire', itemName('flameorb', me.cls), 'THE WAND CAN HURL FIRE']);
+  if (me.items.wandthunder) ups.push(['orb_thunder', itemName('stormorb', me.cls), 'THE WAND CAN CALL LIGHTNING']);
   if (me.items.cloakslam) ups.push(['scroll', itemName('galeslam', me.cls), 'END A FLIGHT EARLY TO SLAM DOWN']);
   if (me.items.bombbag2) ups.push(['bomb', itemName('bombbag2', me.cls), 'CARRY 16 BOMBS']); else if (me.items.bombbag) ups.push(['bomb', itemName('bombbag', me.cls), 'CARRY 8 BOMBS']);
   if (me.items.bombarrow) ups.push(['scroll', itemName('bombarrows', me.cls), 'SHIFT + BOW: COSTS AN ARROW AND A BOMB']);

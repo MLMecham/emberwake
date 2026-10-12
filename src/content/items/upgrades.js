@@ -13,9 +13,15 @@ Content.upgrades = [
   { id: 'quiver50', group: 'BOW', desc: 'CARRY 50 ARROWS', has: (p) => (p.maxArrows || ARROWS_START) >= 50, on: (p) => { p.maxArrows = 50; }, off: (p) => { p.maxArrows = (p.maxArrows || ARROWS_START) >= 30 ? 30 : ARROWS_START; p.arrows = Math.min(p.arrows, p.maxArrows); } },
   Object.assign({ id: 'widethrow', group: 'BOOMERANG', desc: 'SHIFT + BOOMERANG: A WIDE SWEEP THAT HITS HARD' }, flag('widethrow')),
   Object.assign({ id: 'boomerang2', group: 'BOOMERANG', desc: 'TWO BOOMERANGS OUT AT ONCE' }, flag('boomerang2')),
+  Object.assign({ id: 'flameorb', group: 'WAND', desc: 'THE WAND CAN HURL FIRE' }, flag('wandfire')),
+  Object.assign({ id: 'stormorb', group: 'WAND', desc: 'THE WAND CAN CALL LIGHTNING' }, flag('wandthunder')),
+  Object.assign({ id: 'forcewave', group: 'WAND', desc: 'SHIFT + WAND (FORCE): A WAVE THAT HURLS FOES BACK' }, flag('forcewave')),
+  Object.assign({ id: 'flamewall', group: 'WAND', desc: 'SHIFT + WAND (FIRE): A WALL OF FIRE' }, flag('flamewall')),
+  Object.assign({ id: 'lightninglance', group: 'WAND', desc: 'SHIFT + WAND (STORM): A PIERCING LANCE' }, flag('lightninglance')),
+  Object.assign({ id: 'tandem', group: 'WAND', desc: 'CHANT THE SAME SPELL AS A FRIEND TO COMBINE IT' }, flag('tandem')),
   Object.assign({ id: 'galeslam', group: 'GALE CLOAK', desc: 'END A FLIGHT EARLY TO SLAM DOWN' }, flag('cloakslam')),
   Object.assign({ id: 'bombbag', group: 'BOMBS', desc: 'CARRY 8 BOMBS' }, flag('bombbag')),
   Object.assign({ id: 'bombbag2', group: 'BOMBS', desc: 'CARRY 16 BOMBS' }, flag('bombbag2')),
 ];
 // the items those upgrades need, handed over by ALL ON
-Content.upgradeBase = ['bow', 'boomerang', 'galecloak', 'bombs'];
+Content.upgradeBase = ['bow', 'boomerang', 'galecloak', 'bombs', 'rod'];

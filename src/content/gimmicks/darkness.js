@@ -1,4 +1,4 @@
-// ===== content/gimmicks/darkness.js : the dungeon is dark. Light the braziers with fire (candle, fire rod, flame palm). =====
+// ===== content/gimmicks/darkness.js : the dungeon is dark. Light the braziers with fire (candle, the wand's fire magic, flame palm). =====
 'use strict';
 defineSprite('brazier', [
   '................', '................', '................', '................', '................', '................',

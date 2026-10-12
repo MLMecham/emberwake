@@ -468,6 +468,7 @@ function drawHUD(st) {
   const bx = 4, by = H - 30; rect(bx, by, 26, 26, rgb(10, 10, 20)); frame(bx, by, 26, 26, rgb(80, 140, 255));
   text('B', bx + 2, by + 2, rgb(80, 140, 255));
   const sel = st.selItem; if (sel) { blit(SPR[itemSprite(sel, me.cls)], bx + 5, by + 6, 1); text(itemName(sel, me.cls), bx + 30, by + 18, rgb(200, 210, 255)); }
+  if (sel === 'rod' && me.spellCd > 0) { const k = Math.min(1, me.spellCd / 7); rect(bx + 2, by + 22, 22, 3, rgb(30, 30, 50)); rect(bx + 2, by + 22, Math.round(22 * (1 - k)), 3, rgb(160, 120, 255)); } // the wand's spell cooldown
   // A box
   const ax = 32, ay = H - 30; if (!sel) { }
   // crosshair

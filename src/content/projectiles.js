@@ -25,5 +25,7 @@ defineProjectile({ id: 'dart', spr: 'beam', spd: 12, dmg: 2, sc: 0.5, player: tr
 defineProjectile({ id: 'candle', spr: 'flame', spd: 4, dmg: 1, sc: 0.8, z: -0.05, player: true, range: 2.2, fire: true });
 defineProjectile({ id: 'palm', spr: 'flame', spd: 6, dmg: 2, sc: 1.1, z: -0.05, player: true, range: 3.5, fire: true, pierce: true });
 defineProjectile({ id: 'bolt', spr: 'beam', spd: 13, dmg: 2, sc: 0.9, player: true, chain: true, stun: 0.5, range: 9 }); // thunder rod: hops to the next foe (game/sim.js)
+defineProjectile({ id: 'forcebolt', spr: 'forcebolt', spd: 9, dmg: 0.5, sc: 0.7, player: true, stun: 0.6, range: 7 }); // magic wand, plain: a shove (kbMul from the wand)
+defineProjectile({ id: 'lance', spr: 'beam', spd: 22, dmg: 3, sc: 1.1, player: true, pierce: true, pierceShield: true, stun: 2, range: 10 }); // Lightning Lance: through everything in a line
 defineProjectile({ id: 'rodbolt', spr: 'magic', spd: 8, dmg: 3, player: true });
 defineProjectile({ id: 'thunder', spr: 'beam', spd: 14, dmg: 3, sc: 0.9, player: true, pierce: true, pierceShield: true, endFx: 'boom' });
