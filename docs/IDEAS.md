@@ -10,6 +10,7 @@ Not built yet. Parked here so they don't get lost. Newest at the bottom.
 - **Skeleton Key** (every lock, no keys used). Built, but not in the world yet. A post-game reward, or the prize for finding every secret?
 
 ## Combat
+- **A clearer lunge-ready cue.** When the reverse grip is held long enough to lunge, the blade should glow (or get some bigger effect) so you know it's ready. Right now it's just a chime and a few sparkles. Keep the lunge itself as it is.
 - **Gauntlets as their own item.** Their job: **push rocks, boulders and tombs** aside to uncover secrets (stairs, grottos, heart pieces) hidden under them. Maybe also heavier knockback. In first person your hands turn steel when you wear them.
 - **Armored enemies.** A bomb (or bomb arrow) cracks the armor; only then do sword hits land.
 - **Shield enemy rework.** Shield knights are fine early but too tough later, even in a group. Add a technique that knocks their shield down for 1–2 s. Armored versions can ignore it, for another layer.

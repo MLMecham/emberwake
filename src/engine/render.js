@@ -324,10 +324,6 @@ function drawViewmodel(st) {
     return;
   }
   // sword class: shield on left, sword on right
-  if (st.lungeT >= 0) { // the lunge: speed lines rushing past the edges of the view and a warm tint while you charge in
-    const f = Math.max(0, 1 - st.lungeT / 0.45); rectA(0, 0, W, H, rgb(255, 240, 200), 0.18 * f);
-    for (let i = 0; i < 26; i++) { const a = Math.random() * TAU, r0 = 60 + Math.random() * 60, r1 = r0 + 40 + Math.random() * 90; thickLine(W / 2 + Math.cos(a) * r0, H / 2 + Math.sin(a) * r0 * 0.6, W / 2 + Math.cos(a) * r1, H / 2 + Math.sin(a) * r1 * 0.6, Math.random() < 0.3 ? 2 : 1, rgb(255, 255, 255)); }
-  }
   const sw = st.swing; const k = sw != null && sw < 0.25 ? sw / 0.25 : -1;
   // shield, seen from behind: the upper arm comes up from the bottom-left, bends at the elbow, and the forearm lies
   // across the back of the shield through a strap, with the fist closed on an upright grip near the far edge.
@@ -407,12 +403,8 @@ function drawViewmodel(st) {
     const pa = ang + Math.PI / 2; thickLine(gx + Math.cos(pa) * 10, gy + Math.sin(pa) * 10, gx - Math.cos(pa) * 10, gy - Math.sin(pa) * 10, 4, rgb(230, 190, 60));
     if (me.sword >= 4) for (let i = 0; i < 5; i++) { const tt = Math.random(); px(lerp(gx, tipX, tt) + (Math.random() - 0.5) * 8, lerp(gy, tipY, tt) + (Math.random() - 0.5) * 8, Math.random() < 0.5 ? rgb(255, 255, 220) : rgb(255, 180, 60)); }
     if (me.sword === 3) for (let i = 0; i < 3; i++) { const tt = Math.random(); px(lerp(gx, tipX, tt) + (Math.random() - 0.5) * 6, lerp(gy, tipY, tt) + (Math.random() - 0.5) * 6, rgb(220, 255, 255)); }
-    if (st.lungeReady) { const pr = 10 + Math.sin(st.time * 18) * 3; for (let i = 0; i < 24; i++) { const a = i / 24 * TAU; px(hx - Math.cos(ang) * 10 + Math.cos(a) * pr, hy - Math.sin(ang) * 10 + Math.sin(a) * pr, rgb(255, 250, 200)); } } // ready to lunge: a pulsing ring at the pommel...
-    if (st.lungeReady) for (let i = 0; i < 14; i++) { const tt = Math.random(); px(lerp(gx, tipX, tt) + (Math.random() - 0.5) * 10, lerp(gy, tipY, tt) + (Math.random() - 0.5) * 10, rgb(255, 255, 255)); } // ready to lunge: the blade glints
-    if (k >= 0 && k < 1) { // the cut's trail; lunge slashes (and the backswing) leave a wide, bright arc in the blade's color
-      const big = st.swingFast; const n = big ? 12 : 5, w = big ? 3 : 1; const tc = big ? blade : rgb(255, 255, 255);
-      for (let i = 0; i < n; i++) { const a2 = lerp(rev ? -2.6 : -0.4, ang, i / n); thickLine(hx + Math.cos(a2) * (big ? 30 : 40), hy + Math.sin(a2) * (big ? 30 : 40), hx + Math.cos(a2) * (big ? 84 : 66), hy + Math.sin(a2) * (big ? 84 : 66), w, i % 3 === 0 && big ? rgb(255, 255, 255) : tc); }
-    }
+    if (st.lungeReady) for (let i = 0; i < 6; i++) { const tt = Math.random(); px(lerp(gx, tipX, tt) + (Math.random() - 0.5) * 10, lerp(gy, tipY, tt) + (Math.random() - 0.5) * 10, rgb(255, 255, 255)); } // ready to lunge: the blade glints
+    if (k >= 0 && k < 1) { for (let i = 0; i < 5; i++) { const a2 = lerp(rev ? -2.6 : -0.4, ang, i / 5); thickLine(hx + Math.cos(a2) * 40, hy + Math.sin(a2) * 40, hx + Math.cos(a2) * 66, hy + Math.sin(a2) * 66, 1, rgb(255, 255, 255)); } }
     // sword hand, drawn like the shield hand: the grip and pommel, then a curved forearm from the bottom-right
     // (shadow on its far edge, cuff, bare wrist), then four fingers wrapped around the grip with the thumb over them
     const dx = Math.cos(ang), dy = Math.sin(ang), qx = -dy, qy = dx; const OUT = rgb(20, 18, 28); const skinL = c32(hexToRgb('#f8d4b0'));
