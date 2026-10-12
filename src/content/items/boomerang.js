@@ -29,9 +29,15 @@ function throwBoomer(sim, p, a, wide) {
   const disc = p.cls === 'monk';
   sim.spawn({ k: 'boomer', lvl: p.lvl, x: p.x, y: p.y, a, pid: p.id, out: true, t: 0, spr: disc ? 'disc_spin' : 'boomerang_spin', sc: 0.6, z: 0.15, disc, wide, hitSet: {} });
 }
+// A frog hit while it's out of the water (or up for air) gets hooked and rides the boomerang back to you, still dizzy,
+// so you can cut it down. dropCarried lets it go wherever the boomerang ends up.
+function dropCarried(sim, e) {
+  const f = e.carry != null && sim.ents.find(x => x.id === e.carry); e.carry = null; if (!f) return;
+  f.carried = false; f.x = e.x; f.y = e.y; f.sub = false; f.st = 0; f.tgt = null; f.stun = Math.max(f.stun || 0, 2); f.stunFrom = sim.time;
+}
 defineEntity('boomer', {
   update(sim, e, dt) {
-    const p = sim.players[e.pid]; if (!p || p.lvl !== e.lvl) { e.dead = true; return; }
+    const p = sim.players[e.pid]; if (!p || p.lvl !== e.lvl) { dropCarried(sim, e); e.dead = true; return; }
     const L = sim.W.levels[e.lvl]; const spd = e.disc ? 10 : e.wide ? 7.5 : 8;
     if (e.out) {
       if (e.wide) e.a += e.wide * 2.6 * dt; // curve round
@@ -39,15 +45,19 @@ defineEntity('boomer', {
       if (e.t > (e.wide ? 0.85 : e.disc ? 0.65 : 0.5) || L.solidAt(nx, ny) && !TINFO[L.get(Math.floor(nx), Math.floor(ny))].low) e.out = false; else { e.x = nx; e.y = ny; }
     } else {
       const a = Math.atan2(p.y - e.y, p.x - e.x); e.x += Math.cos(a) * spd * dt; e.y += Math.sin(a) * spd * dt;
-      if (dist2(p.x, p.y, e.x, e.y) < 0.3) e.dead = true;
+      if (dist2(p.x, p.y, e.x, e.y) < (e.carry != null ? 0.8 : 0.3)) { dropCarried(sim, e); e.dead = true; } // a hooked frog lands at your feet
     }
+    if (e.carry != null) { const f = sim.ents.find(x => x.id === e.carry); if (f && !f.dead) { f.x = e.x; f.y = e.y; } else e.carry = null; }
     for (const en of sim.ents) {
       if (en.lvl !== e.lvl || en.dead) continue;
       if (en.k === 'en' && !e.hitSet[en.id] && dist2(en.x, en.y, e.x, e.y) < (sim.enemyRadius(en) + (e.wide ? 0.4 : 0.25)) ** 2) {
         e.hitSet[en.id] = 1;
         if (e.wide) sim.damageEnemy(en, e.disc ? 3 : SWORD_DMG[1] * 2, e, { pid: e.pid, ignoreIframes: true, kbMul: 1.4 }); // sweeps on through
         else if (e.disc) sim.damageEnemy(en, 2, e, { pid: e.pid, ignoreIframes: true });
-        else { sim.damageEnemy(en, BOOMERANG_DMG, e, { pid: e.pid, stunOnly: true }); e.out = false; }
+        else {
+          const hit = sim.damageEnemy(en, BOOMERANG_DMG, e, { pid: e.pid, stunOnly: true }); e.out = false;
+          const d = enemyDef(en.type); if (hit && d.swim && !d.boss && !en.dead && !en.sub && e.carry == null) { e.carry = en.id; en.carried = true; } // hook the frog
+        }
       }
       if (en.k === 'pick' && (!en.perm || en.item === 'key') && dist2(en.x, en.y, e.x, e.y) < 0.4) { en.x = e.x; en.y = e.y; } // drag loot (and small keys) back
     }

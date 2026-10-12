@@ -37,6 +37,13 @@ defineSprite('arrow3', [
   '................',
   '................',
 ]);
+// bomb arrows on a loaded shot: two or three arrows with one bomb tied on top
+defineSprite('arrow2_bomb', [
+  '................', '................', '.......x........', '......kkk.......', '.....kkkkk......', '.....kBkkk......', '.....ukkku......', '....uuu.uuu.....',
+  '.....n...n......', '.....n...n......', '.....n...n......', '....wnw.wnw.....', '....w.w.w.w.....', '................', '................', '................']);
+defineSprite('arrow3_bomb', [
+  '................', '................', '.......x........', '......kkk.......', '.....kkkkk......', '.....kBkkk......', '...u..kkk..u....', '..uuu.uuu.uuu...',
+  '...n...n...n....', '...n...n...n....', '...n...n...n....', '..wnw.wnw.wnw...', '..w.w.w.w.w.w...', '................', '................', '................']);
 defineSpriteVariant('arrow2_ice', 'arrow2', { u: '#c8f4ff', n: '#4aa8e0', w: '#e8f8ff' });
 defineSpriteVariant('arrow3_ice', 'arrow3', { u: '#c8f4ff', n: '#4aa8e0', w: '#e8f8ff' });
 // a technique scroll: parchment with a red ribbon

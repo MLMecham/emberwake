@@ -246,7 +246,7 @@ function updateLocal(dt, inp) {
     if (inp.item) Lc.loadT = 0.001;
     if (Lc.loadT > 0 && inp.atkP) Lc.loadT = 0; // swinging or punching lets the drawn arrow go slack (no shot); so does switching items
     if (Lc.loadT > 0) {
-      if (inp.itemHeld) { const before = nocked(); Lc.loadT += dt; const n = nocked(); if (n > before) sfx('nock'); Lc.useFlash = 0.3; Lc.useSpr = n > 1 ? (me.cls === 'monk' ? 'beam' : n > 2 ? 'arrow3' : 'arrow2') : itemSprite('bow', me.cls); }
+      if (inp.itemHeld) { const before = nocked(); Lc.loadT += dt; const n = nocked(); if (n > before) sfx('nock'); Lc.useFlash = 0.3; Lc.useSpr = n > 1 ? (me.cls === 'monk' ? 'beam' : (n > 2 ? 'arrow3' : 'arrow2') + (inp.alt && me.items.bombarrow && me.bombs > 0 ? '_bomb' : '')) : itemSprite('bow', me.cls); }
       else { sendAction({ t: 'use', item: 'bow', loaded: nocked(), alt: !!inp.alt }); Lc.useFlash = 0.3; Lc.useSpr = itemSprite('bow', me.cls); Lc.loadT = 0; }
     }
   } else { Lc.loadT = 0; if (inp.item && Lc.sel) { sendAction({ t: 'use', item: Lc.sel, alt: !!inp.alt }); Lc.useFlash = 0.3; Lc.useSpr = itemSprite(Lc.sel, me.cls); } }

@@ -1944,6 +1944,13 @@ defineSprite('arrow3', [
   '................',
   '................',
 ]);
+// bomb arrows on a loaded shot: two or three arrows with one bomb tied on top
+defineSprite('arrow2_bomb', [
+  '................', '................', '.......x........', '......kkk.......', '.....kkkkk......', '.....kBkkk......', '.....ukkku......', '....uuu.uuu.....',
+  '.....n...n......', '.....n...n......', '.....n...n......', '....wnw.wnw.....', '....w.w.w.w.....', '................', '................', '................']);
+defineSprite('arrow3_bomb', [
+  '................', '................', '.......x........', '......kkk.......', '.....kkkkk......', '.....kBkkk......', '...u..kkk..u....', '..uuu.uuu.uuu...',
+  '...n...n...n....', '...n...n...n....', '...n...n...n....', '..wnw.wnw.wnw...', '..w.w.w.w.w.w...', '................', '................', '................']);
 defineSpriteVariant('arrow2_ice', 'arrow2', { u: '#c8f4ff', n: '#4aa8e0', w: '#e8f8ff' });
 defineSpriteVariant('arrow3_ice', 'arrow3', { u: '#c8f4ff', n: '#4aa8e0', w: '#e8f8ff' });
 // a technique scroll: parchment with a red ribbon
@@ -2377,6 +2384,13 @@ defineEntity('efire', {                                                         
     for (const pl of Object.values(sim.players)) if (pl.alive && pl.lvl === e.lvl && dist2(pl.x, pl.y, e.x, e.y) < 0.3) sim.hurtPlayer(pl, 1, e);
   },
 });
+// something knocked out of a foe's hands (game/sim.js disarmEnemy): it flies, bounces once, then lies there a while
+defineEntity('tossed', { update(sim, e, dt) {
+  if (e.t > e.life) { e.dead = true; return; }
+  const k = Math.min(1, e.t / 0.6); const L = sim.W.levels[e.lvl];
+  if (k < 1) { const nx = e.x + e.vx * dt * (1 - k), ny = e.y + e.vy * dt * (1 - k); if (!L.solidAt(nx, ny)) { e.x = nx; e.y = ny; } e.z = 0.05 + Math.abs(Math.sin(k * Math.PI * 1.5)) * 0.5 * (1 - k * 0.6); }
+  else e.z = 0.05;
+} });
 
 })();
 // ---- src/content/frontier.js ----
@@ -3279,6 +3293,9 @@ defineEnemy({
   ai: AI.chase,
   anim: { fps: 4, frames: (s, kit) => [s, kit.step(s, 12, -1, 0), s, kit.step(s, 12, 0, -1)] },
   shield: true, backSprite: 'knight_back',
+  // a Heavy Pommel strike knocks the shield away (game/sim.js disarmEnemy): no more blocking, and it charges in recklessly
+  disarm: 'shield_drop', disarmedSprite: 'knight_bare', disarmText: 'THE SHIELD GOES FLYING!',
+  disarmedAi(sim, e, dt, ctx) { AI.chase(sim, e, dt, Object.assign({}, ctx, { spd: ctx.spd * 1.35 })); },
   sprite: [
     '................',
     '.....kkkkkk.....',
@@ -3318,6 +3335,15 @@ defineSprite('knight_back', [
 ]);
 // the old men know (cave hint pool)
 defineHints(['KNIGHTS TURN SLOWLY IN ALL THAT ARMOR. GET BEHIND ONE AND ITS SHIELD WON\'T SAVE IT.']);
+// without its shield (knocked away by a Heavy Pommel strike)
+defineSprite('knight_bare', [
+  '................', '.....kkkkkk.....', '....kuuuuuuk....', '....kukkkkuk....', '....kuurruuk....', '.....kuuuuk.....', '....kUuuuuUk....',
+  '...kuUuuuuUuk...', '...kukUuuUkuk...', '...kukUUUUkuk...', '...k.kUuuUk.k...', '......UuuU......', '......UU.UU.....', '......UU.UU.....', '.....kUk.kUk....', '................']);
+defineAnim('knight_bare', 6, (s, kit) => [s, kit.step(s, 12, -1, 0), s, kit.step(s, 12, 0, -1)]);
+defineSprite('shield_drop', [ // the knight's shield, tumbling away
+  '................', '................', '................', '.....kkkkkk.....', '....kBBBBBBk....', '....kByyyyBk....', '....kBybbyBk....', '....kByyyyBk....',
+  '....kBBybBBk....', '.....kBBBBk.....', '......kBBk......', '.......kk.......', '................', '................', '................', '................']);
+defineHints(['A BOOMERANG CURVES. IT CAN FIND THE BACK OF A SHIELDED FOE THAT YOUR BLADE CANNOT.']);
 
 })();
 // ---- src/content/enemies/magmite.js ----
@@ -3612,6 +3638,13 @@ defineEnemy({
   hp: 4, spd: 0, dmg: 2, r: 0.32, sc: 0.9,
   spawns: { dungeons: [6, 7, 8, 9] },
   ai: AI.blinkCaster('magic', 2),
+  // a Heavy Pommel strike knocks the staff away: no more spells. It blinks away from you instead, and only fights up close.
+  disarm: 'staff_drop', disarmedSprite: 'wizard_bare', disarmText: 'THE STAFF GOES FLYING!',
+  disarmedAi(sim, e, dt, { p }) {
+    if (e.tm > 0 || !p) return; const L = sim.W.levels[e.lvl];
+    for (let i = 0; i < 20; i++) { const a = Math.atan2(e.y - p.y, e.x - p.x) + (Math.random() - 0.5) * 2, r = 3 + Math.random() * 2; const x = p.x + Math.cos(a) * r, y = p.y + Math.sin(a) * r; if (AI.safeAt(L, x, y) && (!e.b || (x > e.b.x0 && x < e.b.x1 && y > e.b.y0 && y < e.b.y1))) { sim.puff(e, 0.8); e.x = x; e.y = y; break; } }
+    e.tm = 1.8 + Math.random();
+  },
   anim: { fps: 3, frames: (s, kit) => [s, kit.shiftCols(s, 13, 15, -1), kit.shiftCols(s, 13, 15, -2)] },
   sprite: [
     '.......kk.......',
@@ -3632,6 +3665,13 @@ defineEnemy({
     '................',
   ],
 });
+// without its staff (knocked away by a Heavy Pommel strike)
+defineSprite('wizard_bare', [
+  '.......kk.......', '......kPPk......', '.....kPPPPk.....', '....kPPyPPPk....', '...kkkkkkkkkk...', '....kSwSSwSk....', '.....kSSSSk.....', '....kPPPPPPk....',
+  '...kPpPPPPpPks..', '...kPpPPPPpk....', '...kPpPyyPpk....', '...kPpPPPPpk....', '..kPPpPPPPpPk...', '..kPPPPPPPPPk...', '...kkkkkkkkk....', '................']);
+defineSprite('staff_drop', [ // the wizard's staff, tumbling away
+  '................', '................', '..........y.....', '.........yny....', '..........n.....', '.........n......', '........n.......', '.......n........',
+  '......n.........', '.....n..........', '....n...........', '...n............', '................', '................', '................', '................']);
 
 })();
 // ---- src/content/enemies/wyrm.js ----
@@ -3767,9 +3807,15 @@ function throwBoomer(sim, p, a, wide) {
   const disc = p.cls === 'monk';
   sim.spawn({ k: 'boomer', lvl: p.lvl, x: p.x, y: p.y, a, pid: p.id, out: true, t: 0, spr: disc ? 'disc_spin' : 'boomerang_spin', sc: 0.6, z: 0.15, disc, wide, hitSet: {} });
 }
+// A frog hit while it's out of the water (or up for air) gets hooked and rides the boomerang back to you, still dizzy,
+// so you can cut it down. dropCarried lets it go wherever the boomerang ends up.
+function dropCarried(sim, e) {
+  const f = e.carry != null && sim.ents.find(x => x.id === e.carry); e.carry = null; if (!f) return;
+  f.carried = false; f.x = e.x; f.y = e.y; f.sub = false; f.st = 0; f.tgt = null; f.stun = Math.max(f.stun || 0, 2); f.stunFrom = sim.time;
+}
 defineEntity('boomer', {
   update(sim, e, dt) {
-    const p = sim.players[e.pid]; if (!p || p.lvl !== e.lvl) { e.dead = true; return; }
+    const p = sim.players[e.pid]; if (!p || p.lvl !== e.lvl) { dropCarried(sim, e); e.dead = true; return; }
     const L = sim.W.levels[e.lvl]; const spd = e.disc ? 10 : e.wide ? 7.5 : 8;
     if (e.out) {
       if (e.wide) e.a += e.wide * 2.6 * dt; // curve round
@@ -3777,15 +3823,19 @@ defineEntity('boomer', {
       if (e.t > (e.wide ? 0.85 : e.disc ? 0.65 : 0.5) || L.solidAt(nx, ny) && !TINFO[L.get(Math.floor(nx), Math.floor(ny))].low) e.out = false; else { e.x = nx; e.y = ny; }
     } else {
       const a = Math.atan2(p.y - e.y, p.x - e.x); e.x += Math.cos(a) * spd * dt; e.y += Math.sin(a) * spd * dt;
-      if (dist2(p.x, p.y, e.x, e.y) < 0.3) e.dead = true;
+      if (dist2(p.x, p.y, e.x, e.y) < (e.carry != null ? 0.8 : 0.3)) { dropCarried(sim, e); e.dead = true; } // a hooked frog lands at your feet
     }
+    if (e.carry != null) { const f = sim.ents.find(x => x.id === e.carry); if (f && !f.dead) { f.x = e.x; f.y = e.y; } else e.carry = null; }
     for (const en of sim.ents) {
       if (en.lvl !== e.lvl || en.dead) continue;
       if (en.k === 'en' && !e.hitSet[en.id] && dist2(en.x, en.y, e.x, e.y) < (sim.enemyRadius(en) + (e.wide ? 0.4 : 0.25)) ** 2) {
         e.hitSet[en.id] = 1;
         if (e.wide) sim.damageEnemy(en, e.disc ? 3 : SWORD_DMG[1] * 2, e, { pid: e.pid, ignoreIframes: true, kbMul: 1.4 }); // sweeps on through
         else if (e.disc) sim.damageEnemy(en, 2, e, { pid: e.pid, ignoreIframes: true });
-        else { sim.damageEnemy(en, BOOMERANG_DMG, e, { pid: e.pid, stunOnly: true }); e.out = false; }
+        else {
+          const hit = sim.damageEnemy(en, BOOMERANG_DMG, e, { pid: e.pid, stunOnly: true }); e.out = false;
+          const d = enemyDef(en.type); if (hit && d.swim && !d.boss && !en.dead && !en.sub && e.carry == null) { e.carry = en.id; en.carried = true; } // hook the frog
+        }
       }
       if (en.k === 'pick' && (!en.perm || en.item === 'key') && dist2(en.x, en.y, e.x, e.y) < 0.4) { en.x = e.x; en.y = e.y; } // drag loot (and small keys) back
     }
@@ -3810,8 +3860,10 @@ defineItem({
     if (!p.items.bombarrow) return this.use(sim, p, a);
     if (p.arrows <= 0 || p.bombs <= 0) return sim.hint(p, p.arrows <= 0 ? 'NO ARROWS.' : 'NO BOMBS FOR A BOMB ARROW.');
     if (sim.ents.some(e => e.k === 'proj' && e.pid === p.id && (e.type === 'arrow' || e.type === 'dart'))) return;
-    p.arrows--; p.bombs--;
-    sim.fireProj(p.cls === 'monk' ? 'dart' : 'arrow', p.lvl, p.x, p.y, p.a, 'p', p.id, { dmg: 2, bomb: true, spr: 'arrow_bomb' }); sim.sfx('arrow', p.lvl);
+    // a loaded bomb arrow: every nocked arrow flies together with the one bomb (still one burst)
+    const want = a && a.loaded === true ? 2 : Math.floor(+(a && a.loaded) || 1); const n = Math.max(1, Math.min(want, nockMax(p), p.arrows));
+    p.arrows -= n; p.bombs--;
+    sim.fireProj(p.cls === 'monk' ? 'dart' : 'arrow', p.lvl, p.x, p.y, p.a, 'p', p.id, Object.assign({ dmg: 2 * n, bomb: true, spr: n > 2 ? 'arrow3_bomb' : n > 1 ? 'arrow2_bomb' : 'arrow_bomb' }, n > 1 ? { kbMul: n > 2 ? 2.1 : 1.6, shieldBreak: true } : {})); sim.sfx('arrow', p.lvl);
   },
   use(sim, p, a) {
     // Loaded Shot (items/techniques.js): each Loaded Shot scroll lets you nock one more arrow (2, then 3), whichever you found first
@@ -4851,6 +4903,7 @@ const BACK_ANGLE = 2.1;
 // ARMOR (def.armor 0-3, e.armor now): each level blocks ARMOR_STEP of the damage. Bombs and the Heavy Pommel knock one level off
 // instead of hurting, but each of those ways only works once per foe (e.stripped), so a fight can't be just one trick.
 const ARMOR_STEP = 0.25;
+const DISARM_STAGGER = 1.2; // seconds a disarmed foe reels
 const GOURD_REGROW = 40; // seconds before a split gourd can grow back (and only with nobody within 6 tiles)
 // how many bombs you can carry: 1 without a bag, 8 with the Bramble Keep bag, 16 with the second one (sold in a grotto)
 const bombCap = (p) => p.items.bombbag2 ? 16 : p.items.bombbag ? 8 : 1;
@@ -5014,7 +5067,8 @@ class Sim {
   teleport(p, lvl, x, y, a) {
     p.lvl = lvl; p.x = x; p.y = y; p.a = a; this.ev({ t: 'tp', pid: p.id, lvl, x, y, a });
     this.initLevel(lvl);
-    if (lvl[0] === 'd') { const d = +lvl.slice(1); this.ev({ t: 'title', pid: p.id, text: d <= 9 ? 'LEVEL-' + d : dungeonName(d), sub: d <= 9 ? dungeonName(d) : (d === 12 ? 'THE LAST FLAME' : 'OPTIONAL DUNGEON') }); }
+    if (lvl === 'dbg') this.ev({ t: 'title', pid: p.id, text: 'TEST ZONE', sub: 'DEBUG' });
+    else if (lvl[0] === 'd') { const d = +lvl.slice(1); this.ev({ t: 'title', pid: p.id, text: d <= 9 ? 'LEVEL-' + d : dungeonName(d), sub: d <= 9 ? dungeonName(d) : (d === 12 ? 'THE LAST FLAME' : 'OPTIONAL DUNGEON') }); }
     if (lvl === 'ow') this.autosave = true;
   }
   tryEnter(p, idx) {
@@ -5306,6 +5360,7 @@ class Sim {
       return;
     }
     if (e.spawnFx > 0) { e.spawnFx -= dt; return; }
+    if (e.carried) return; // riding a boomerang back to the hero (items/boomerang.js)
     this.groundHazards(e, def, dt); if (e.dead) return;
     if (e.hurt > 0) e.hurt -= dt;
     if (e.kb) { this.moveEnt(e, e.kb[0] * dt, e.kb[1] * dt, def, true); e.kbT -= dt; if (e.kbT <= 0) e.kb = null; } // a stunned enemy still gets shoved
@@ -5316,7 +5371,7 @@ class Sim {
     const elite = e.elite && eliteByIdx(e.elite);
     const skipAi = elite && elite.update && elite.update(this, e, dt, ctx);
     if (e.dead) return;
-    if (!skipAi) def.ai(this, e, dt, ctx);
+    if (!skipAi) (e.disarmed && def.disarmedAi ? def.disarmedAi : def.ai)(this, e, dt, ctx);
     // contact damage
     if ((elite && elite.noContact) || e.sub || e.air) return; // can't bite you from under the water or in mid-air
     for (const pl of Object.values(this.players)) {
@@ -5375,7 +5430,7 @@ class Sim {
     const atk = opt.pid && this.players[opt.pid]; if (atk && atk.god) dmg *= 3; // god mode hits three times as hard
     if (e.dormant) { this.sfx('clink', e.lvl, e.x, e.y); this.wake(e); return false; }
     if (e.hurt > 0 && !opt.ignoreIframes) return false;
-    if (def.shield && src && !opt.pierceShield && !(e.reelUntil > this.time)) { // blocks hits from the front (not while reeling from a loaded shot)
+    if (def.shield && !e.disarmed && src && !opt.pierceShield && !(e.reelUntil > this.time)) { // blocks hits from the front (not while reeling from a loaded shot)
       const toSrc = Math.atan2(src.y - e.y, src.x - e.x); if (Math.abs(angDiff(e.f, toSrc)) < 0.9) {
         this.sfx('clink', e.lvl, e.x, e.y);
         if (!opt.shieldBreak) { e.stun = 0.15; return false; }
@@ -5444,8 +5499,9 @@ class Sim {
     if (a.kind === 'sword' && hitAny) this.chainHit(p, hits);
     if (hitAny && p.cls === 'monk') this.ev({ t: 'pow', lvl: p.lvl, x: p.x + Math.cos(p.a) * 0.9, y: p.y + Math.sin(p.a) * 0.9, big: a.kind === 'punch3' });
     // bush cutting / burn? sword cuts nothing; check bombable hint clink
-    // beam at full health
-    if (p.hp >= p.maxHp && !this.ents.some(e => e.k === 'proj' && e.pid === p.id && Content.projectiles[e.type].beam)) {
+    // sword beams: at full health, one at a time. The Dawnblade's light always flies, at any health, up to 3 at once.
+    const myBeams = this.ents.filter(e => e.k === 'proj' && !e.dead && e.pid === p.id && Content.projectiles[e.type].beam).length;
+    if (a.kind !== 'pommel' && (p.cls !== 'monk' && p.sword >= 4 ? myBeams < 3 : p.hp >= p.maxHp && myBeams === 0)) {
       if (p.cls === 'monk') this.fireProj('ki', p.lvl, p.x + Math.cos(p.a) * 0.3, p.y + Math.sin(p.a) * 0.3, p.a, 'p', p.id, { dmg: swordDmg });
       else this.fireProj(p.sword >= 4 ? 'dawnbeam' : 'beam', p.lvl, p.x + Math.cos(p.a) * 0.3, p.y + Math.sin(p.a) * 0.3, p.a, 'p', p.id, { dmg: swordDmg });
       this.sfx('beam', p.lvl, p.x, p.y);
@@ -5467,6 +5523,14 @@ class Sim {
       if (L.props[g.i] === PR.NONE) this.setTile(g.lvl, g.i, null, g.prop); return false;
     });
   }
+  // DISARM (Heavy Pommel on a foe with def.disarm): what it holds goes flying (a 'tossed' entity), it staggers for a moment,
+  // and from then on fights without it: def.disarmedSprite for the look, def.disarmedAi for how it behaves.
+  disarmEnemy(e, src) {
+    const def = enemyDef(e.type); e.disarmed = true; e.stun = Math.max(e.stun || 0, DISARM_STAGGER); e.stunFrom = this.time; e.hurt = 0.3;
+    const a = src ? Math.atan2(e.y - src.y, e.x - src.x) + (Math.random() - 0.5) * 1.2 : Math.random() * TAU;
+    this.spawn({ k: 'tossed', lvl: e.lvl, x: e.x, y: e.y, vx: Math.cos(a) * 3.2, vy: Math.sin(a) * 3.2, spr: def.disarm, sc: 0.6, z: 0.3, life: 6 });
+    this.sfx('disarm', e.lvl, e.x, e.y); if (src && this.players[src.id] === src) this.hint(src, def.disarmText || 'DISARMED!');
+  }
   // knock one piece of armor off. `method` ('bomb', 'pommel', ...) only works once per foe: a second time just clanks.
   stripArmor(e, method, src) {
     if (!(e.armor > 0) || e.dead) return false; e.stripped = e.stripped || {};
@@ -5484,7 +5548,8 @@ class Sim {
       if (e.k !== 'en' || e.lvl !== p.lvl || e.dead) continue; const def = enemyDef(e.type); const d = Math.sqrt(dist2(e.x, e.y, p.x, p.y));
       if (d > 1.25 + this.enemyRadius(e)) continue; if (d > 0.5 && Math.abs(angDiff(p.a, Math.atan2(e.y - p.y, e.x - p.x))) > 0.6) continue;
       hit = true;
-      if (p.items.heavypommel && e.armor > 0 && this.stripArmor(e, 'pommel', p)) { if (!def.boss) { e.stun = Math.max(e.stun || 0, POMMEL_STUN); e.stunFrom = this.time; } continue; }
+      if (p.items.heavypommel && def.disarm && !e.disarmed && !def.boss) { this.disarmEnemy(e, p); continue; } // knocks the shield (or staff) clean away
+      if (e.armor > 0) { if (!(p.items.heavypommel && this.stripArmor(e, 'pommel', p))) this.damageEnemy(e, POMMEL_DMG, p, { pid: p.id, kbMul: 0.6 }); continue; } // armor takes the blow: no stun
       if (this.damageEnemy(e, POMMEL_DMG, p, { pid: p.id, kbMul: 0.6 }) && !def.boss && !e.dead) { e.stun = Math.max(e.stun || 0, POMMEL_STUN); e.stunFrom = this.time; }
     }
     for (const d of [0.6, 1.1]) this.breakGourd(L, p.x + Math.cos(p.a) * d, p.y + Math.sin(p.a) * d);
@@ -5649,7 +5714,8 @@ class Sim {
       const def = enemyDef(e.type); spr = e.dormant ? 'statue' : e.type; sc = e.dormant ? 1.1 : def.sc * (e.scMul || 1); z = e.dormant ? 0 : def.z || 0;
       if (def.fly) z += Math.sin(e.t * 6) * 0.06;
       if (def.sprFor) { const s2 = def.sprFor(e); if (s2) spr = s2; }
-      if (def.backSprite && viewer && !e.dormant && Math.abs(angDiff(e.f, Math.atan2(viewer.y - e.y, viewer.x - e.x))) > BACK_ANGLE) spr = def.backSprite; // e.g. a frog's head poking out of the water
+      if (e.disarmed && def.disarmedSprite) spr = def.disarmedSprite;
+      else if (def.backSprite && viewer && !e.dormant && Math.abs(angDiff(e.f, Math.atan2(viewer.y - e.y, viewer.x - e.x))) > BACK_ANGLE) spr = def.backSprite; // e.g. a frog's head poking out of the water
       if (e.hurt > 0) fl |= 1; if (e.stun > 0) fl |= 2; if (def.phase) fl |= 4; if (e.spawnFx > 0) { spr = 'puff'; }
       if (def.view) z += def.view(e);
     }
@@ -6363,6 +6429,7 @@ function sfx(name, vol) {
     case 'croak': tone(150, 0.18, 'square', 0.16 * v, 110); tone(120, 0.22, 'square', 0.14 * v, 90, AU.ctx.currentTime + 0.2); break; // a frog
     case 'bubble': tone(500, 0.12, 'sine', 0.1 * v, 900); tone(800, 0.06, 'sine', 0.06 * v, 1200, AU.ctx.currentTime + 0.1); break;
     case 'poison': tone(260, 0.15, 'sawtooth', 0.06 * v, 200); noise(0.12, 0.05 * v, 900); break; // a poison tick
+    case 'disarm': tone(1300, 0.05, 'square', 0.12 * v, 900); tone(420, 0.25, 'triangle', 0.12 * v, 160, AU.ctx.currentTime + 0.04); noise(0.12, 0.1 * v, 3000); break; // a shield or staff knocked flying
     case 'land': tone(200, 0.08, 'triangle', 0.1 * v, 120); noise(0.1, 0.08 * v, 800); break; // dropping out of a Gale Cloak flight
     case 'grip': tone(300, 0.06, 'triangle', 0.08 * v, 220); noise(0.05, 0.06 * v, 2500); break; // the sword flips into reverse grip
     case 'pommel': noise(0.07, 0.28 * v, 900); tone(140, 0.1, 'square', 0.16 * v, 50); break; // the hilt driven home
@@ -6913,7 +6980,7 @@ function updateLocal(dt, inp) {
     if (inp.item) Lc.loadT = 0.001;
     if (Lc.loadT > 0 && inp.atkP) Lc.loadT = 0; // swinging or punching lets the drawn arrow go slack (no shot); so does switching items
     if (Lc.loadT > 0) {
-      if (inp.itemHeld) { const before = nocked(); Lc.loadT += dt; const n = nocked(); if (n > before) sfx('nock'); Lc.useFlash = 0.3; Lc.useSpr = n > 1 ? (me.cls === 'monk' ? 'beam' : n > 2 ? 'arrow3' : 'arrow2') : itemSprite('bow', me.cls); }
+      if (inp.itemHeld) { const before = nocked(); Lc.loadT += dt; const n = nocked(); if (n > before) sfx('nock'); Lc.useFlash = 0.3; Lc.useSpr = n > 1 ? (me.cls === 'monk' ? 'beam' : (n > 2 ? 'arrow3' : 'arrow2') + (inp.alt && me.items.bombarrow && me.bombs > 0 ? '_bomb' : '')) : itemSprite('bow', me.cls); }
       else { sendAction({ t: 'use', item: 'bow', loaded: nocked(), alt: !!inp.alt }); Lc.useFlash = 0.3; Lc.useSpr = itemSprite('bow', me.cls); Lc.loadT = 0; }
     }
   } else { Lc.loadT = 0; if (inp.item && Lc.sel) { sendAction({ t: 'use', item: Lc.sel, alt: !!inp.alt }); Lc.useFlash = 0.3; Lc.useSpr = itemSprite(Lc.sel, me.cls); } }

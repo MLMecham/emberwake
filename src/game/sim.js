@@ -42,6 +42,7 @@ const BACK_ANGLE = 2.1;
 // ARMOR (def.armor 0-3, e.armor now): each level blocks ARMOR_STEP of the damage. Bombs and the Heavy Pommel knock one level off
 // instead of hurting, but each of those ways only works once per foe (e.stripped), so a fight can't be just one trick.
 const ARMOR_STEP = 0.25;
+const DISARM_STAGGER = 1.2; // seconds a disarmed foe reels
 const GOURD_REGROW = 40; // seconds before a split gourd can grow back (and only with nobody within 6 tiles)
 // how many bombs you can carry: 1 without a bag, 8 with the Bramble Keep bag, 16 with the second one (sold in a grotto)
 const bombCap = (p) => p.items.bombbag2 ? 16 : p.items.bombbag ? 8 : 1;
@@ -205,7 +206,8 @@ class Sim {
   teleport(p, lvl, x, y, a) {
     p.lvl = lvl; p.x = x; p.y = y; p.a = a; this.ev({ t: 'tp', pid: p.id, lvl, x, y, a });
     this.initLevel(lvl);
-    if (lvl[0] === 'd') { const d = +lvl.slice(1); this.ev({ t: 'title', pid: p.id, text: d <= 9 ? 'LEVEL-' + d : dungeonName(d), sub: d <= 9 ? dungeonName(d) : (d === 12 ? 'THE LAST FLAME' : 'OPTIONAL DUNGEON') }); }
+    if (lvl === 'dbg') this.ev({ t: 'title', pid: p.id, text: 'TEST ZONE', sub: 'DEBUG' });
+    else if (lvl[0] === 'd') { const d = +lvl.slice(1); this.ev({ t: 'title', pid: p.id, text: d <= 9 ? 'LEVEL-' + d : dungeonName(d), sub: d <= 9 ? dungeonName(d) : (d === 12 ? 'THE LAST FLAME' : 'OPTIONAL DUNGEON') }); }
     if (lvl === 'ow') this.autosave = true;
   }
   tryEnter(p, idx) {
@@ -497,6 +499,7 @@ class Sim {
       return;
     }
     if (e.spawnFx > 0) { e.spawnFx -= dt; return; }
+    if (e.carried) return; // riding a boomerang back to the hero (items/boomerang.js)
     this.groundHazards(e, def, dt); if (e.dead) return;
     if (e.hurt > 0) e.hurt -= dt;
     if (e.kb) { this.moveEnt(e, e.kb[0] * dt, e.kb[1] * dt, def, true); e.kbT -= dt; if (e.kbT <= 0) e.kb = null; } // a stunned enemy still gets shoved
@@ -507,7 +510,7 @@ class Sim {
     const elite = e.elite && eliteByIdx(e.elite);
     const skipAi = elite && elite.update && elite.update(this, e, dt, ctx);
     if (e.dead) return;
-    if (!skipAi) def.ai(this, e, dt, ctx);
+    if (!skipAi) (e.disarmed && def.disarmedAi ? def.disarmedAi : def.ai)(this, e, dt, ctx);
     // contact damage
     if ((elite && elite.noContact) || e.sub || e.air) return; // can't bite you from under the water or in mid-air
     for (const pl of Object.values(this.players)) {
@@ -566,7 +569,7 @@ class Sim {
     const atk = opt.pid && this.players[opt.pid]; if (atk && atk.god) dmg *= 3; // god mode hits three times as hard
     if (e.dormant) { this.sfx('clink', e.lvl, e.x, e.y); this.wake(e); return false; }
     if (e.hurt > 0 && !opt.ignoreIframes) return false;
-    if (def.shield && src && !opt.pierceShield && !(e.reelUntil > this.time)) { // blocks hits from the front (not while reeling from a loaded shot)
+    if (def.shield && !e.disarmed && src && !opt.pierceShield && !(e.reelUntil > this.time)) { // blocks hits from the front (not while reeling from a loaded shot)
       const toSrc = Math.atan2(src.y - e.y, src.x - e.x); if (Math.abs(angDiff(e.f, toSrc)) < 0.9) {
         this.sfx('clink', e.lvl, e.x, e.y);
         if (!opt.shieldBreak) { e.stun = 0.15; return false; }
@@ -635,8 +638,9 @@ class Sim {
     if (a.kind === 'sword' && hitAny) this.chainHit(p, hits);
     if (hitAny && p.cls === 'monk') this.ev({ t: 'pow', lvl: p.lvl, x: p.x + Math.cos(p.a) * 0.9, y: p.y + Math.sin(p.a) * 0.9, big: a.kind === 'punch3' });
     // bush cutting / burn? sword cuts nothing; check bombable hint clink
-    // beam at full health
-    if (p.hp >= p.maxHp && !this.ents.some(e => e.k === 'proj' && e.pid === p.id && Content.projectiles[e.type].beam)) {
+    // sword beams: at full health, one at a time. The Dawnblade's light always flies, at any health, up to 3 at once.
+    const myBeams = this.ents.filter(e => e.k === 'proj' && !e.dead && e.pid === p.id && Content.projectiles[e.type].beam).length;
+    if (a.kind !== 'pommel' && (p.cls !== 'monk' && p.sword >= 4 ? myBeams < 3 : p.hp >= p.maxHp && myBeams === 0)) {
       if (p.cls === 'monk') this.fireProj('ki', p.lvl, p.x + Math.cos(p.a) * 0.3, p.y + Math.sin(p.a) * 0.3, p.a, 'p', p.id, { dmg: swordDmg });
       else this.fireProj(p.sword >= 4 ? 'dawnbeam' : 'beam', p.lvl, p.x + Math.cos(p.a) * 0.3, p.y + Math.sin(p.a) * 0.3, p.a, 'p', p.id, { dmg: swordDmg });
       this.sfx('beam', p.lvl, p.x, p.y);
@@ -658,6 +662,14 @@ class Sim {
       if (L.props[g.i] === PR.NONE) this.setTile(g.lvl, g.i, null, g.prop); return false;
     });
   }
+  // DISARM (Heavy Pommel on a foe with def.disarm): what it holds goes flying (a 'tossed' entity), it staggers for a moment,
+  // and from then on fights without it: def.disarmedSprite for the look, def.disarmedAi for how it behaves.
+  disarmEnemy(e, src) {
+    const def = enemyDef(e.type); e.disarmed = true; e.stun = Math.max(e.stun || 0, DISARM_STAGGER); e.stunFrom = this.time; e.hurt = 0.3;
+    const a = src ? Math.atan2(e.y - src.y, e.x - src.x) + (Math.random() - 0.5) * 1.2 : Math.random() * TAU;
+    this.spawn({ k: 'tossed', lvl: e.lvl, x: e.x, y: e.y, vx: Math.cos(a) * 3.2, vy: Math.sin(a) * 3.2, spr: def.disarm, sc: 0.6, z: 0.3, life: 6 });
+    this.sfx('disarm', e.lvl, e.x, e.y); if (src && this.players[src.id] === src) this.hint(src, def.disarmText || 'DISARMED!');
+  }
   // knock one piece of armor off. `method` ('bomb', 'pommel', ...) only works once per foe: a second time just clanks.
   stripArmor(e, method, src) {
     if (!(e.armor > 0) || e.dead) return false; e.stripped = e.stripped || {};
@@ -675,7 +687,8 @@ class Sim {
       if (e.k !== 'en' || e.lvl !== p.lvl || e.dead) continue; const def = enemyDef(e.type); const d = Math.sqrt(dist2(e.x, e.y, p.x, p.y));
       if (d > 1.25 + this.enemyRadius(e)) continue; if (d > 0.5 && Math.abs(angDiff(p.a, Math.atan2(e.y - p.y, e.x - p.x))) > 0.6) continue;
       hit = true;
-      if (p.items.heavypommel && e.armor > 0 && this.stripArmor(e, 'pommel', p)) { if (!def.boss) { e.stun = Math.max(e.stun || 0, POMMEL_STUN); e.stunFrom = this.time; } continue; }
+      if (p.items.heavypommel && def.disarm && !e.disarmed && !def.boss) { this.disarmEnemy(e, p); continue; } // knocks the shield (or staff) clean away
+      if (e.armor > 0) { if (!(p.items.heavypommel && this.stripArmor(e, 'pommel', p))) this.damageEnemy(e, POMMEL_DMG, p, { pid: p.id, kbMul: 0.6 }); continue; } // armor takes the blow: no stun
       if (this.damageEnemy(e, POMMEL_DMG, p, { pid: p.id, kbMul: 0.6 }) && !def.boss && !e.dead) { e.stun = Math.max(e.stun || 0, POMMEL_STUN); e.stunFrom = this.time; }
     }
     for (const d of [0.6, 1.1]) this.breakGourd(L, p.x + Math.cos(p.a) * d, p.y + Math.sin(p.a) * d);
@@ -840,7 +853,8 @@ class Sim {
       const def = enemyDef(e.type); spr = e.dormant ? 'statue' : e.type; sc = e.dormant ? 1.1 : def.sc * (e.scMul || 1); z = e.dormant ? 0 : def.z || 0;
       if (def.fly) z += Math.sin(e.t * 6) * 0.06;
       if (def.sprFor) { const s2 = def.sprFor(e); if (s2) spr = s2; }
-      if (def.backSprite && viewer && !e.dormant && Math.abs(angDiff(e.f, Math.atan2(viewer.y - e.y, viewer.x - e.x))) > BACK_ANGLE) spr = def.backSprite; // e.g. a frog's head poking out of the water
+      if (e.disarmed && def.disarmedSprite) spr = def.disarmedSprite;
+      else if (def.backSprite && viewer && !e.dormant && Math.abs(angDiff(e.f, Math.atan2(viewer.y - e.y, viewer.x - e.x))) > BACK_ANGLE) spr = def.backSprite; // e.g. a frog's head poking out of the water
       if (e.hurt > 0) fl |= 1; if (e.stun > 0) fl |= 2; if (def.phase) fl |= 4; if (e.spawnFx > 0) { spr = 'puff'; }
       if (def.view) z += def.view(e);
     }

@@ -16,7 +16,7 @@ Not built yet. Parked here so they don't get lost. Newest at the bottom.
 
 ## Enemies
 - **Spider webs and a better spider boss.** Web tiles that slow or stick you (fire burns them away), and a spider boss (Tideglass Halls) that uses them: strings webs across the room, drops from the ceiling, wraps you if you stand still.
-- **Knight tiers.** (1) Today's knight: a loaded shot stuns it. (2) Big-shield knight: only a three-arrow loaded shot (the triple-shot scroll) stuns it. (3) Armored knight with a sword: it swings at you, takes less damage, and only a triple bomb arrow stuns it. Later dungeons mix them.
+- **Knight tiers.** (1) Today's knight: a loaded shot stuns it, and a Heavy Pommel strike knocks its shield away (built). (2) Big-shield knight: only a three-arrow loaded shot (the triple-shot scroll) stuns it. (3) Armored knight with a sword: it swings at you, takes less damage, and only a triple bomb arrow stuns it. Later dungeons mix them.
 - **Knight tiers.** A lava monster that pulls you into the lava :
 
 ## Bow techniques
@@ -24,6 +24,7 @@ Not built yet. Parked here so they don't get lost. Newest at the bottom.
 - **Enemies with loaded shots.** Archers that fire doubled arrows you can't block without a better shield.
 
 ## Technique scrolls
+- **Metal boomerang.** A metal-coated boomerang upgrade: heavier hits (maybe breaks a level of armor, or cuts webs and brambles on the way). A good third step after the wide throw and the second boomerang.
 - **Boomerang path:** built (wide throw, then a second boomerang), debug only. Still to decide: where in the world each one is found.
 - Hidden in grottos. The **candle** should be the way to find them (lighting a hidden grotto), so the candle stays useful for beginners.
 - **Fire rod → magic rod.** Fire this early is too strong (free, fast, spammable projectiles, and great against ice enemies). Make it a plain magic rod. Scrolls then add fire or ice to it, which pushes elemental magic later in the game.

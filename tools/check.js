@@ -472,7 +472,7 @@ attempt('armor', () => {
   h = sk.hp; boom(); __ok(sk.armor === 2 && sk.hp === h - 4 * 0.5, 'a second bomb only hurts, through the armor left');
   // the pommel only strips with the Heavy Pommel scroll, also once
   sk.hurt = 0; sim.playerAttack(p, { kind: 'pommel' }); __ok(sk.armor === 2, 'a plain pommel strike leaves armor alone');
-  p.items.heavypommel = true; sk.hurt = 0; sk.stun = 0; sim.playerAttack(p, { kind: 'pommel' }); __ok(sk.armor === 1 && sk.stun > 1, 'a heavy pommel strips a level (and still stuns)');
+  p.items.heavypommel = true; sk.hurt = 0; sk.stun = 0; sim.playerAttack(p, { kind: 'pommel' }); __ok(sk.armor === 1 && !(sk.stun > 0), 'a heavy pommel strips a level, and armor takes the blow: no stun');
   sk.hurt = 0; sim.playerAttack(p, { kind: 'pommel' }); __ok(sk.armor === 1, 'but only once per foe');
   __ok(view() === 'skeleton_a1', 'down to the breastplate');
   __ok(Content.enemies.skeleton_a1 && Content.enemies.skeleton_a2, 'all three armored skeletons exist');
@@ -557,6 +557,35 @@ attempt('debug upgrade switches', () => {
   sim.onAction('p1', { t: 'dbgup', id: 'lunge', on: false }); __ok(!p.items.lunge && p.items.heavypommel, 'one switch at a time');
   sim.onAction('p1', { t: 'dbgup', all: false }); __ok(Content.upgrades.every(u => !u.has(p)) && p.maxBombs === 1 && p.maxArrows === ARROWS_START, 'ALL OFF takes them all away');
   __ok(Content.upgrades.every(u => Content.items[u.id]), 'every upgrade is a real item');
+});
+attempt('beams, disarming, hooked frogs, loaded bomb arrows', () => {
+  const sim = freshSim(); const p = sim.players.p1; p.god = false; p.a = 0;
+  const clear = () => { for (const e of sim.ents) if (e.k === 'en' || e.k === 'proj' || e.k === 'boomer') e.dead = true; sim.ents = sim.ents.filter(e => !e.dead); };
+  const beams = () => sim.ents.filter(e => e.k === 'proj' && Content.projectiles[e.type].beam && !e.dead).length;
+  // the Dawnblade always throws its light, even hurt, up to three at once; other swords need full health
+  clear(); p.sword = 4; p.hp = 1; for (let i = 0; i < 5; i++) sim.playerAttack(p, { kind: 'sword' }); __ok(beams() === 3, 'the Dawnblade beams at any health, up to 3 (' + beams() + ')');
+  clear(); p.sword = 3; p.hp = 1; sim.playerAttack(p, { kind: 'sword' }); __ok(beams() === 0, 'other swords: no beam when hurt');
+  p.hp = p.maxHp; sim.playerAttack(p, { kind: 'sword' }); sim.playerAttack(p, { kind: 'sword' }); __ok(beams() === 1, 'other swords: one beam at full health');
+  p.hp = 1; p.sword = 2;
+  // a heavy pommel knocks a knight's shield away (from the front); then sword hits land from the front
+  clear(); p.items.heavypommel = true; const kn = sim.spawnEnemy('knight', p.lvl, p.x + 1, p.y, {}); kn.spawnFx = 0; kn.f = Math.PI; kn.hp = 20;
+  sim.playerAttack(p, { kind: 'pommel' }); __ok(kn.disarmed && sim.ents.some(e => e.k === 'tossed' && e.spr === 'shield_drop'), 'the shield goes flying');
+  __ok(sim.snapshotFor('p1').en.find(v => v[0] === kn.id)[1] === 'knight_bare', 'and the knight is drawn without it');
+  kn.hurt = 0; kn.stun = 0; const h = kn.hp; sim.playerAttack(p, { kind: 'sword' }); __ok(kn.hp < h, 'front hits land now');
+  // a disarmed wizard casts nothing
+  clear(); const wz = sim.spawnEnemy('wizard', p.lvl, p.x + 1, p.y, {}); wz.spawnFx = 0; wz.hp = 20; sim.playerAttack(p, { kind: 'pommel' }); __ok(wz.disarmed, 'the staff goes flying');
+  wz.stun = 0; for (let i = 0; i < 600; i++) sim.updateEnemy(wz, 1 / 60); __ok(!sim.ents.some(e => e.k === 'proj' && e.type === 'magic'), 'a wizard without its staff casts nothing');
+  // armored foes: the pommel never stuns them
+  clear(); p.items.heavypommel = false; const ak = sim.spawnEnemy('skeleton_a1', p.lvl, p.x + 1, p.y, {}); ak.spawnFx = 0; ak.hp = 20; sim.playerAttack(p, { kind: 'pommel' }); __ok(!(ak.stun > 0) && ak.armor === 1, 'a plain pommel does not stun an armored foe');
+  // a frog out of the water is hooked by the boomerang and brought back, dizzy
+  clear(); p.items.boomerang = true; const fr = sim.spawnEnemy('frog', p.lvl, p.x + 2.5, p.y, {}); fr.spawnFx = 0; fr.hp = 20;
+  sim.useItem(p, 'boomerang', {}); for (let i = 0; i < 120 && sim.ents.some(e => e.k === 'boomer' && !e.dead); i++) { for (const e of sim.ents.slice()) if (e.k === 'boomer') sim.updateEnt(e, 1 / 60); sim.ents = sim.ents.filter(e => !e.dead); }
+  __ok(!fr.carried && Math.hypot(fr.x - p.x, fr.y - p.y) < 1.2 && fr.stun > 0, 'the frog rides the boomerang back, still dizzy (' + Math.hypot(fr.x - p.x, fr.y - p.y).toFixed(2) + ')');
+  // loaded bomb arrows: every nocked arrow flies with one bomb
+  clear(); p.items.bow = true; p.items.bombarrow = true; p.items.loaded = true; p.items.loaded2 = true; p.arrows = 10; p.bombs = 3;
+  sim.useItem(p, 'bow', { alt: true, loaded: 3 }); const ba = sim.ents.find(e => e.k === 'proj' && e.bomb); __ok(ba && ba.spr === 'arrow3_bomb' && ba.dmg === 6 && p.arrows === 7 && p.bombs === 2, 'a triple bomb arrow');
+  clear(); sim.useItem(p, 'bow', { alt: true, loaded: 2 }); __ok(sim.ents.find(e => e.k === 'proj' && e.bomb).spr === 'arrow2_bomb', 'a double bomb arrow');
+  __ok(Content.hints.some(t => /BOOMERANG CURVES/.test(t)), 'the old men know about boomerangs and shields');
 });
 attempt('tideglass opening', () => {
   for (const [seed, mode] of [[7319, 'adv'], [1234, 'rogue'], [99, 'rogue'], [4242, 'adv']]) {

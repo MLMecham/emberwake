@@ -15,3 +15,10 @@ defineEntity('efire', {                                                         
     for (const pl of Object.values(sim.players)) if (pl.alive && pl.lvl === e.lvl && dist2(pl.x, pl.y, e.x, e.y) < 0.3) sim.hurtPlayer(pl, 1, e);
   },
 });
+// something knocked out of a foe's hands (game/sim.js disarmEnemy): it flies, bounces once, then lies there a while
+defineEntity('tossed', { update(sim, e, dt) {
+  if (e.t > e.life) { e.dead = true; return; }
+  const k = Math.min(1, e.t / 0.6); const L = sim.W.levels[e.lvl];
+  if (k < 1) { const nx = e.x + e.vx * dt * (1 - k), ny = e.y + e.vy * dt * (1 - k); if (!L.solidAt(nx, ny)) { e.x = nx; e.y = ny; } e.z = 0.05 + Math.abs(Math.sin(k * Math.PI * 1.5)) * 0.5 * (1 - k * 0.6); }
+  else e.z = 0.05;
+} });
