@@ -88,7 +88,7 @@ Read this first in a new chat. It's the context from the long first build sessio
 - **Controls:**
   - Click/Space: attack. Space is dash for the martial artist.
   - Shift is a modifier for both hands. Shift + attack (hold) = reverse grip (sword techniques). Shift + item = the item's technique (`useAlt`): bomb arrows, the wide boomerang throw.
-  - Right-click/E: item. Hold for power: the bow fires on release; holding nocks more arrows (one per Loaded Shot scroll).
+  - Right-click/E: item. Hold for power: the bow fires on release; holding nocks one more arrow every 0.6 s (`LOAD_TIME`, one per Loaded Shot scroll).
   - Favorites (`favList` in main.js, stored in this browser only): star items in the inventory. Wheel and R step through favorites (all items if none), Q + wheel through everything, a tap of Q steps back, 1-4 pick the first four favorites.
   - I: inventory. M: map.
   - Attacking or switching items lets a drawn arrow go slack.
@@ -133,6 +133,7 @@ Read this first in a new chat. It's the context from the long first build sessio
   - Webcam/QR pairing was removed.
 
 ## Gotchas
+- Solid props (trees, boulders, cacti, graves...) block a diamond around the tile center (`PROP_K` in tex.js, `solidAt` in world.js), not the whole tile, so two props touching only at a corner leave a walkable gap. Wall tiles still block whole tiles.
 - Sprite pixels are unsigned (`Uint32Array`) but `c32()`/`rgb()` return signed ints. Compare with `c32(x) >>> 0`.
 - Dead entities stay in `sim.ents` until the next tick. Tests that call `useItem` repeatedly should filter out dead projectiles first.
 - The opening dialog pauses the sim. In browser tests, set `G.local.dialog = null` first.

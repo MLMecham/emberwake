@@ -621,6 +621,7 @@ defTile(TL.HEARTHGATE = 38, { solid: true, wall: 'hearthgate', hearthGate: true 
 // props drawn as sprites on tiles
 const PROPS = [null, 'tree', 'pine', 'boulder', 'bush', 'cactus', 'grave', 'statue', 'sign', 'flame', 'pedestal'];
 const PR = { NONE: 0, TREE: 1, PINE: 2, BOULDER: 3, BUSH: 4, CACTUS: 5, GRAVE: 6, STATUE: 7, SIGN: 8, FLAME: 9, PEDESTAL: 10 };
+const PROP_K = 0.53; // a solid prop blocks the diamond |dx| + |dy| < PROP_K around its tile's center (game/world.js solidAt); tuned to the 0.22 hero radius
 const PROP_INFO = {
   1: { solid: true, scale: 1.5 }, 2: { solid: true, scale: 1.6 }, 3: { solid: true, scale: 1.0 }, 4: { solid: true, scale: 0.9, burn: true },
   5: { solid: true, scale: 1.1 }, 6: { solid: true, scale: 0.9 }, 7: { solid: true, scale: 1.1 }, 8: { solid: true, scale: 0.8 }, 9: { solid: true, scale: 0.7 }, 10: { solid: false, scale: 0.6 },
@@ -4287,7 +4288,7 @@ class Level {
   get(x, y) { if (x < 0 || y < 0 || x >= this.w || y >= this.h) return TL.ROCK; return this.tiles[y * this.w + x]; }
   set(x, y, t) { if (x >= 0 && y >= 0 && x < this.w && y < this.h) this.tiles[y * this.w + x] = t; }
   solidAt(x, y, opts) {
-    x = Math.floor(x); y = Math.floor(y);
+    const fx = x, fy = y; x = Math.floor(x); y = Math.floor(y);
     if (x < 0 || y < 0 || x >= this.w || y >= this.h) return true;
     const t = this.tiles[y * this.w + x]; const ti = TINFO[t];
     if (ti.water && !ti.ocean && opts && opts.raft && this.kind !== 'dungeon') return false; // the raft is for open water, not dungeon halls
@@ -4298,7 +4299,9 @@ class Level {
       if (rid != null) { const r = this.rooms[rid]; const x0 = r.rx * DSX, y0 = r.ry * DSY; const m = 0.23; /* just over the player's 0.22 radius: you're 'inside' only once fully clear of the doorway */ const inside = opts.mx > x0 + 1 + m && opts.mx < x0 + DSX - m && opts.my > y0 + 1 + m && opts.my < y0 + DSY - m; if (!inside) return false; }
     }
     if (ti.solid) return true;
-    const p = this.props[y * this.w + x]; if (p && PROP_INFO[p].solid) return true;
+    // solid props (trees, boulders, cacti, graves, statues...) block a diamond, not the whole tile: two of them touching only at
+    // a corner leave a gap you can walk through, the way it looks. Side by side they still make a solid wall.
+    const p = this.props[y * this.w + x]; if (p && PROP_INFO[p].solid) return Math.abs(fx - x - 0.5) + Math.abs(fy - y - 0.5) < PROP_K;
     return false;
   }
 }
@@ -6105,6 +6108,10 @@ function drawViewmodel(st) {
     return;
   }
   // sword class: shield on left, sword on right
+  if (st.lungeT >= 0) { // the lunge: speed lines rushing past the edges of the view and a warm tint while you charge in
+    const f = Math.max(0, 1 - st.lungeT / 0.45); rectA(0, 0, W, H, rgb(255, 240, 200), 0.18 * f);
+    for (let i = 0; i < 26; i++) { const a = Math.random() * TAU, r0 = 60 + Math.random() * 60, r1 = r0 + 40 + Math.random() * 90; thickLine(W / 2 + Math.cos(a) * r0, H / 2 + Math.sin(a) * r0 * 0.6, W / 2 + Math.cos(a) * r1, H / 2 + Math.sin(a) * r1 * 0.6, Math.random() < 0.3 ? 2 : 1, rgb(255, 255, 255)); }
+  }
   const sw = st.swing; const k = sw != null && sw < 0.25 ? sw / 0.25 : -1;
   // shield, seen from behind: the upper arm comes up from the bottom-left, bends at the elbow, and the forearm lies
   // across the back of the shield through a strap, with the fist closed on an upright grip near the far edge.
@@ -6184,8 +6191,12 @@ function drawViewmodel(st) {
     const pa = ang + Math.PI / 2; thickLine(gx + Math.cos(pa) * 10, gy + Math.sin(pa) * 10, gx - Math.cos(pa) * 10, gy - Math.sin(pa) * 10, 4, rgb(230, 190, 60));
     if (me.sword >= 4) for (let i = 0; i < 5; i++) { const tt = Math.random(); px(lerp(gx, tipX, tt) + (Math.random() - 0.5) * 8, lerp(gy, tipY, tt) + (Math.random() - 0.5) * 8, Math.random() < 0.5 ? rgb(255, 255, 220) : rgb(255, 180, 60)); }
     if (me.sword === 3) for (let i = 0; i < 3; i++) { const tt = Math.random(); px(lerp(gx, tipX, tt) + (Math.random() - 0.5) * 6, lerp(gy, tipY, tt) + (Math.random() - 0.5) * 6, rgb(220, 255, 255)); }
-    if (st.lungeReady) for (let i = 0; i < 6; i++) { const tt = Math.random(); px(lerp(gx, tipX, tt) + (Math.random() - 0.5) * 10, lerp(gy, tipY, tt) + (Math.random() - 0.5) * 10, rgb(255, 255, 255)); } // ready to lunge: the blade glints
-    if (k >= 0 && k < 1) { for (let i = 0; i < 5; i++) { const a2 = lerp(rev ? -2.6 : -0.4, ang, i / 5); thickLine(hx + Math.cos(a2) * 40, hy + Math.sin(a2) * 40, hx + Math.cos(a2) * 66, hy + Math.sin(a2) * 66, 1, rgb(255, 255, 255)); } }
+    if (st.lungeReady) { const pr = 10 + Math.sin(st.time * 18) * 3; for (let i = 0; i < 24; i++) { const a = i / 24 * TAU; px(hx - Math.cos(ang) * 10 + Math.cos(a) * pr, hy - Math.sin(ang) * 10 + Math.sin(a) * pr, rgb(255, 250, 200)); } } // ready to lunge: a pulsing ring at the pommel...
+    if (st.lungeReady) for (let i = 0; i < 14; i++) { const tt = Math.random(); px(lerp(gx, tipX, tt) + (Math.random() - 0.5) * 10, lerp(gy, tipY, tt) + (Math.random() - 0.5) * 10, rgb(255, 255, 255)); } // ready to lunge: the blade glints
+    if (k >= 0 && k < 1) { // the cut's trail; lunge slashes (and the backswing) leave a wide, bright arc in the blade's color
+      const big = st.swingFast; const n = big ? 12 : 5, w = big ? 3 : 1; const tc = big ? blade : rgb(255, 255, 255);
+      for (let i = 0; i < n; i++) { const a2 = lerp(rev ? -2.6 : -0.4, ang, i / n); thickLine(hx + Math.cos(a2) * (big ? 30 : 40), hy + Math.sin(a2) * (big ? 30 : 40), hx + Math.cos(a2) * (big ? 84 : 66), hy + Math.sin(a2) * (big ? 84 : 66), w, i % 3 === 0 && big ? rgb(255, 255, 255) : tc); }
+    }
     // sword hand, drawn like the shield hand: the grip and pommel, then a curved forearm from the bottom-right
     // (shadow on its far edge, cuff, bare wrist), then four fingers wrapped around the grip with the thumb over them
     const dx = Math.cos(ang), dy = Math.sin(ang), qx = -dy, qy = dx; const OUT = rgb(20, 18, 28); const skinL = c32(hexToRgb('#f8d4b0'));
@@ -6757,7 +6768,7 @@ function applyDebugLoadout(p, d, fresh) {
 // ---- src/ui/main.js ----
 // ===== ui/main.js : client game loop, local movement, events, menus and boot =====
 'use strict';
-const LOAD_TIME = 0.4; // seconds to nock a second arrow for a Loaded Shot
+const LOAD_TIME = 0.6; // seconds to nock each extra arrow for a Loaded Shot (so a quick release fires just one)
 const ADV_SEED = 7319;
 const G = {
   state: 'title', profile: { name: 'HERO', color: 'GREEN', cls: 'sword' }, world: null, sim: null, myId: 'p1', snap: null,
@@ -6981,7 +6992,7 @@ function updateLocal(dt, inp) {
     const canLunge = !!me.items.lunge;
     if (inp.atk) { const before = Lc.gripT; Lc.gripT += dt; if (canLunge && before < LUNGE_HOLD && Lc.gripT >= LUNGE_HOLD) sfx('lungeready'); }
     else {
-      if (canLunge && Lc.gripT >= LUNGE_HOLD) { Lc.lunge = { t: 0, n: me.sword >= 3 ? 4 : me.sword + 1, next: 0.05, dir: Lc.a, side: 1 }; Lc.atkCd = 0.6; sfx('lunge'); Lc.shake = 0.15; }
+      if (canLunge && Lc.gripT >= LUNGE_HOLD) { Lc.lunge = { t: 0, n: me.sword >= 3 ? 4 : me.sword + 1, next: 0.05, dir: Lc.a, side: 1 }; Lc.atkCd = 0.6; sfx('lunge'); Lc.shake = 0.3; Lc.flash = 0.12; Lc.flashC = rgb(255, 250, 220); }
       else if (Lc.gripT >= POMMEL_MIN) { Lc.pommelT = 0; Lc.atkCd = 0.4; Lc.atkVis = 0.25; sendAction({ t: 'atk', kind: 'pommel' }); }
       Lc.gripT = 0;
     }
@@ -6992,7 +7003,7 @@ function updateLocal(dt, inp) {
   if (Lc.pommelT != null) { Lc.pommelT += dt; if (Lc.pommelT > 0.3) Lc.pommelT = null; }
   if (Lc.lunge) { // the lunge's slashes, alternating directions, a quick one every 0.11 s
     const lg = Lc.lunge; lg.t += dt; lg.next -= dt;
-    if (lg.n > 0 && lg.next <= 0) { lg.n--; lg.next = 0.11; Lc.swing = 0; Lc.swingDir = lg.side; lg.side = -lg.side; Lc.swingFast = true; sfx('swing'); Lc.atkVis = 0.15; sendAction({ t: 'atk', kind: 'slash' }); }
+    if (lg.n > 0 && lg.next <= 0) { lg.n--; lg.next = 0.11; Lc.swing = 0; Lc.swingDir = lg.side; lg.side = -lg.side; Lc.swingFast = true; sfx('swing'); Lc.shake = Math.max(Lc.shake, 0.08); Lc.atkVis = 0.15; sendAction({ t: 'atk', kind: 'slash' }); }
     if (lg.n <= 0 && lg.t > LUNGE_DUR) { Lc.lunge = null; Lc.swingFast = false; }
   }
   // Item button. Shift (or LB) held = the item's technique. The bow draws while held and fires on release; with the
@@ -7101,7 +7112,7 @@ function draw(dt) {
   // pow words
   for (const p of Lc.pow) { const sc = projectPt(cam, p.x, p.y); if (sc) { const c = p.big ? rgb(255, 230, 60) : rgb(255, 255, 255); text(p.word, sc.x - p.word.length * 3, sc.y - 30 - p.t * (p.num ? 45 : 30), p.num ? rgb(255, 236, 120) : Math.floor(p.t * 20) & 1 ? c : rgb(255, 80, 40)); } }
   const bossE = ents.find(e => e[8] >= 0);
-  const st = { me, bob: Lc.bob, moveK: Lc.moveK || 0, readyK: Lc.readyK || 0, blockT: Lc.blockT || 0, swing: Lc.swing, swingDir: Lc.swingDir || 1, grip: Lc.gripT || 0, pommelT: Lc.pommelT, lungeReady: !!(Lc.gripT >= LUNGE_HOLD && me && me.items.lunge), punch: Lc.punch, charge: Lc.charge, useFlash: Lc.useFlash, useSpr: Lc.useSpr, level: L, cam, players: snap ? snap.pl : [], myId: G.myId, team: snap ? snap.team : { keys: {}, maps: {}, comps: {}, shards: [], done: [] }, seen: G.seen[L.id] || new Uint8Array(L.w * L.h), seenOW: G.seen.ow || new Uint8Array(1), seenRooms: G.seenRooms, selItem: Lc.sel, pitch: Lc.pitch, lvlKind: L.kind, bossHp: bossE ? bossE[8] : -1, bossName: bossE ? ((enemyDef(bossE[1]) || enemyDef(String(bossE[1]).replace(/_sub$/, '')) || {}).title || null) : null, world: G.world };
+  const st = { me, bob: Lc.bob, moveK: Lc.moveK || 0, readyK: Lc.readyK || 0, blockT: Lc.blockT || 0, swing: Lc.swing, swingDir: Lc.swingDir || 1, swingFast: !!Lc.swingFast, lungeT: Lc.lunge ? Lc.lunge.t : -1, time: R.time, grip: Lc.gripT || 0, pommelT: Lc.pommelT, lungeReady: !!(Lc.gripT >= LUNGE_HOLD && me && me.items.lunge), punch: Lc.punch, charge: Lc.charge, useFlash: Lc.useFlash, useSpr: Lc.useSpr, level: L, cam, players: snap ? snap.pl : [], myId: G.myId, team: snap ? snap.team : { keys: {}, maps: {}, comps: {}, shards: [], done: [] }, seen: G.seen[L.id] || new Uint8Array(L.w * L.h), seenOW: G.seen.ow || new Uint8Array(1), seenRooms: G.seenRooms, selItem: Lc.sel, pitch: Lc.pitch, lvlKind: L.kind, bossHp: bossE ? bossE[8] : -1, bossName: bossE ? ((enemyDef(bossE[1]) || enemyDef(String(bossE[1]).replace(/_sub$/, '')) || {}).title || null) : null, world: G.world };
   if (me && !down) drawViewmodel(st);
   if (me && me.cls === 'monk' && me.armor > 0 && !down) { const ac = me.armor === 2 ? rgb(255, 248, 200) : rgb(100, 190, 255); for (let i = 0; i < 18; i++) { const side = Math.random() < 0.5; const x = side ? (Math.random() < 0.5 ? Math.random() * 10 : R.W - Math.random() * 10) : Math.random() * R.W; const y = side ? Math.random() * R.H : R.H - Math.random() * 8; px(x, y, ac); } }
   if (Lc.dashT > 0) rectA(0, 0, R.W, R.H, rgb(200, 240, 255), 0.15);

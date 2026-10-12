@@ -602,6 +602,20 @@ attempt('training dummies', () => {
   sim.time += DUMMY_RESET + 0.1; sim.updateEnemy(a, 1 / 60); __ok(a.armor === 3, 'and it gets its armor back');
   sim.hurtPlayer = () => { throw new Error('a dummy hurt the hero'); }; p.x = a.x; p.y = a.y; sim.updateEnemy(a, 1 / 60); __ok(true, 'dummies never hurt you');
 });
+attempt('round props: diagonal gaps are walkable', () => {
+  const W = genWorld(7319, 'adv'); const L = W.levels.ow; const x0 = Math.floor(L.spawn.x) + 2, y0 = Math.floor(L.spawn.y) + 2;
+  for (let y = y0 - 1; y <= y0 + 2; y++) for (let x = x0 - 1; x <= x0 + 2; x++) { L.tiles[L.idx(x, y)] = TL.GRASS; L.props[L.idx(x, y)] = 0; }
+  const body = (cx, cy) => [[-0.22, -0.22], [0.22, -0.22], [-0.22, 0.22], [0.22, 0.22]].some(([ox, oy]) => L.solidAt(cx + ox, cy + oy));
+  L.props[L.idx(x0, y0)] = PR.TREE; L.props[L.idx(x0 + 1, y0 + 1)] = PR.BOULDER;
+  __ok(!body(x0 + 1, y0 + 1), 'you fit through the gap between two props that only touch at a corner');
+  __ok(body(x0 + 0.5, y0 + 0.5) && L.solidAt(x0 + 0.5, y0 + 0.5), 'but not through a prop');
+  L.props[L.idx(x0 + 1, y0 + 1)] = 0; L.props[L.idx(x0 + 1, y0)] = PR.TREE;
+  let leak = false; for (let t = -0.6; t <= 1.6; t += 0.02) if (!body(x0 + 1, y0 + t) && t > 0.1 && t < 0.9) leak = true; __ok(!leak, 'two props side by side still make a wall');
+  // walk the diagonal gap in small axis-separated steps, the way the client moves
+  L.props[L.idx(x0 + 1, y0)] = 0; L.props[L.idx(x0 + 1, y0 + 1)] = PR.BOULDER; let px = x0 + 1.5, py = y0 + 0.5;
+  for (let i = 0; i < 200; i++) { const nx = px - 0.01, ny = py + 0.01; if (!body(nx, py)) px = nx; if (!body(px, ny)) py = ny; }
+  __ok(px < x0 + 0.8 && py > y0 + 1.2, 'walking from one open corner to the other gets through (' + px.toFixed(2) + ',' + py.toFixed(2) + ')');
+});
 attempt('tideglass opening', () => {
   for (const [seed, mode] of [[7319, 'adv'], [1234, 'rogue'], [99, 'rogue'], [4242, 'adv']]) {
     const W = genWorld(seed, mode); const D = W.levels.d6; const st = D.startRoom; const r2 = st.children[0]; const r3 = r2.children[0];

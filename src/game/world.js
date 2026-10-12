@@ -16,7 +16,7 @@ class Level {
   get(x, y) { if (x < 0 || y < 0 || x >= this.w || y >= this.h) return TL.ROCK; return this.tiles[y * this.w + x]; }
   set(x, y, t) { if (x >= 0 && y >= 0 && x < this.w && y < this.h) this.tiles[y * this.w + x] = t; }
   solidAt(x, y, opts) {
-    x = Math.floor(x); y = Math.floor(y);
+    const fx = x, fy = y; x = Math.floor(x); y = Math.floor(y);
     if (x < 0 || y < 0 || x >= this.w || y >= this.h) return true;
     const t = this.tiles[y * this.w + x]; const ti = TINFO[t];
     if (ti.water && !ti.ocean && opts && opts.raft && this.kind !== 'dungeon') return false; // the raft is for open water, not dungeon halls
@@ -27,7 +27,9 @@ class Level {
       if (rid != null) { const r = this.rooms[rid]; const x0 = r.rx * DSX, y0 = r.ry * DSY; const m = 0.23; /* just over the player's 0.22 radius: you're 'inside' only once fully clear of the doorway */ const inside = opts.mx > x0 + 1 + m && opts.mx < x0 + DSX - m && opts.my > y0 + 1 + m && opts.my < y0 + DSY - m; if (!inside) return false; }
     }
     if (ti.solid) return true;
-    const p = this.props[y * this.w + x]; if (p && PROP_INFO[p].solid) return true;
+    // solid props (trees, boulders, cacti, graves, statues...) block a diamond, not the whole tile: two of them touching only at
+    // a corner leave a gap you can walk through, the way it looks. Side by side they still make a solid wall.
+    const p = this.props[y * this.w + x]; if (p && PROP_INFO[p].solid) return Math.abs(fx - x - 0.5) + Math.abs(fy - y - 0.5) < PROP_K;
     return false;
   }
 }
