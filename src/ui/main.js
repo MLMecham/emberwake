@@ -490,7 +490,13 @@ function updatePauseInfo() {
   const dOn = !!(G.snap && G.snap.me && G.snap.me.dbg); $('pDebug').style.display = dOn ? '' : 'none';
   const dev = isDevName(G.snap && G.snap.me ? G.snap.me.name : G.profile.name); $('pDbgToggle').style.display = dev ? '' : 'none'; $('pDbgToggle').textContent = 'DEBUG: ' + (dOn ? 'ON' : 'OFF'); $('pGodToggle').textContent = 'GOD MODE: ' + (G.snap && G.snap.me && G.snap.me.god ? 'ON' : 'OFF');
   if (dOn && !$('pDbgFoe').childElementCount) { // debug spawner lists and boss-room buttons
-    for (const id of Object.keys(Content.enemies).sort()) { const o = document.createElement('option'); o.value = id; o.textContent = (Content.enemies[id].boss ? 'BOSS: ' : '') + id.toUpperCase(); $('pDbgFoe').appendChild(o); }
+    // foes by family: 'knight_sword' and 'knight_champion' are variants of 'knight', 'frog_poison' of 'frog', and so on.
+    // Pick the family, then (if it has any) the variant in the second box. Bosses get their own list.
+    const fam = {}; const ids = Object.keys(Content.enemies).sort(); const opt = (sel, v, t) => { const o = document.createElement('option'); o.value = v; o.textContent = t; sel.appendChild(o); };
+    for (const id of ids) { if (Content.enemies[id].boss) { opt($('pDbgBoss'), id, (Content.enemies[id].title || id).toUpperCase()); continue; } const base = id.includes('_') && Content.enemies[id.split('_')[0]] ? id.split('_')[0] : id; (fam[base] = fam[base] || []).push(id); }
+    for (const base of Object.keys(fam).sort()) opt($('pDbgFoe'), base, base.toUpperCase() + (fam[base].length > 1 ? '  (+' + (fam[base].length - 1) + ')' : ''));
+    const fillVar = () => { const v = $('pDbgVar'); v.innerHTML = ''; const base = $('pDbgFoe').value; const list = (fam[base] || []).slice().sort((x, y) => (x === base ? -1 : y === base ? 1 : 0) || (Content.enemies[x].armor || 0) - (Content.enemies[y].armor || 0) || Content.enemies[x].hp - Content.enemies[y].hp || (x < y ? -1 : 1)); /* the plain one first, then weakest to strongest */ v.style.display = list.length > 1 ? '' : 'none'; for (const id of list) { const d = Content.enemies[id]; opt(v, id, id === base ? 'NORMAL' : ((d.title || id.replace(/^[a-z]+_/, '')).toUpperCase().replace(base.toUpperCase(), '').trim() + (d.armor ? ' A' + d.armor : '')) || id.toUpperCase()); } };
+    $('pDbgFoe').onchange = fillVar; fillVar();
     { const o = document.createElement('option'); o.value = ''; o.textContent = 'NORMAL'; $('pDbgElite').appendChild(o); } for (const el of Content.elites) { const o = document.createElement('option'); o.value = el.id; o.textContent = el.name; $('pDbgElite').appendChild(o); }
     for (let d = 1; d <= NDUNGEONS(); d++) { const b = document.createElement('button'); b.textContent = d <= 9 ? 'BOSS ' + d : 'BOSS ' + (Content.dungeons[d].mapLabel || d); b.onclick = () => { sendAction({ t: 'dbgboss', d }); resume(); }; $('pDbgBosses').appendChild(b); }
   }
@@ -587,7 +593,8 @@ function bindUI() {
   });
   on('dbgBack', () => { readDebugUI(); showScreen('titleScreen'); refreshTitle(); });
   on('pDbgZone', () => { sendAction({ t: 'warp', to: 'dbg' }); resume(); });
-  on('pDbgSpawn', () => { sendAction({ t: 'dbgspawn', type: $('pDbgFoe').value, elite: $('pDbgElite').value || null }); resume(); });
+  on('pDbgSpawn', () => { const v = $('pDbgVar'); sendAction({ t: 'dbgspawn', type: v.style.display !== 'none' && v.value ? v.value : $('pDbgFoe').value, elite: $('pDbgElite').value || null }); resume(); });
+  on('pDbgBossSpawn', () => { sendAction({ t: 'dbgspawn', type: $('pDbgBoss').value, elite: null }); resume(); });
   on('pDbgMap', () => { sendAction({ t: 'dbgmap', what: 'map' }); resume(); }); on('pDbgComp', () => { sendAction({ t: 'dbgmap', what: 'comp' }); resume(); });
   on('pGodToggle', () => { const now = !(G.snap && G.snap.me && G.snap.me.god); G.profile.dbg = Object.assign(defaultDebug(), G.profile.dbg || {}, { god: now }); saveProfile(); sendAction({ t: 'god', on: now }); setTimeout(updatePauseInfo, 150); showToast(now ? 'GOD MODE ON' : 'GOD MODE OFF'); });
   // EVERYTHING: best sword (the Dawnblade), plate, 16 hearts, every item and relic, all shards, god mode

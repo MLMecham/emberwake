@@ -128,7 +128,7 @@ Read this first in a new chat. It's the context from the long first build sessio
   - Title DEBUG loadout, and EVERYTHING (Dawnblade, all items, relics, shards, god mode).
   - Pause menu: DEBUG ON/OFF, GOD MODE (god mode does triple damage), MAP HERE / COMPASS HERE, and a warp list.
   - Warp Stone (hops between dungeons) and Boss Bell (cycles 12, 9, 10, 11).
-  - Pause menu also has TEST ZONE (level `dbg` from `genTestZone` in world.js: a strip of every hazard, an eye moat, a sealed eye, a bomb wall, vents and open floor), SPAWN A FOE (any enemy plus an elite), and BOSS ROOMS (warp into any boss room). The test zone also has two training dummies (`content/enemies/dummy.js`, `L.dummies`): they show each hit's damage and the running total, never move or hurt you, and heal (and re-armor) after 3 s.
+  - Pause menu also has TEST ZONE (level `dbg` from `genTestZone` in world.js: a strip of every hazard, an eye moat, a sealed eye, a bomb wall, vents and open floor), SPAWN A FOE (pick a family, then its variant in the second box if it has any, e.g. KNIGHT -> SWORD / ARMORED A2 / CHAMPION A3; families come from the id before the first `_`; plus an elite) and SPAWN A BOSS (its own list), and BOSS ROOMS (warp into any boss room). The test zone also has two training dummies (`content/enemies/dummy.js`, `L.dummies`): they show each hit's damage and the running total, never move or hurt you, and heal (and re-armor) after 3 s.
 - **Networking:**
   - PeerJS with 5-character join codes. ICE servers: 1 Google STUN plus Metered's public openrelay.
   - Mitch decided not to run his own relay; never ask for or embed the Metered secret key.
@@ -138,6 +138,7 @@ Read this first in a new chat. It's the context from the long first build sessio
 ## Gotchas
 - Solid props don't block their whole tile (`solidAt` in world.js, sizes in tex.js). Trees, pines and boulders block a diamond (`PROP_K`): side by side they're a wall, corner to corner you can slip between. Small props (`round: true`: bushes, cacti, graves, statues, signs, flames, torches) block a small circle (`PROP_ROUND_R`), so you can walk between two side by side. The hero's body is checked at 3x3 points (`BODY_PTS` in main.js) so nothing small slips between its corners. Wall tiles still block whole tiles.
 - Explosions always land (`ignoreIframes`), even right after another hit, e.g. a bomb arrow's own arrow.
+- `tools/check.js` also compiles every source file, browser-only ones included, so a `//` comment that swallows code fails the tests.
 - Sprite pixels are unsigned (`Uint32Array`) but `c32()`/`rgb()` return signed ints. Compare with `c32(x) >>> 0`.
 - Dead entities stay in `sim.ents` until the next tick. Tests that call `useItem` repeatedly should filter out dead projectiles first.
 - The opening dialog pauses the sim. In browser tests, set `G.local.dialog = null` first.

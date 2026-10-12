@@ -726,6 +726,8 @@ try { vm.runInContext(tests, ctx, { filename: 'tests.js' }); } catch (e) { failu
 
 // a // comment followed by more code on the same line silently swallows that code (this once froze the game)
 const allSrc = []; (function walk(d) { for (const n of fs.readdirSync(path.join(root, d))) { const p = d + '/' + n; if (fs.statSync(path.join(root, p)).isDirectory()) walk(p); else if (n.endsWith('.js')) allSrc.push(p); } })('src');
+// every source file must at least compile, including the browser-only ones the tests above never load (a stray // can swallow code)
+for (const f of allSrc) if (f.endsWith('.js')) { try { new vm.Script(fs.readFileSync(path.join(root, f), 'utf8'), { filename: f }); } catch (e) { failures.push(f + ' does not compile: ' + e.message); } }
 for (const f of allSrc) { const src = fs.readFileSync(path.join(root, f), 'utf8').split('\n'); src.forEach((line, i) => { const m = line.match(/\/\/[^'"`]*\b(const|let) [A-Za-z_]\w* = /); if (m && !/^\s*\/\//.test(line.slice(0, line.indexOf('//')) + '//')) failures.push(f + ':' + (i + 1) + ' has code after a // comment: ' + line.trim().slice(0, 80)); }); }
 // browser-only files (render, input, net, ui) aren't run here, so at least make sure they parse
 for (const f of ['src/engine/render.js', 'src/engine/audio.js', 'src/engine/input.js', 'src/net/relay.js', 'src/net/net.js', 'src/ui/debug.js', 'src/ui/main.js']) {
