@@ -35,6 +35,9 @@ const POISON_FRAC = 0.05, POISON_FROG_CHANCE = 0.1; // poison frogs are 1 in 10 
 const BOOMERANG_STUN = 3, STUN_LOCK = 6, BOOMERANG_DMG = 0.25; // boomerang: stun seconds, the longest a foe can be kept dizzy, chip damage
 const BACK_ANGLE = 2.1;
 // sword techniques: the pommel strike (reverse grip), the lunge's slashes, and the backswing on every third hit
+// ARMOR (def.armor 0-3, e.armor now): each level blocks ARMOR_STEP of the damage. Bombs and the Heavy Pommel knock one level off
+// instead of hurting, but each of those ways only works once per foe (e.stripped), so a fight can't be just one trick.
+const ARMOR_STEP = 0.25;
 const POMMEL_DMG = 0.25, POMMEL_STUN = 2.5, CHAIN_GAP = 2, BACKSWING_DELAY = 0.14; // radians off a foe's facing that count as behind it (about 120 degrees)
 const SHIELD_STUN = 0.9; // seconds a knight reels after a loaded shot hits its shield
 const FREEZE_TIME = 6, FREEZE_PATH = 6; // seconds frost-arrow ice lasts; how many tiles of water one arrow freezes along its flight
@@ -254,7 +257,7 @@ class Sim {
   spawnEnemy(type, lvl, x, y, opts) {
     const def = enemyDef(type); opts = opts || {}; const hp = opts.hp || def.hp;
     const e = this.spawn(Object.assign({ k: 'en', type, lvl, x, y, hp, maxHp: hp, f: Math.random() * TAU, b: opts.bounds || null, g: opts.group || null, st: 0, tm: 0.5, stun: 0, hurt: 0, spawnFx: 0.3, dmgMul: 1 }, opts));
-    delete e.group; delete e.bounds; e.maxHp = e.hp;
+    delete e.group; delete e.bounds; e.maxHp = e.hp; if (def.armor && e.armor == null) e.armor = def.armor;
     const g = e.g && this.groups[e.g]; if (g && !g.cleared) { g.ents.push(e); e.hp *= g.mul || 1; e.maxHp *= g.mul || 1; }
     return e;
   }
@@ -563,6 +566,7 @@ class Sim {
       if (e.stun > 0) { if (this.time - (e.stunFrom != null ? e.stunFrom : this.time) < STUN_LOCK) e.stun = Math.max(e.stun, BOOMERANG_STUN); else { e.stunImmune = this.time + e.stun + 1.2; } return true; }
       e.stun = BOOMERANG_STUN; e.stunFrom = this.time; if (def.boomerangKills) dmg = Math.max(dmg, e.hp); // bats and the like drop to one throw
     }
+    if (e.armor > 0) dmg *= 1 - ARMOR_STEP * Math.min(3, e.armor);
     if (def.onDamage && def.onDamage(this, e, dmg, opt) === false) return true;
     e.hp -= dmg; e.hurt = 0.35; this.sfx('hit', e.lvl, e.x, e.y); if (opt.pid) e.lastPid = opt.pid;
     if (src && !def.boss) { const a = Math.atan2(e.y - src.y, e.x - src.x); const [v, t] = this.knockFor(e, def, 9 * (opt.kbMul || 1)); e.kb = [Math.cos(a) * v, Math.sin(a) * v]; e.kbT = t || 0.12; }
@@ -620,6 +624,15 @@ class Sim {
       else this.fireProj(p.sword >= 4 ? 'dawnbeam' : 'beam', p.lvl, p.x + Math.cos(p.a) * 0.3, p.y + Math.sin(p.a) * 0.3, p.a, 'p', p.id, { dmg: swordDmg });
       this.sfx('beam', p.lvl, p.x, p.y);
     }
+  }
+  // knock one piece of armor off. `method` ('bomb', 'pommel', ...) only works once per foe: a second time just clanks.
+  stripArmor(e, method, src) {
+    if (!(e.armor > 0) || e.dead) return false; e.stripped = e.stripped || {};
+    if (e.stripped[method]) { this.sfx('clank', e.lvl, e.x, e.y); return false; }
+    e.stripped[method] = true; e.armor--; e.hurt = 0.25;
+    this.sfx('armor', e.lvl, e.x, e.y); this.spawn({ k: 'fx', lvl: e.lvl, x: e.x, y: e.y, spr: 'armorbits', life: 0.45, sc: 0.9, z: 0.3 });
+    if (src && !enemyDef(e.type).boss) { const a = Math.atan2(e.y - src.y, e.x - src.x); const [v, t] = this.knockFor(e, enemyDef(e.type), 6); e.kb = [Math.cos(a) * v, Math.sin(a) * v]; e.kbT = t || 0.12; }
+    return true;
   }
   // POMMEL STRIKE: little damage and a long stun on whatever's right in front of you. A shield still blocks it from the front.
   // With the Heavy Pommel scroll it also knocks a piece of armor off (once per foe). It's also the only thing that splits gourds.

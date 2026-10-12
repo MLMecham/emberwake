@@ -457,6 +457,26 @@ attempt('sword: pommel, slashes and the backswing', () => {
   clear(); p.chain = 0; p.backArmed = false; p.backswing = null; sk = foe(1, 20); swing(); swing(); sim.time += CHAIN_GAP + 0.5; swing(); __ok(!p.backswing && p.chain === 1, 'a pause breaks the chain');
   __ok(Content.items.lunge && Content.items.heavypommel, 'the sword scrolls exist');
 });
+attempt('armor', () => {
+  const sim = freshSim(); const p = sim.players.p1; p.god = false; p.a = 0; p.sword = 2; p.hp = 1;
+  for (const e of sim.ents) if (e.k === 'en') e.dead = true; sim.ents = sim.ents.filter(e => !e.dead);
+  const sk = sim.spawnEnemy('skeleton_a3', p.lvl, p.x + 1, p.y, {}); sk.spawnFx = 0; sk.hp = 100; sk.f = Math.PI;
+  __ok(sk.armor === 3, 'full armor to start');
+  const view = () => sim.snapshotFor('p1').en.find(v => v[0] === sk.id)[1];
+  __ok(view() === 'skeleton_a3', 'shows all its armor');
+  sim.damageEnemy(sk, 4, p, { pid: 'p1' }); __ok(Math.abs(sk.hp - 99) < 1e-9, 'three levels block 75%');
+  // a bomb knocks a piece off and does no damage; a second bomb just hurts (still through the armor left)
+  const boom = () => { const b = sim.spawn({ k: 'bomb', lvl: p.lvl, x: sk.x, y: sk.y, fuse: 0, pid: 'p1' }); sk.hurt = 0; sim.updateEnt(b, 1 / 60); };
+  let h = sk.hp; boom(); __ok(sk.armor === 2 && sk.hp === h, 'a bomb strips a level without damage');
+  __ok(view() === 'skeleton_a2', 'and the sprite loses that piece');
+  h = sk.hp; boom(); __ok(sk.armor === 2 && sk.hp === h - 4 * 0.5, 'a second bomb only hurts, through the armor left');
+  // the pommel only strips with the Heavy Pommel scroll, also once
+  sk.hurt = 0; sim.playerAttack(p, { kind: 'pommel' }); __ok(sk.armor === 2, 'a plain pommel strike leaves armor alone');
+  p.items.heavypommel = true; sk.hurt = 0; sk.stun = 0; sim.playerAttack(p, { kind: 'pommel' }); __ok(sk.armor === 1 && sk.stun > 1, 'a heavy pommel strips a level (and still stuns)');
+  sk.hurt = 0; sim.playerAttack(p, { kind: 'pommel' }); __ok(sk.armor === 1, 'but only once per foe');
+  __ok(view() === 'skeleton_a1', 'down to the breastplate');
+  __ok(Content.enemies.skeleton_a1 && Content.enemies.skeleton_a2, 'all three armored skeletons exist');
+});
 attempt('tideglass opening', () => {
   for (const [seed, mode] of [[7319, 'adv'], [1234, 'rogue'], [99, 'rogue'], [4242, 'adv']]) {
     const W = genWorld(seed, mode); const D = W.levels.d6; const st = D.startRoom; const r2 = st.children[0]; const r3 = r2.children[0];

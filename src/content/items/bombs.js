@@ -29,7 +29,8 @@ defineEntity('bomb', {
     e.dead = true; const L = sim.W.levels[e.lvl]; const R = e.nova ? 2.4 : 1.7;
     sim.spawn({ k: 'fx', lvl: e.lvl, x: e.x, y: e.y, spr: 'boom', life: 0.45, sc: R, z: 0.2 });
     sim.sfx('boom', e.lvl, e.x, e.y); sim.ev({ t: 'shake', lvl: e.lvl, x: e.x, y: e.y });
-    for (const en of sim.ents) if (en.k === 'en' && en.lvl === e.lvl && !en.dead && dist2(en.x, en.y, e.x, e.y) < R * R) sim.damageEnemy(en, e.nova ? 6 : 4, e, { pid: e.pid, pierceShield: true });
+    // armored foes lose a piece of armor instead of taking damage, the first time a bomb (or bomb arrow) gets them
+    for (const en of sim.ents) if (en.k === 'en' && en.lvl === e.lvl && !en.dead && dist2(en.x, en.y, e.x, e.y) < R * R) { if (en.armor > 0 && sim.stripArmor(en, 'bomb', e)) continue; sim.damageEnemy(en, e.nova ? 6 : 4, e, { pid: e.pid, pierceShield: true }); }
     // crack open bombable walls in range
     const tx = Math.floor(e.x), ty = Math.floor(e.y); let found = false;
     for (let dy = -2; dy <= 2; dy++) for (let dx = -2; dx <= 2; dx++) {
