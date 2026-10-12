@@ -533,6 +533,21 @@ attempt('bramble keep: no keys, every crack pays', () => {
   const dx = st.rx * DSX + 6, dy = st.ry * DSY; sim.teleport(p, 'd2', dx + 0.5, dy + 1.5, -Math.PI / 2); sim.useItem(p, 'bombs', {}); run(sim, 2);
   __ok(L.get(dx, dy) !== TL.BRICK_BOMB, 'the bomb opens the way out of the entrance');
 });
+attempt('triple shot, great quiver, gale slam', () => {
+  const sim = freshSim(); const p = sim.players.p1; p.god = false; p.items.bow = true; p.arrows = 20; p.items.loaded = false; p.items.loaded2 = false; p.a = 0;
+  const shot = (n) => { for (const e of sim.ents) if (e.k === 'proj') e.dead = true; sim.ents = sim.ents.filter(e => !e.dead); const before = p.arrows; sim.useItem(p, 'bow', { loaded: n }); const pr = sim.ents.find(e => e.k === 'proj' && e.pid === 'p1'); return [before - p.arrows, pr]; };
+  __ok(shot(3)[0] === 1, 'no scrolls: one arrow, however long you hold');
+  sim.giveItem(p, 'tripleshot', false); __ok(shot(3)[0] === 2, 'Loaded Shot 2 alone still works (order does not matter)');
+  sim.giveItem(p, 'loadedshot', false); const [n3, pr3] = shot(3); __ok(n3 === 3 && pr3.dmg === 6, 'both scrolls: three arrows for triple damage');
+  __ok(shot(true)[0] === 2, 'old clients asking for a loaded shot still get two');
+  sim.giveItem(p, 'quiver50', false); __ok(p.maxArrows === 50, 'the Great Quiver holds 50');
+  // the Gale Cloak: pressing again mid-flight drops you; with the scroll you slam and stun foes around you
+  p.items.galecloak = true; for (const e of sim.ents) if (e.k === 'en') e.dead = true; sim.ents = sim.ents.filter(e => !e.dead);
+  const sk = sim.spawnEnemy('skeleton', p.lvl, p.x + 1.2, p.y, {}); sk.spawnFx = 0; sk.hp = 10;
+  sim.useItem(p, 'galecloak', {}); __ok(sim.flying(p), 'flying'); sim.time += 0.5; sim.useItem(p, 'galecloak', {}); __ok(!sim.flying(p) && !(sk.stun > 0), 'pressing again drops you, no slam without the scroll');
+  p.flyReady = 0; sim.giveItem(p, 'galeslam', false); sim.useItem(p, 'galecloak', {}); sim.time += 0.5; sk.hurt = 0; sim.useItem(p, 'galecloak', {}); __ok(sk.stun >= 1.9 && sk.hp < 10, 'ending a flight early slams down');
+  p.flyReady = 0; sk.stun = 0; sk.hurt = 0; sim.useItem(p, 'galecloak', {}); sim.time += FLY_TIME + 0.1; __ok(!sim.flying(p) && !(sk.stun > 0), 'riding it out gives no slam');
+});
 attempt('tideglass opening', () => {
   for (const [seed, mode] of [[7319, 'adv'], [1234, 'rogue'], [99, 'rogue'], [4242, 'adv']]) {
     const W = genWorld(seed, mode); const D = W.levels.d6; const st = D.startRoom; const r2 = st.children[0]; const r3 = r2.children[0];

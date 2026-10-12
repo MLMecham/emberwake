@@ -6,10 +6,17 @@
 defineItem({ id: 'loadedshot', name: 'SCROLL: LOADED SHOT', sprite: 'scroll', team: true, debug: true, monk: { name: 'SCROLL: TWIN DARTS' },
   debugGrant(p) { p.items.loaded = true; },
   give(sim, p, ctx) { p.items.loaded = true; ctx.banner(); sim.ev({ t: 'dialog', pid: p.id, text: p.cls === 'monk' ? 'HOLD THE ITEM BUTTON WITH THE DARTS TO GATHER A SECOND, THEN LET GO. TWICE THE STING, AND A SHIELD WON\'T SAVE THEM FROM IT.' : 'HOLD THE ITEM BUTTON WITH THE BOW TO NOCK A SECOND ARROW, THEN LET GO. TWICE THE DAMAGE, AND A SHIELD WON\'T SAVE THEM FROM IT.' }); } });
-// quivers: you start able to carry 15 arrows; this one holds 30 (a later one, 50)
+// LOADED SHOT 2: one more arrow on the string (three at once). Either Loaded Shot scroll works on its own, in any order.
+defineItem({ id: 'tripleshot', name: 'SCROLL: LOADED SHOT 2', sprite: 'scroll', team: true, debug: true, monk: { name: 'SCROLL: TWIN DARTS 2' },
+  debugGrant(p) { p.items.loaded2 = true; },
+  give(sim, p, ctx) { p.items.loaded2 = true; ctx.banner(); sim.ev({ t: 'dialog', pid: p.id, text: 'HOLD THE ITEM BUTTON WITH THE BOW A LITTLE LONGER TO NOCK ONE MORE ARROW. EVERY ARROW ON THE STRING HITS AS ONE.' }); } });
+// quivers: you start able to carry 15 arrows; the Big Quiver holds 30 and the Great Quiver 50
 defineItem({ id: 'quiver', name: 'BIG QUIVER', sprite: 'quiver', team: true, debug: true, monk: { name: 'BIG DART POUCH' },
   debugGrant(p) { p.maxArrows = Math.max(p.maxArrows || ARROWS_START, 30); },
   give(sim, p, ctx) { p.maxArrows = Math.max(p.maxArrows || ARROWS_START, 30); p.arrows = p.maxArrows; ctx.banner(); } });
+defineItem({ id: 'quiver50', name: 'GREAT QUIVER', sprite: 'quiver', team: true, debug: true, monk: { name: 'GREAT DART POUCH' },
+  debugGrant(p) { p.maxArrows = Math.max(p.maxArrows || ARROWS_START, 50); },
+  give(sim, p, ctx) { p.maxArrows = Math.max(p.maxArrows || ARROWS_START, 50); p.arrows = p.maxArrows; ctx.banner(); } });
 // BOMB ARROWS: Shift + bow fires an arrow with a bomb tied on (items/bow.js useAlt). Not placed in the world yet (debug only).
 defineItem({ id: 'bombarrows', name: 'SCROLL: BOMB ARROWS', sprite: 'scroll', team: true, debug: true, monk: { name: 'SCROLL: BLAST DARTS' },
   debugGrant(p) { p.items.bombarrow = true; },

@@ -3812,15 +3812,16 @@ defineItem({
     sim.fireProj(p.cls === 'monk' ? 'dart' : 'arrow', p.lvl, p.x, p.y, p.a, 'p', p.id, { dmg: 2, bomb: true, spr: 'arrow_bomb' }); sim.sfx('arrow', p.lvl);
   },
   use(sim, p, a) {
-    const loaded = !!(a && a.loaded && p.items.loaded) && p.arrows >= 2; // Loaded Shot (items/techniques.js): two arrows at once
+    // Loaded Shot (items/techniques.js): each Loaded Shot scroll lets you nock one more arrow (2, then 3), whichever you found first
+    const want = a && a.loaded === true ? 2 : Math.floor(+(a && a.loaded) || 1); const nocks = Math.max(1, Math.min(want, nockMax(p), p.arrows)); const loaded = nocks > 1;
     if (p.arrows <= 0) return sim.hint(p, 'NO ARROWS.');
     const monk = p.cls === 'monk';
     if (sim.ents.filter(e => e.k === 'proj' && e.pid === p.id && (e.type === 'arrow' || e.type === 'dart')).length >= (monk ? 3 : 1)) return;
-    p.arrows -= loaded ? 2 : 1;
+    p.arrows -= nocks;
     const kind = arrowKind(p); const silver = kind === 'silver', frost = kind === 'frost'; const dmg = silver ? 4 : 2; // the kind picked in the inventory: plain, frost (freeze) or silver
-    const extra = Object.assign(loaded ? { kbMul: 1.6, shieldBreak: true } : {}, frost ? { iceLeft: FREEZE_PATH } : {}); const mul = loaded ? 2 : 1; // frost arrows freeze water they fly over (sim.freezeAlong)
+    const extra = Object.assign(loaded ? { kbMul: nocks > 2 ? 2.1 : 1.6, shieldBreak: true } : {}, frost ? { iceLeft: FREEZE_PATH } : {}); const mul = nocks; // frost arrows freeze water they fly over (sim.freezeAlong)
     if (monk) for (const s of [-0.12, 0, 0.12]) sim.fireProj('dart', p.lvl, p.x, p.y, p.a + s, 'p', p.id, Object.assign({ dmg: (dmg - 1) * mul, silver, life: 1.5, frost }, extra, frost ? { spr: 'icebolt' } : {}, loaded ? { sc: 0.75 } : {}));
-    else sim.fireProj('arrow', p.lvl, p.x, p.y, p.a, 'p', p.id, Object.assign({ dmg: dmg * mul, silver, frost }, extra, { spr: (loaded ? 'arrow2' : 'arrow') + (frost ? '_ice' : silver && !loaded ? '_silver' : '') }));
+    else sim.fireProj('arrow', p.lvl, p.x, p.y, p.a, 'p', p.id, Object.assign({ dmg: dmg * mul, silver, frost }, extra, { spr: (nocks > 2 ? 'arrow3' : loaded ? 'arrow2' : 'arrow') + (frost ? '_ice' : silver && !loaded ? '_silver' : '') }));
     sim.sfx('arrow', p.lvl);
   },
 });
@@ -3828,6 +3829,8 @@ defineItem({ id: 'arrows', name: 'ARROWS', sprite: 'arrow', full: (p) => p.arrow
 defineItem({ id: 'arrow', name: 'ARROWS', sprite: 'arrow', give(sim, p) { p.arrows = Math.min(p.maxArrows || ARROWS_START, p.arrows + 5); sim.sfx('gem', p.lvl); } }); // enemy drop
 // dungeon 8 treasure: arrows hit harder, and only silver can finish the Hollow King
 defineItem({ id: 'silver', name: 'SILVER ARROWS', sprite: 'arrow_silver', team: true, debug: true, give(sim, p, ctx) { p.items.silver = true; p.arrowType = 'silver'; ctx.banner('SILVER ARROWS: PICK THEM IN THE INVENTORY'); } });
+// how many arrows you can nock at once: 1, plus one for each Loaded Shot scroll
+function nockMax(p) { return 1 + (p.items.loaded ? 1 : 0) + (p.items.loaded2 ? 1 : 0); }
 // which arrows fly: the inventory choice (p.arrowType), as long as you own that kind
 function arrowKind(p) { const t = p.arrowType; if (t === 'silver' && p.items.silver) return 'silver'; if (t === 'frost' && p.items.frostarrows) return 'frost'; if (t == null) return p.items.silver ? 'silver' : p.items.frostarrows ? 'frost' : 'plain'; return 'plain'; }
 
@@ -4047,11 +4050,26 @@ defineItem({ id: 'galecloak', name: 'GALE CLOAK', sprite: 'galecloak', monk: { n
   owned: (p) => !!p.items.galecloak,
   give(sim, p, ctx) { p.items.galecloak = true; ctx.banner(); },
   use(sim, p) {
-    if (sim.flying(p)) return;
+    if (sim.flying(p)) return endFlight(sim, p); // press again mid-flight to drop (and slam, with the scroll)
     if (sim.time < (p.flyReady || 0)) return sim.hint(p, 'THE CLOAK IS STILL CATCHING ITS BREATH.');
     p.flyUntil = sim.time + FLY_TIME; p.flyReady = p.flyUntil + FLY_COOLDOWN; sim.sfx('gale', p.lvl, p.x, p.y);
   },
 });
+// Ending a flight early: you drop where you are. With the GALE SLAM scroll you slam down, stunning and shoving foes
+// around you. Riding the flight out to the end gives no slam.
+const SLAM_R = 2.3, SLAM_STUN = 2;
+function endFlight(sim, p) {
+  p.flyUntil = sim.time; p.flyReady = sim.time + FLY_COOLDOWN;
+  if (!p.items.cloakslam) return sim.sfx('land', p.lvl, p.x, p.y);
+  sim.sfx('boom', p.lvl, p.x, p.y); sim.ev({ t: 'shake', lvl: p.lvl, x: p.x, y: p.y }); sim.spawn({ k: 'fx', lvl: p.lvl, x: p.x, y: p.y, spr: 'boom', life: 0.4, sc: 1.6, z: 0 });
+  for (const e of sim.ents) {
+    if (e.k !== 'en' || e.lvl !== p.lvl || e.dead || dist2(e.x, e.y, p.x, p.y) > SLAM_R * SLAM_R) continue; const def = enemyDef(e.type);
+    if (sim.damageEnemy(e, 1, p, { pid: p.id, pierceShield: true, kbMul: 1.5 }) && !def.boss && !e.dead) { e.stun = Math.max(e.stun || 0, SLAM_STUN); e.stunFrom = sim.time; }
+  }
+}
+defineItem({ id: 'galeslam', name: 'SCROLL: GALE SLAM', sprite: 'scroll', team: true, debug: true,
+  debugGrant(p) { p.items.cloakslam = true; },
+  give(sim, p, ctx) { p.items.cloakslam = true; ctx.banner(); sim.ev({ t: 'dialog', pid: p.id, text: 'WHILE THE GALE CLOAK CARRIES YOU, PRESS THE ITEM BUTTON AGAIN TO DROP OUT OF THE SKY AND SLAM THE GROUND. RIDE THE WIND TO THE END AND THERE IS NO SLAM.' }); } });
 // SKELETON KEY: opens every locked door, in every dungeon, without using up keys.
 defineItem({ id: 'skeletonkey', name: 'SKELETON KEY', sprite: 'skelkey', team: true, debug: true,
   give(sim, p, ctx) { p.items.skeletonkey = true; ctx.banner('SKELETON KEY: EVERY LOCK IS YOURS'); } });
@@ -4102,10 +4120,17 @@ defineItem({
 defineItem({ id: 'loadedshot', name: 'SCROLL: LOADED SHOT', sprite: 'scroll', team: true, debug: true, monk: { name: 'SCROLL: TWIN DARTS' },
   debugGrant(p) { p.items.loaded = true; },
   give(sim, p, ctx) { p.items.loaded = true; ctx.banner(); sim.ev({ t: 'dialog', pid: p.id, text: p.cls === 'monk' ? 'HOLD THE ITEM BUTTON WITH THE DARTS TO GATHER A SECOND, THEN LET GO. TWICE THE STING, AND A SHIELD WON\'T SAVE THEM FROM IT.' : 'HOLD THE ITEM BUTTON WITH THE BOW TO NOCK A SECOND ARROW, THEN LET GO. TWICE THE DAMAGE, AND A SHIELD WON\'T SAVE THEM FROM IT.' }); } });
-// quivers: you start able to carry 15 arrows; this one holds 30 (a later one, 50)
+// LOADED SHOT 2: one more arrow on the string (three at once). Either Loaded Shot scroll works on its own, in any order.
+defineItem({ id: 'tripleshot', name: 'SCROLL: LOADED SHOT 2', sprite: 'scroll', team: true, debug: true, monk: { name: 'SCROLL: TWIN DARTS 2' },
+  debugGrant(p) { p.items.loaded2 = true; },
+  give(sim, p, ctx) { p.items.loaded2 = true; ctx.banner(); sim.ev({ t: 'dialog', pid: p.id, text: 'HOLD THE ITEM BUTTON WITH THE BOW A LITTLE LONGER TO NOCK ONE MORE ARROW. EVERY ARROW ON THE STRING HITS AS ONE.' }); } });
+// quivers: you start able to carry 15 arrows; the Big Quiver holds 30 and the Great Quiver 50
 defineItem({ id: 'quiver', name: 'BIG QUIVER', sprite: 'quiver', team: true, debug: true, monk: { name: 'BIG DART POUCH' },
   debugGrant(p) { p.maxArrows = Math.max(p.maxArrows || ARROWS_START, 30); },
   give(sim, p, ctx) { p.maxArrows = Math.max(p.maxArrows || ARROWS_START, 30); p.arrows = p.maxArrows; ctx.banner(); } });
+defineItem({ id: 'quiver50', name: 'GREAT QUIVER', sprite: 'quiver', team: true, debug: true, monk: { name: 'GREAT DART POUCH' },
+  debugGrant(p) { p.maxArrows = Math.max(p.maxArrows || ARROWS_START, 50); },
+  give(sim, p, ctx) { p.maxArrows = Math.max(p.maxArrows || ARROWS_START, 50); p.arrows = p.maxArrows; ctx.banner(); } });
 // BOMB ARROWS: Shift + bow fires an arrow with a bomb tied on (items/bow.js useAlt). Not placed in the world yet (debug only).
 defineItem({ id: 'bombarrows', name: 'SCROLL: BOMB ARROWS', sprite: 'scroll', team: true, debug: true, monk: { name: 'SCROLL: BLAST DARTS' },
   debugGrant(p) { p.items.bombarrow = true; },
@@ -6304,6 +6329,7 @@ function sfx(name, vol) {
     case 'croak': tone(150, 0.18, 'square', 0.16 * v, 110); tone(120, 0.22, 'square', 0.14 * v, 90, AU.ctx.currentTime + 0.2); break; // a frog
     case 'bubble': tone(500, 0.12, 'sine', 0.1 * v, 900); tone(800, 0.06, 'sine', 0.06 * v, 1200, AU.ctx.currentTime + 0.1); break;
     case 'poison': tone(260, 0.15, 'sawtooth', 0.06 * v, 200); noise(0.12, 0.05 * v, 900); break; // a poison tick
+    case 'land': tone(200, 0.08, 'triangle', 0.1 * v, 120); noise(0.1, 0.08 * v, 800); break; // dropping out of a Gale Cloak flight
     case 'grip': tone(300, 0.06, 'triangle', 0.08 * v, 220); noise(0.05, 0.06 * v, 2500); break; // the sword flips into reverse grip
     case 'pommel': noise(0.07, 0.28 * v, 900); tone(140, 0.1, 'square', 0.16 * v, 50); break; // the hilt driven home
     case 'lungeready': seq([523, 784, 1047], 0.05, 'square', 0.08 * v); break; // held long enough to lunge
@@ -6848,12 +6874,12 @@ function updateLocal(dt, inp) {
   // Loaded Shot scroll, holding past LOAD_TIME nocks a second arrow ("hold = power").
   R.heldLight = Lc.sel === 'candle'; // holding the candle lights up dark rooms; lit braziers do it hands-free
   if (Lc.sel === 'bow') {
-    const canLoad = me.items.loaded && me.arrows >= 2;
+    const most = Math.min(me.arrows, 1 + (me.items.loaded ? 1 : 0) + (me.items.loaded2 ? 1 : 0)); const nocked = () => Math.min(most, 1 + Math.floor(Lc.loadT / LOAD_TIME)); // one more arrow each LOAD_TIME, up to what your scrolls allow
     if (inp.item) Lc.loadT = 0.001;
     if (Lc.loadT > 0 && inp.atkP) Lc.loadT = 0; // swinging or punching lets the drawn arrow go slack (no shot); so does switching items
     if (Lc.loadT > 0) {
-      if (inp.itemHeld) { const before = Lc.loadT; Lc.loadT += dt; if (canLoad && before < LOAD_TIME && Lc.loadT >= LOAD_TIME) sfx('nock'); Lc.useFlash = 0.3; Lc.useSpr = canLoad && Lc.loadT >= LOAD_TIME ? (me.cls === 'monk' ? 'beam' : 'arrow2') : itemSprite('bow', me.cls); }
-      else { sendAction({ t: 'use', item: 'bow', loaded: canLoad && Lc.loadT >= LOAD_TIME, alt: !!inp.alt }); Lc.useFlash = 0.3; Lc.useSpr = itemSprite('bow', me.cls); Lc.loadT = 0; }
+      if (inp.itemHeld) { const before = nocked(); Lc.loadT += dt; const n = nocked(); if (n > before) sfx('nock'); Lc.useFlash = 0.3; Lc.useSpr = n > 1 ? (me.cls === 'monk' ? 'beam' : n > 2 ? 'arrow3' : 'arrow2') : itemSprite('bow', me.cls); }
+      else { sendAction({ t: 'use', item: 'bow', loaded: nocked(), alt: !!inp.alt }); Lc.useFlash = 0.3; Lc.useSpr = itemSprite('bow', me.cls); Lc.loadT = 0; }
     }
   } else { Lc.loadT = 0; if (inp.item && Lc.sel) { sendAction({ t: 'use', item: Lc.sel, alt: !!inp.alt }); Lc.useFlash = 0.3; Lc.useSpr = itemSprite(Lc.sel, me.cls); } }
   if (Lc.useFlash > 0) Lc.useFlash -= dt;
@@ -7060,13 +7086,18 @@ function renderBag() {
     if (me.items.silver) btn(r, 'arrow_silver', 'SILVER ' + D, 'DOUBLE DAMAGE. ONLY THEY END THE HOLLOW KING', cur === 'silver', () => sendAction({ t: 'equip', slot: 'arrows', kind: 'silver' }));
   }
   const owned = ownedBItems(me);
-  if (page === 'items' && owned.length) { const r = sec('ITEM BUTTON (RIGHT-CLICK / E) - HOLD FOR POWER, SHIFT FOR TECHNIQUE'); for (const id of owned) { const d = itemDef(id); const sub = id === 'bow' ? [me.items.loaded ? 'HOLD: LOADED SHOT' : 'FIRES WHEN YOU LET GO', me.items.bombarrow ? 'SHIFT: BOMB ARROW' : ''].filter(Boolean).join(' / ') : id === 'galecloak' ? 'FLY OVER ANYTHING FOR ' + FLY_TIME + 's' : d.useAlt ? 'SHIFT: TECHNIQUE' : null; btn(r, itemSprite(id, me.cls), itemName(id, me.cls), sub, Lc_sel() === id, () => { G.local.sel = id; sendAction({ t: 'sel', item: id }); });
+  if (page === 'items' && owned.length) { const r = sec('ITEM BUTTON (RIGHT-CLICK / E) - HOLD FOR POWER, SHIFT FOR TECHNIQUE'); for (const id of owned) { const d = itemDef(id); const sub = id === 'bow' ? [me.items.loaded || me.items.loaded2 ? 'HOLD: LOADED SHOT' : 'FIRES WHEN YOU LET GO', me.items.bombarrow ? 'SHIFT: BOMB ARROW' : ''].filter(Boolean).join(' / ') : id === 'galecloak' ? 'FLY OVER ANYTHING FOR ' + FLY_TIME + 's. PRESS AGAIN TO DROP' + (me.items.cloakslam ? ' AND SLAM' : '') : d.useAlt ? 'SHIFT: TECHNIQUE' : null; btn(r, itemSprite(id, me.cls), itemName(id, me.cls), sub, Lc_sel() === id, () => { G.local.sel = id; sendAction({ t: 'sel', item: id }); });
       if (!G.favs) G.favs = loadFavs(); const star = document.createElement('span'); star.className = 'fav' + (G.favs.has(id) ? ' on' : ''); star.textContent = G.favs.has(id) ? '\u2605' : '\u2606'; star.title = 'FAVORITE: THE SCROLL WHEEL ONLY STEPS THROUGH FAVORITES'; star.onclick = (ev) => { ev.stopPropagation(); toggleFav(id); sfx('menu'); renderBag(); }; r.lastChild.appendChild(star); }
     const n = document.createElement('small'); n.className = 'favnote'; n.textContent = 'STAR YOUR FAVORITES: THE WHEEL STEPS THROUGH THEM, KEYS 1-4 PICK THEM, Q + WHEEL STEPS THROUGH EVERYTHING'; body.appendChild(n); }
   const ups = []; if ((me.maxArrows || ARROWS_START) > ARROWS_START) ups.push(['quiver', itemName('quiver', me.cls), 'HOLDS ' + me.maxArrows]);
   if (me.items.loaded) ups.push(['scroll', itemName('loadedshot', me.cls), 'HOLD THE ITEM BUTTON WITH THE BOW']);
+  if (me.items.loaded2) ups.push(['scroll', itemName('tripleshot', me.cls), 'ONE MORE ARROW ON THE STRING']);
+  if (me.items.lunge) ups.push(['scroll', itemName('lunge', me.cls), 'SHIFT + HOLD ATTACK UNTIL IT CHIMES, THEN LET GO']);
+  if (me.items.heavypommel) ups.push(['scroll', itemName('heavypommel', me.cls), 'POMMEL STRIKES CRACK ARMOR']);
+  if (me.items.cloakslam) ups.push(['scroll', itemName('galeslam', me.cls), 'END A FLIGHT EARLY TO SLAM DOWN']);
+  if (me.items.bombbag2) ups.push(['bomb', itemName('bombbag2', me.cls), 'CARRY 16 BOMBS']); else if (me.items.bombbag) ups.push(['bomb', itemName('bombbag', me.cls), 'CARRY 8 BOMBS']);
   if (me.items.bombarrow) ups.push(['scroll', itemName('bombarrows', me.cls), 'SHIFT + BOW: COSTS AN ARROW AND A BOMB']);
-  for (const k of Object.keys(me.items)) { if (!me.items[k] || owned.includes(k) || ['loaded', 'frostarrows', 'silver', 'potion', 'bombarrow'].includes(k)) continue; const d = Content.items[k]; if (!d || d.slot === 'b') continue; ups.push([itemSprite(k, me.cls), itemName(k, me.cls), k === 'skeletonkey' ? 'OPENS EVERY LOCK' : k === 'silver' ? 'ONLY THEY CAN FINISH THE HOLLOW KING' : k === 'magmaboots' ? 'WALK ON LAVA AND VENTS' : k === 'raft' ? 'OPEN WATER ONLY' : null]); }
+  for (const k of Object.keys(me.items)) { if (!me.items[k] || owned.includes(k) || ['loaded', 'loaded2', 'lunge', 'heavypommel', 'cloakslam', 'bombbag', 'bombbag2', 'frostarrows', 'silver', 'potion', 'bombarrow'].includes(k)) continue; const d = Content.items[k]; if (!d || d.slot === 'b') continue; ups.push([itemSprite(k, me.cls), itemName(k, me.cls), k === 'skeletonkey' ? 'OPENS EVERY LOCK' : k === 'silver' ? 'ONLY THEY CAN FINISH THE HOLLOW KING' : k === 'magmaboots' ? 'WALK ON LAVA AND VENTS' : k === 'raft' ? 'OPEN WATER ONLY' : null]); }
   if (page === 'upgrades' && ups.length) { const r = sec('UPGRADES & TECHNIQUES'); for (const [spr, name, sub] of ups) tag(r, spr, name, sub); }
 }
 function Lc_sel() { return G.local && G.local.sel; }
