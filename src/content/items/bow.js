@@ -14,7 +14,7 @@ defineItem({
     // a loaded bomb arrow: every nocked arrow flies together with the one bomb (still one burst)
     const want = a && a.loaded === true ? 2 : Math.floor(+(a && a.loaded) || 1); const n = Math.max(1, Math.min(want, nockMax(p), p.arrows));
     p.arrows -= n; p.bombs--; const kind = arrowKind(p); const silver = kind === 'silver', frost = kind === 'frost'; // the arrows you picked: silver hits twice as hard, frost freezes
-    sim.fireProj(p.cls === 'monk' ? 'dart' : 'arrow', p.lvl, p.x, p.y, p.a, 'p', p.id, Object.assign({ dmg: (silver ? 4 : 2) * n, silver, frost }, frost ? { iceLeft: FREEZE_PATH } : {}, { bomb: true, spr: n > 2 ? 'arrow3_bomb' : n > 1 ? 'arrow2_bomb' : 'arrow_bomb' }, n > 1 ? { kbMul: n > 2 ? 2.1 : 1.6, shieldBreak: true } : {})); sim.sfx('arrow', p.lvl);
+    sim.fireProj(p.cls === 'monk' ? 'dart' : 'arrow', p.lvl, p.x, p.y, p.a, 'p', p.id, Object.assign({ dmg: (silver ? 4 : 2) * n, silver, frost }, frost ? { iceLeft: FREEZE_PATH } : {}, { bomb: true, spr: n > 2 ? 'arrow3_bomb' : n > 1 ? 'arrow2_bomb' : 'arrow_bomb' }, n > 1 ? { kbMul: n > 2 ? 2.1 : 1.6, shieldBreak: n } : {})); sim.sfx('arrow', p.lvl);
   },
   use(sim, p, a) {
     // Loaded Shot (items/techniques.js): each Loaded Shot scroll lets you nock one more arrow (2, then 3), whichever you found first
@@ -24,7 +24,7 @@ defineItem({
     if (sim.ents.filter(e => e.k === 'proj' && e.pid === p.id && (e.type === 'arrow' || e.type === 'dart')).length >= (monk ? 3 : 1)) return;
     p.arrows -= nocks;
     const kind = arrowKind(p); const silver = kind === 'silver', frost = kind === 'frost'; const dmg = silver ? 4 : 2; // the kind picked in the inventory: plain, frost (freeze) or silver
-    const extra = Object.assign(loaded ? { kbMul: nocks > 2 ? 2.1 : 1.6, shieldBreak: true } : {}, frost ? { iceLeft: FREEZE_PATH } : {}); const mul = nocks; // frost arrows freeze water they fly over (sim.freezeAlong)
+    const extra = Object.assign(loaded ? { kbMul: nocks > 2 ? 2.1 : 1.6, shieldBreak: nocks } : {}, frost ? { iceLeft: FREEZE_PATH } : {}); const mul = nocks; // frost arrows freeze water they fly over (sim.freezeAlong)
     if (monk) for (const s of [-0.12, 0, 0.12]) sim.fireProj('dart', p.lvl, p.x, p.y, p.a + s, 'p', p.id, Object.assign({ dmg: (dmg - 1) * mul, silver, life: 1.5, frost }, extra, frost ? { spr: 'icebolt' } : {}, loaded ? { sc: 0.75 } : {}));
     else sim.fireProj('arrow', p.lvl, p.x, p.y, p.a, 'p', p.id, Object.assign({ dmg: dmg * mul, silver, frost }, extra, { spr: (nocks > 2 ? 'arrow3' : loaded ? 'arrow2' : 'arrow') + (frost ? '_ice' : silver && !loaded ? '_silver' : '') }));
     sim.sfx('arrow', p.lvl);

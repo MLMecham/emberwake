@@ -47,7 +47,8 @@ const BACK_ANGLE = 2.1;
 const ARMOR_STEP = 0.25;
 const DUMMY_RESET = 3; // a training dummy heals (and gets its armor back) after this many seconds without a hit
 const fmtDmg = (n) => String(Math.round(n * 100) / 100);
-const DISARM_STAGGER = 1.2; // seconds a disarmed foe reels
+const DISARM_STAGGER = 1.2;
+const KNIGHT_WINDUP = 0.45; // seconds a sword knight raises its blade before the counter lands (your cue to back off) // seconds a disarmed foe reels
 const GOURD_REGROW = 40; // seconds before a split gourd can grow back (and only with nobody within 6 tiles)
 // how many bombs you can carry: 1 without a bag, 8 with the Bramble Keep bag, 16 with the second one (sold in a grotto)
 const bombCap = (p) => p.items.bombbag2 ? 16 : p.items.bombbag ? 8 : 1;
@@ -578,7 +579,8 @@ class Sim {
     if (def.shield && !e.disarmed && src && !opt.pierceShield && !(e.reelUntil > this.time)) { // blocks hits from the front (not while reeling from a loaded shot)
       const toSrc = Math.atan2(src.y - e.y, src.x - e.x); if (Math.abs(angDiff(e.f, toSrc)) < 0.9) {
         this.sfx('clink', e.lvl, e.x, e.y);
-        if (!opt.shieldBreak) { e.stun = 0.15; return false; }
+        if (def.counter) this.shieldBlocked(e, def); // sword knights strike back after enough blocks
+        if (!opt.shieldBreak || (def.bigShield && (opt.breakNocks || 0) < 3)) { e.stun = 0.15; return false; } // a big shield shrugs off anything less than a triple shot
         dmg = opt.shieldBreak * (atk && atk.god ? 3 : 1); e.stun = Math.max(e.stun, SHIELD_STUN); e.reelUntil = this.time + SHIELD_STUN; // a loaded shot jars the shield: half damage, and the knight reels long enough for a sword strike
       }
     }
@@ -670,6 +672,12 @@ class Sim {
       if (L.props[g.i] === PR.NONE) this.setTile(g.lvl, g.i, null, g.prop); return false;
     });
   }
+  // A sword knight counts the hits its shield stops; after def.counter of them (within 4 s) it winds up a counter-attack
+  // (enemies/knight.js knightAi swings it).
+  shieldBlocked(e, def) {
+    if (this.time - (e.blockAt != null ? e.blockAt : -99) > 4) e.blocks = 0; e.blockAt = this.time;
+    e.blocks = (e.blocks || 0) + 1; if (e.blocks >= def.counter && !(e.counterT > 0)) { e.blocks = 0; e.counterT = KNIGHT_WINDUP; e.counterHits = def.counterHits || 1; this.sfx('windup', e.lvl, e.x, e.y); }
+  }
   // DISARM (Heavy Pommel on a foe with def.disarm): what it holds goes flying (a 'tossed' entity), it staggers for a moment,
   // and from then on fights without it: def.disarmedSprite for the look, def.disarmedAi for how it behaves.
   disarmEnemy(e, src) {
@@ -695,7 +703,7 @@ class Sim {
       if (e.k !== 'en' || e.lvl !== p.lvl || e.dead) continue; const def = enemyDef(e.type); const d = Math.sqrt(dist2(e.x, e.y, p.x, p.y));
       if (d > 1.25 + this.enemyRadius(e)) continue; if (d > 0.5 && Math.abs(angDiff(p.a, Math.atan2(e.y - p.y, e.x - p.x))) > 0.6) continue;
       hit = true;
-      if (p.items.heavypommel && def.disarm && !e.disarmed && !def.boss) { this.disarmEnemy(e, p); continue; } // knocks the shield (or staff) clean away
+      if (p.items.heavypommel && def.disarm && !e.disarmed && !def.boss && !(e.armor > 0)) { this.disarmEnemy(e, p); continue; } // knocks the shield (or staff) clean away; armor has to come off first
       if (e.armor > 0) { if (!(p.items.heavypommel && this.stripArmor(e, 'pommel', p))) this.damageEnemy(e, POMMEL_DMG, p, { pid: p.id, kbMul: 0.6 }); continue; } // armor takes the blow: no stun
       if (this.damageEnemy(e, POMMEL_DMG, p, { pid: p.id, kbMul: 0.6 }) && !def.boss && !e.dead) { e.stun = Math.max(e.stun || 0, POMMEL_STUN); e.stunFrom = this.time; }
     }
@@ -781,7 +789,7 @@ class Sim {
         const r = this.enemyRadius(en) + 0.2;
         if (dist2(en.x, en.y, e.x, e.y) < r * r) {
           e.hitSet[en.id] = 1;
-          const landed = this.damageEnemy(en, e.dmg * (e.frost && enemyDef(en.type).hot ? 2 : 1), { x: e.x - e.vx * 0.1, y: e.y - e.vy * 0.1 }, { pid: e.pid, silver: e.silver, pierceShield: def.pierceShield, ignoreIframes: def.pierce, kbMul: e.kbMul, shieldBreak: e.shieldBreak ? e.dmg / 2 : 0 });
+          const landed = this.damageEnemy(en, e.dmg * (e.frost && enemyDef(en.type).hot ? 2 : 1), { x: e.x - e.vx * 0.1, y: e.y - e.vy * 0.1 }, { pid: e.pid, silver: e.silver, pierceShield: def.pierceShield, ignoreIframes: def.pierce, kbMul: e.kbMul, shieldBreak: e.shieldBreak ? e.dmg / (e.shieldBreak === true ? 2 : e.shieldBreak) : 0, breakNocks: e.shieldBreak === true ? 2 : e.shieldBreak || 0 }); // a loaded shot jars a shield for one arrow's damage
           if (e.frost && landed && !en.dead) { en.stun = Math.max(en.stun, enemyDef(en.type).boss ? 0.6 : 2.5); this.spawn({ k: 'fx', lvl: e.lvl, x: en.x, y: en.y, spr: 'icefx', life: 0.4, sc: 1 }); this.sfx('freeze', e.lvl, en.x, en.y); }
           if (def.fire) this.spawn({ k: 'fire', lvl: e.lvl, x: e.x, y: e.y, life: 0.8, spr: 'flame', sc: 0.8, z: -0.05, pid: e.pid });
           if (def.stun && landed && !en.dead && !enemyDef(en.type).boss) en.stun = Math.max(en.stun, def.stun);
@@ -863,7 +871,7 @@ class Sim {
       if (def.fly) z += Math.sin(e.t * 6) * 0.06;
       if (def.sprFor) { const s2 = def.sprFor(e); if (s2) spr = s2; }
       if (e.disarmed && def.disarmedSprite) spr = def.disarmedSprite;
-      else if (def.backSprite && viewer && !e.dormant && Math.abs(angDiff(e.f, Math.atan2(viewer.y - e.y, viewer.x - e.x))) > BACK_ANGLE) spr = def.backSprite; // e.g. a frog's head poking out of the water
+      else if (def.backSprite && !e.disarmed && viewer && !e.dormant && Math.abs(angDiff(e.f, Math.atan2(viewer.y - e.y, viewer.x - e.x))) > BACK_ANGLE) spr = def.backSprite; // e.g. a frog's head poking out of the water
       if (e.hurt > 0) fl |= 1; if (e.stun > 0) fl |= 2; if (def.phase) fl |= 4; if (e.spawnFx > 0) { spr = 'puff'; }
       if (def.view) z += def.view(e);
     }

@@ -87,6 +87,7 @@ function sfx(name, vol) {
     case 'galeburst': noise(0.6, 0.3 * v, 900); tone(110, 0.5, 'sine', 0.2 * v, 40); seq([392, 523, 784], 0.07, 'triangle', 0.1 * v); break; // a combined Force Wave
     case 'chant': seq([440, 554, 659], 0.09, 'triangle', 0.08 * v); break; // a spell starts its chant
     case 'chantjoin': seq([659, 880, 1109], 0.07, 'square', 0.08 * v); break; // a friend joins the chant
+    case 'windup': tone(300, 0.4, 'sawtooth', 0.07 * v, 900); noise(0.3, 0.05 * v, 5000); break; // a sword knight draws back for a counter
     case 'land': tone(200, 0.08, 'triangle', 0.1 * v, 120); noise(0.1, 0.08 * v, 800); break; // dropping out of a Gale Cloak flight
     case 'grip': tone(300, 0.06, 'triangle', 0.08 * v, 220); noise(0.05, 0.06 * v, 2500); break; // the sword flips into reverse grip
     case 'pommel': noise(0.07, 0.28 * v, 900); tone(140, 0.1, 'square', 0.16 * v, 50); break; // the hilt driven home

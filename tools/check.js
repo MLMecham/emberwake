@@ -661,6 +661,32 @@ attempt('magic wand, spells and casting together', () => {
   // old saves: the fire rod keeps its fire
   const sv = sim.makeSave(); sv.v = 7; for (const c in sv.players) { sv.players[c].items = { rod: true }; delete sv.players[c].wandEl; } const s2 = new Sim(genWorld(7319, 'adv'), sv); const pl = Object.values(s2.savedPlayers)[0]; __ok(pl.items.wandfire && pl.wandEl === 'fire', 'an old fire rod becomes the wand with fire');
 });
+attempt('stronger knights', () => {
+  const sim = freshSim(); const p = sim.players.p1; p.god = false; p.hp = p.maxHp = 40; p.sword = 2; p.a = 0; p.inv = 0;
+  const clear = () => { for (const e of sim.ents) if (e.k === 'en' || e.k === 'proj') e.dead = true; sim.ents = sim.ents.filter(e => !e.dead); };
+  const knight = (type) => { clear(); const k = sim.spawnEnemy(type, p.lvl, p.x + 1.1, p.y, {}); k.spawnFx = 0; k.f = Math.PI; k.hp = 50; return k; };
+  const swing = (k) => { k.hurt = 0; sim.playerAttack(p, { kind: 'sword' }); };
+  // the plain knight never counters
+  let k = knight('knight'); swing(k); swing(k); swing(k); __ok(!(k.counterT > 0), 'a plain knight never strikes back');
+  // a sword knight: two blocked hits, a glowing wind-up, then a cut
+  k = knight('knight_sword'); swing(k); __ok(!(k.counterT > 0), 'one block: nothing yet'); swing(k); __ok(k.counterT > 0, 'two blocks: it winds up');
+  __ok(sim.snapshotFor('p1').en.find(v => v[0] === k.id)[1] === 'knight_sword_s_windup', 'the blade glows while it winds up');
+  const hp0 = p.hp; p.inv = 0; for (let i = 0; i < 40; i++) sim.updateEnemy(k, 1 / 60); __ok(p.hp < hp0, 'then it cuts whoever is in front (' + (hp0 - p.hp) + ')');
+  p.hp = 40; p.inv = 0; k.counterT = 0; k.blocks = 0; p.x -= 3; swing(k); swing(k); for (let i = 0; i < 40; i++) sim.updateEnemy(k, 1 / 60); __ok(p.hp === 40, 'backing off dodges it'); p.x += 3;
+  // the champion swings twice and its great shield only gives to a triple shot
+  k = knight('knight_champion'); __ok(k.armor === 3, 'the champion wears full plate'); swing(k); swing(k); __ok(k.counterHits === 2, 'its counter is a two-cut combo');
+  k = knight('knight_champion'); p.items.bow = true; p.arrows = 20; p.items.loaded = p.items.loaded2 = true; p.x = k.x - 3; p.a = 0;
+  const shoot = (n) => { for (const e of sim.ents) if (e.k === 'proj') e.dead = true; sim.ents = sim.ents.filter(e => !e.dead); k.hurt = 0; k.reelUntil = 0; k.stun = 0; sim.useItem(p, 'bow', { loaded: n }); for (let i = 0; i < 60; i++) { for (const e of sim.ents.slice()) if (e.k === 'proj') sim.updateEnt(e, 1 / 60); sim.ents = sim.ents.filter(e => !e.dead); } };
+  shoot(2); __ok(!(k.reelUntil > sim.time), 'a double loaded shot does nothing to a great shield'); shoot(3); __ok(k.reelUntil > sim.time, 'a triple shot jars it');
+  // armored knights: plate first, then the shield
+  k = knight('knight_armored'); p.x = k.x - 1.1; p.items.heavypommel = true; __ok(k.armor === 2, 'an armored knight wears plate');
+  sim.playerAttack(p, { kind: 'pommel' }); __ok(k.armor === 1 && !k.disarmed, 'a heavy pommel takes plate first');
+  const b = sim.spawn({ k: 'bomb', lvl: p.lvl, x: k.x, y: k.y, fuse: 0, pid: 'p1' }); sim.updateEnt(b, 1 / 60); __ok(k.armor === 0, 'a bomb takes the rest');
+  __ok(sim.snapshotFor('p1').en.find(v => v[0] === k.id)[1] === 'knight_redshield', 'down to the red shield and sword');
+  k.stripped = {}; sim.playerAttack(p, { kind: 'pommel' }); __ok(k.disarmed, 'then the shield can be knocked away');
+  __ok(['knight_sword', 'knight_armored', 'knight_champion'].every(id => Content.enemies[id]), 'all three new knights exist');
+  __ok(Content.hints.some(t => /GLINT OF HIS SWORD/.test(t)), 'the old men warn about sword knights');
+});
 attempt('tideglass opening', () => {
   for (const [seed, mode] of [[7319, 'adv'], [1234, 'rogue'], [99, 'rogue'], [4242, 'adv']]) {
     const W = genWorld(seed, mode); const D = W.levels.d6; const st = D.startRoom; const r2 = st.children[0]; const r3 = r2.children[0];

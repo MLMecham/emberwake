@@ -3386,6 +3386,69 @@ defineSprite('shield_drop', [ // the knight's shield, tumbling away
   '................', '................', '................', '.....kkkkkk.....', '....kBBBBBBk....', '....kByyyyBk....', '....kBybbyBk....', '....kByyyyBk....',
   '....kBBybBBk....', '.....kBBBBk.....', '......kBBk......', '.......kk.......', '................', '................', '................', '................']);
 defineHints(['A BOOMERANG CURVES. IT CAN FIND THE BACK OF A SHIELDED FOE THAT YOUR BLADE CANNOT.']);
+// ===================== STRONGER KNIGHTS =====================
+// Sword knights hold a blade as well. Their shield counts the hits it stops (game/sim.js shieldBlocked): after
+// `counter` blocks they raise the blade (KNIGHT_WINDUP, it glows: back off!) and strike everyone in front of them.
+// The plain knight above has no sword on purpose, so players learn the shield before it can punish them.
+// Armored knights (armor 2) and champions (armor 3) wear dark plate with red trim and carry a red war shield: bombs and the
+// Heavy Pommel strip the plate first (like the armored skeletons), and only then can the shield be knocked away. A champion's
+// great shield even shrugs off a double loaded shot (bigShield: only a triple shot jars it), and its great sword swings twice.
+const KNIGHT_ROWS = enemyDef('knight').sprite;
+// put a sword in the knight's right hand: blade (v) up the right edge, a guard (Y), the grip (n)
+function withSword(rows, blade) {
+  const g = rows.map(r => r.split(''));
+  const put = (y, x, c, onlyEmpty) => { if (!onlyEmpty || g[y][x] === '.') g[y][x] = c; };
+  put(0, 13, 'k', true); for (let y = 1; y <= 8; y++) { put(y, 13, blade || 'v'); put(y, 12, 'k', true); put(y, 14, 'k', true); }
+  put(9, 13, 'Y'); put(9, 14, 'Y'); put(10, 13, 'n'); put(11, 13, 'k', true);
+  return g.map(r => r.join(''));
+}
+// studs on the shield's rim (the red war shield)
+function withSpikes(rows) { const g = rows.map(r => r.split('')); for (const y of [7, 9, 11]) if (g[y][0] === '.') g[y][0] = 'k'; if (g[6][1] === '.') g[6][1] = 'k'; if (g[12][1] === '.') g[12][1] = 'k'; return g.map(r => r.join('')); }
+// a red mark on the breastplate and red eye slit (plate tiers)
+function withTrim(rows) { const g = rows.map(r => r.split('')); g[7][7] = 'r'; g[7][8] = 'r'; g[8][7] = 'r'; return g.map(r => r.join('')); }
+// horns on the champion's helm
+function withHorns(rows) { const g = rows.map(r => r.split('')); g[0][4] = 'k'; g[1][4] = 'r'; g[0][11] = 'k'; g[1][11] = 'r'; g[1][3] = 'k'; g[1][12] = g[1][12] === '.' ? 'k' : g[1][12]; return g.map(r => r.join('')); }
+const RED_SHIELD = { B: '#8a1414', y: '#ff5030', b: '#2a0808' }, PLATE = { u: '#7a7e92', U: '#3c3f52', r: '#ff2a18' }, BLACK_PLATE = { u: '#4c4a5a', U: '#24222e', r: '#ff2a18' };
+const swordSprites = (id, rows, pal) => { defineSprite(id, rows, pal); defineAnim(id, 4, (s, kit) => [s, kit.step(s, 12, -1, 0), s, kit.step(s, 12, 0, -1)]); defineSpriteVariant(id + '_windup', id, { v: '#ffe040', x: '#ffe040' }); }; // the blade glows while it winds up
+// the looks: blue shield + sword; plate tiers; what's left as the plate comes off; disarmed with a sword
+swordSprites('knight_sword_s', withSword(KNIGHT_ROWS));
+swordSprites('knight_redshield', withSpikes(withSword(KNIGHT_ROWS)), RED_SHIELD);
+swordSprites('knight_plate1', withSpikes(withSword(KNIGHT_ROWS)), Object.assign({}, PLATE, RED_SHIELD));
+swordSprites('knight_plate2', withTrim(withSpikes(withSword(KNIGHT_ROWS))), Object.assign({}, PLATE, RED_SHIELD));
+swordSprites('knight_plate3', withHorns(withTrim(withSpikes(withSword(KNIGHT_ROWS, 'x')))), Object.assign({}, BLACK_PLATE, RED_SHIELD, { x: '#ff4020' }));
+swordSprites('knight_bare_sword', withSword(enemyDef('knight').sprite.map((r, y) => ['................', '.....kkkkkk.....', '....kuuuuuuk....', '....kukkkkuk....', '....kuurruuk....', '.....kuuuuk.....', '....kUuuuuUk....', '...kuUuuuuUuk...', '...kukUuuUkuk...', '...kukUUUUkuk...', '...k.kUuuUk.k...', '......UuuU......', '......UU.UU.....', '......UU.UU.....', '.....kUk.kUk....', '................'][y])));
+defineSpriteVariant('knight_back_red', 'knight_back', RED_SHIELD);
+defineSpriteVariant('redshield_drop', 'shield_drop', RED_SHIELD);
+defineSprite('slash_fx', [ // a knight's counter cut
+  '................', '..............w.', '............ww..', '..........www...', '........wwv.....', '......wwv.......', '....wwv.........', '...wv...........',
+  '..wv............', '.w..............', '................', '................', '................', '................', '................', '................']);
+// The sword knights' brain: chase like any knight, but a counter that's winding up takes over (face the hero, then cut).
+function knightAi(sim, e, dt, ctx) {
+  const def = enemyDef(e.type);
+  if (e.counterT > 0) {
+    const p = ctx.p; if (p) { const ta = Math.atan2(p.y - e.y, p.x - e.x); e.f += clamp(angDiff(e.f, ta), -dt * 6, dt * 6); }
+    e.counterT -= dt; if (e.counterT > 0) return;
+    sim.sfx('swing', e.lvl, e.x, e.y); sim.spawn({ k: 'fx', lvl: e.lvl, x: e.x + Math.cos(e.f) * 0.8, y: e.y + Math.sin(e.f) * 0.8, spr: 'slash_fx', life: 0.2, sc: 1, z: 0.2 });
+    for (const pl of Object.values(sim.players)) {
+      if (!pl.alive || pl.lvl !== e.lvl) continue; const d = Math.sqrt(dist2(pl.x, pl.y, e.x, e.y));
+      if (d < 1.7 && Math.abs(angDiff(e.f, Math.atan2(pl.y - e.y, pl.x - e.x))) < 1.1) sim.hurtPlayer(pl, def.counterDmg * e.dmgMul, e);
+    }
+    if (--e.counterHits > 0) e.counterT = 0.28; // a champion's great sword comes back for a second cut
+    return;
+  }
+  AI.chase(sim, e, dt, ctx);
+}
+const lookFor = (byArmor) => (e) => { if (e.disarmed) return e.counterT > 0 ? 'knight_bare_sword_windup' : 'knight_bare_sword'; const s = byArmor[Math.max(0, Math.min(byArmor.length - 1, e.armor || 0))]; return e.counterT > 0 ? s + '_windup' : s; };
+const knightVariant = (o) => defineEnemy(Object.assign({}, enemyDef('knight'), { ai: knightAi, disarmedAi: enemyDef('knight').disarmedAi, disarmedSprite: null, noElites: ['giant'] }, o));
+knightVariant({ id: 'knight_sword', title: 'SWORD KNIGHT', hp: 5, counter: 2, counterDmg: 2, spawns: { dungeons: [6, 7, 8, 9] },
+  sprite: withSword(KNIGHT_ROWS), sprFor: lookFor(['knight_sword_s']) });
+knightVariant({ id: 'knight_armored', title: 'ARMORED KNIGHT', hp: 6, spd: 1.4, dmg: 3, sc: 0.98, armor: 2, counter: 2, counterDmg: 3, spawns: { dungeons: [8, 9, 12] },
+  backSprite: 'knight_back_red', disarm: 'redshield_drop', sprite: withTrim(withSpikes(withSword(KNIGHT_ROWS))), pal: Object.assign({}, PLATE, RED_SHIELD),
+  sprFor: lookFor(['knight_redshield', 'knight_plate1', 'knight_plate2']) });
+knightVariant({ id: 'knight_champion', title: 'CHAMPION KNIGHT', hp: 8, spd: 1.3, dmg: 3, sc: 1.08, armor: 3, bigShield: true, counter: 2, counterHits: 2, counterDmg: 3, spawns: { dungeons: [9, 12] },
+  backSprite: 'knight_back_red', disarm: 'redshield_drop', sprite: withHorns(withTrim(withSpikes(withSword(KNIGHT_ROWS, 'x')))), pal: Object.assign({}, BLACK_PLATE, RED_SHIELD, { x: '#ff4020' }),
+  sprFor: lookFor(['knight_redshield', 'knight_plate1', 'knight_plate2', 'knight_plate3']) });
+defineHints(['A KNIGHT WITH A BLADE WAITS BEHIND HIS SHIELD. HIT THE SHIELD TWICE AND WATCH FOR THE GLINT OF HIS SWORD.']);
 
 })();
 // ---- src/content/enemies/magmite.js ----
@@ -3905,7 +3968,7 @@ defineItem({
     // a loaded bomb arrow: every nocked arrow flies together with the one bomb (still one burst)
     const want = a && a.loaded === true ? 2 : Math.floor(+(a && a.loaded) || 1); const n = Math.max(1, Math.min(want, nockMax(p), p.arrows));
     p.arrows -= n; p.bombs--; const kind = arrowKind(p); const silver = kind === 'silver', frost = kind === 'frost'; // the arrows you picked: silver hits twice as hard, frost freezes
-    sim.fireProj(p.cls === 'monk' ? 'dart' : 'arrow', p.lvl, p.x, p.y, p.a, 'p', p.id, Object.assign({ dmg: (silver ? 4 : 2) * n, silver, frost }, frost ? { iceLeft: FREEZE_PATH } : {}, { bomb: true, spr: n > 2 ? 'arrow3_bomb' : n > 1 ? 'arrow2_bomb' : 'arrow_bomb' }, n > 1 ? { kbMul: n > 2 ? 2.1 : 1.6, shieldBreak: true } : {})); sim.sfx('arrow', p.lvl);
+    sim.fireProj(p.cls === 'monk' ? 'dart' : 'arrow', p.lvl, p.x, p.y, p.a, 'p', p.id, Object.assign({ dmg: (silver ? 4 : 2) * n, silver, frost }, frost ? { iceLeft: FREEZE_PATH } : {}, { bomb: true, spr: n > 2 ? 'arrow3_bomb' : n > 1 ? 'arrow2_bomb' : 'arrow_bomb' }, n > 1 ? { kbMul: n > 2 ? 2.1 : 1.6, shieldBreak: n } : {})); sim.sfx('arrow', p.lvl);
   },
   use(sim, p, a) {
     // Loaded Shot (items/techniques.js): each Loaded Shot scroll lets you nock one more arrow (2, then 3), whichever you found first
@@ -3915,7 +3978,7 @@ defineItem({
     if (sim.ents.filter(e => e.k === 'proj' && e.pid === p.id && (e.type === 'arrow' || e.type === 'dart')).length >= (monk ? 3 : 1)) return;
     p.arrows -= nocks;
     const kind = arrowKind(p); const silver = kind === 'silver', frost = kind === 'frost'; const dmg = silver ? 4 : 2; // the kind picked in the inventory: plain, frost (freeze) or silver
-    const extra = Object.assign(loaded ? { kbMul: nocks > 2 ? 2.1 : 1.6, shieldBreak: true } : {}, frost ? { iceLeft: FREEZE_PATH } : {}); const mul = nocks; // frost arrows freeze water they fly over (sim.freezeAlong)
+    const extra = Object.assign(loaded ? { kbMul: nocks > 2 ? 2.1 : 1.6, shieldBreak: nocks } : {}, frost ? { iceLeft: FREEZE_PATH } : {}); const mul = nocks; // frost arrows freeze water they fly over (sim.freezeAlong)
     if (monk) for (const s of [-0.12, 0, 0.12]) sim.fireProj('dart', p.lvl, p.x, p.y, p.a + s, 'p', p.id, Object.assign({ dmg: (dmg - 1) * mul, silver, life: 1.5, frost }, extra, frost ? { spr: 'icebolt' } : {}, loaded ? { sc: 0.75 } : {}));
     else sim.fireProj('arrow', p.lvl, p.x, p.y, p.a, 'p', p.id, Object.assign({ dmg: dmg * mul, silver, frost }, extra, { spr: (nocks > 2 ? 'arrow3' : loaded ? 'arrow2' : 'arrow') + (frost ? '_ice' : silver && !loaded ? '_silver' : '') }));
     sim.sfx('arrow', p.lvl);
@@ -5028,7 +5091,8 @@ const BACK_ANGLE = 2.1;
 const ARMOR_STEP = 0.25;
 const DUMMY_RESET = 3; // a training dummy heals (and gets its armor back) after this many seconds without a hit
 const fmtDmg = (n) => String(Math.round(n * 100) / 100);
-const DISARM_STAGGER = 1.2; // seconds a disarmed foe reels
+const DISARM_STAGGER = 1.2;
+const KNIGHT_WINDUP = 0.45; // seconds a sword knight raises its blade before the counter lands (your cue to back off) // seconds a disarmed foe reels
 const GOURD_REGROW = 40; // seconds before a split gourd can grow back (and only with nobody within 6 tiles)
 // how many bombs you can carry: 1 without a bag, 8 with the Bramble Keep bag, 16 with the second one (sold in a grotto)
 const bombCap = (p) => p.items.bombbag2 ? 16 : p.items.bombbag ? 8 : 1;
@@ -5559,7 +5623,8 @@ class Sim {
     if (def.shield && !e.disarmed && src && !opt.pierceShield && !(e.reelUntil > this.time)) { // blocks hits from the front (not while reeling from a loaded shot)
       const toSrc = Math.atan2(src.y - e.y, src.x - e.x); if (Math.abs(angDiff(e.f, toSrc)) < 0.9) {
         this.sfx('clink', e.lvl, e.x, e.y);
-        if (!opt.shieldBreak) { e.stun = 0.15; return false; }
+        if (def.counter) this.shieldBlocked(e, def); // sword knights strike back after enough blocks
+        if (!opt.shieldBreak || (def.bigShield && (opt.breakNocks || 0) < 3)) { e.stun = 0.15; return false; } // a big shield shrugs off anything less than a triple shot
         dmg = opt.shieldBreak * (atk && atk.god ? 3 : 1); e.stun = Math.max(e.stun, SHIELD_STUN); e.reelUntil = this.time + SHIELD_STUN; // a loaded shot jars the shield: half damage, and the knight reels long enough for a sword strike
       }
     }
@@ -5651,6 +5716,12 @@ class Sim {
       if (L.props[g.i] === PR.NONE) this.setTile(g.lvl, g.i, null, g.prop); return false;
     });
   }
+  // A sword knight counts the hits its shield stops; after def.counter of them (within 4 s) it winds up a counter-attack
+  // (enemies/knight.js knightAi swings it).
+  shieldBlocked(e, def) {
+    if (this.time - (e.blockAt != null ? e.blockAt : -99) > 4) e.blocks = 0; e.blockAt = this.time;
+    e.blocks = (e.blocks || 0) + 1; if (e.blocks >= def.counter && !(e.counterT > 0)) { e.blocks = 0; e.counterT = KNIGHT_WINDUP; e.counterHits = def.counterHits || 1; this.sfx('windup', e.lvl, e.x, e.y); }
+  }
   // DISARM (Heavy Pommel on a foe with def.disarm): what it holds goes flying (a 'tossed' entity), it staggers for a moment,
   // and from then on fights without it: def.disarmedSprite for the look, def.disarmedAi for how it behaves.
   disarmEnemy(e, src) {
@@ -5676,7 +5747,7 @@ class Sim {
       if (e.k !== 'en' || e.lvl !== p.lvl || e.dead) continue; const def = enemyDef(e.type); const d = Math.sqrt(dist2(e.x, e.y, p.x, p.y));
       if (d > 1.25 + this.enemyRadius(e)) continue; if (d > 0.5 && Math.abs(angDiff(p.a, Math.atan2(e.y - p.y, e.x - p.x))) > 0.6) continue;
       hit = true;
-      if (p.items.heavypommel && def.disarm && !e.disarmed && !def.boss) { this.disarmEnemy(e, p); continue; } // knocks the shield (or staff) clean away
+      if (p.items.heavypommel && def.disarm && !e.disarmed && !def.boss && !(e.armor > 0)) { this.disarmEnemy(e, p); continue; } // knocks the shield (or staff) clean away; armor has to come off first
       if (e.armor > 0) { if (!(p.items.heavypommel && this.stripArmor(e, 'pommel', p))) this.damageEnemy(e, POMMEL_DMG, p, { pid: p.id, kbMul: 0.6 }); continue; } // armor takes the blow: no stun
       if (this.damageEnemy(e, POMMEL_DMG, p, { pid: p.id, kbMul: 0.6 }) && !def.boss && !e.dead) { e.stun = Math.max(e.stun || 0, POMMEL_STUN); e.stunFrom = this.time; }
     }
@@ -5762,7 +5833,7 @@ class Sim {
         const r = this.enemyRadius(en) + 0.2;
         if (dist2(en.x, en.y, e.x, e.y) < r * r) {
           e.hitSet[en.id] = 1;
-          const landed = this.damageEnemy(en, e.dmg * (e.frost && enemyDef(en.type).hot ? 2 : 1), { x: e.x - e.vx * 0.1, y: e.y - e.vy * 0.1 }, { pid: e.pid, silver: e.silver, pierceShield: def.pierceShield, ignoreIframes: def.pierce, kbMul: e.kbMul, shieldBreak: e.shieldBreak ? e.dmg / 2 : 0 });
+          const landed = this.damageEnemy(en, e.dmg * (e.frost && enemyDef(en.type).hot ? 2 : 1), { x: e.x - e.vx * 0.1, y: e.y - e.vy * 0.1 }, { pid: e.pid, silver: e.silver, pierceShield: def.pierceShield, ignoreIframes: def.pierce, kbMul: e.kbMul, shieldBreak: e.shieldBreak ? e.dmg / (e.shieldBreak === true ? 2 : e.shieldBreak) : 0, breakNocks: e.shieldBreak === true ? 2 : e.shieldBreak || 0 }); // a loaded shot jars a shield for one arrow's damage
           if (e.frost && landed && !en.dead) { en.stun = Math.max(en.stun, enemyDef(en.type).boss ? 0.6 : 2.5); this.spawn({ k: 'fx', lvl: e.lvl, x: en.x, y: en.y, spr: 'icefx', life: 0.4, sc: 1 }); this.sfx('freeze', e.lvl, en.x, en.y); }
           if (def.fire) this.spawn({ k: 'fire', lvl: e.lvl, x: e.x, y: e.y, life: 0.8, spr: 'flame', sc: 0.8, z: -0.05, pid: e.pid });
           if (def.stun && landed && !en.dead && !enemyDef(en.type).boss) en.stun = Math.max(en.stun, def.stun);
@@ -5844,7 +5915,7 @@ class Sim {
       if (def.fly) z += Math.sin(e.t * 6) * 0.06;
       if (def.sprFor) { const s2 = def.sprFor(e); if (s2) spr = s2; }
       if (e.disarmed && def.disarmedSprite) spr = def.disarmedSprite;
-      else if (def.backSprite && viewer && !e.dormant && Math.abs(angDiff(e.f, Math.atan2(viewer.y - e.y, viewer.x - e.x))) > BACK_ANGLE) spr = def.backSprite; // e.g. a frog's head poking out of the water
+      else if (def.backSprite && !e.disarmed && viewer && !e.dormant && Math.abs(angDiff(e.f, Math.atan2(viewer.y - e.y, viewer.x - e.x))) > BACK_ANGLE) spr = def.backSprite; // e.g. a frog's head poking out of the water
       if (e.hurt > 0) fl |= 1; if (e.stun > 0) fl |= 2; if (def.phase) fl |= 4; if (e.spawnFx > 0) { spr = 'puff'; }
       if (def.view) z += def.view(e);
     }
@@ -6564,6 +6635,7 @@ function sfx(name, vol) {
     case 'galeburst': noise(0.6, 0.3 * v, 900); tone(110, 0.5, 'sine', 0.2 * v, 40); seq([392, 523, 784], 0.07, 'triangle', 0.1 * v); break; // a combined Force Wave
     case 'chant': seq([440, 554, 659], 0.09, 'triangle', 0.08 * v); break; // a spell starts its chant
     case 'chantjoin': seq([659, 880, 1109], 0.07, 'square', 0.08 * v); break; // a friend joins the chant
+    case 'windup': tone(300, 0.4, 'sawtooth', 0.07 * v, 900); noise(0.3, 0.05 * v, 5000); break; // a sword knight draws back for a counter
     case 'land': tone(200, 0.08, 'triangle', 0.1 * v, 120); noise(0.1, 0.08 * v, 800); break; // dropping out of a Gale Cloak flight
     case 'grip': tone(300, 0.06, 'triangle', 0.08 * v, 220); noise(0.05, 0.06 * v, 2500); break; // the sword flips into reverse grip
     case 'pommel': noise(0.07, 0.28 * v, 900); tone(140, 0.1, 'square', 0.16 * v, 50); break; // the hilt driven home

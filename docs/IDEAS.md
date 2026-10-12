@@ -17,7 +17,8 @@ Not built yet. Parked here so they don't get lost. Newest at the bottom.
 
 ## Enemies
 - **Spider webs and a better spider boss.** Web tiles that slow or stick you (fire burns them away), and a spider boss (Tideglass Halls) that uses them: strings webs across the room, drops from the ceiling, wraps you if you stand still.
-- **Knight tiers.** (1) Today's knight: a loaded shot stuns it, and a Heavy Pommel strike knocks its shield away (built). (2) Big-shield knight: only a three-arrow loaded shot (the triple-shot scroll) stuns it. (3) Armored knight with a sword: it swings at you, takes less damage, and only a triple bomb arrow stuns it. Later dungeons mix them.
+- **Knight tiers: built** (sword knight, armored knight, champion). Tune where they spawn after playtesting.
+- **Knight tiers (old notes).** (1) Today's knight: a loaded shot stuns it, and a Heavy Pommel strike knocks its shield away (built). (2) Big-shield knight: only a three-arrow loaded shot (the triple-shot scroll) stuns it. (3) Armored knight with a sword: it swings at you, takes less damage, and only a triple bomb arrow stuns it. Later dungeons mix them.
 - **Knight tiers.** A lava monster that pulls you into the lava :
 
 ## Bow techniques
