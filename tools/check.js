@@ -548,6 +548,16 @@ attempt('triple shot, great quiver, gale slam', () => {
   p.flyReady = 0; sim.giveItem(p, 'galeslam', false); sim.useItem(p, 'galecloak', {}); sim.time += 0.5; sk.hurt = 0; sim.useItem(p, 'galecloak', {}); __ok(sk.stun >= 1.9 && sk.hp < 10, 'ending a flight early slams down');
   p.flyReady = 0; sk.stun = 0; sk.hurt = 0; sim.useItem(p, 'galecloak', {}); sim.time += FLY_TIME + 0.1; __ok(!sim.flying(p) && !(sk.stun > 0), 'riding it out gives no slam');
 });
+attempt('debug upgrade switches', () => {
+  const sim = freshSim(); const p = sim.players.p1; p.items = {}; p.maxArrows = ARROWS_START;
+  sim.onAction('p1', { t: 'dbgup', all: true }); __ok(Content.upgrades.every(u => !u.has(p)), 'nothing switches without debug on');
+  p.dbg = true; sim.onAction('p1', { t: 'dbgup', all: true });
+  __ok(Content.upgrades.every(u => u.has(p)) && p.items.bow && p.items.galecloak, 'ALL ON gives every upgrade and the items they need');
+  __ok(p.maxArrows === 50 && p.maxBombs === 16, 'quivers and bags count');
+  sim.onAction('p1', { t: 'dbgup', id: 'lunge', on: false }); __ok(!p.items.lunge && p.items.heavypommel, 'one switch at a time');
+  sim.onAction('p1', { t: 'dbgup', all: false }); __ok(Content.upgrades.every(u => !u.has(p)) && p.maxBombs === 1 && p.maxArrows === ARROWS_START, 'ALL OFF takes them all away');
+  __ok(Content.upgrades.every(u => Content.items[u.id]), 'every upgrade is a real item');
+});
 attempt('tideglass opening', () => {
   for (const [seed, mode] of [[7319, 'adv'], [1234, 'rogue'], [99, 'rogue'], [4242, 'adv']]) {
     const W = genWorld(seed, mode); const D = W.levels.d6; const st = D.startRoom; const r2 = st.children[0]; const r3 = r2.children[0];

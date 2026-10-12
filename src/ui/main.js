@@ -466,7 +466,13 @@ function renderBag() {
   if (me.items.bombbag2) ups.push(['bomb', itemName('bombbag2', me.cls), 'CARRY 16 BOMBS']); else if (me.items.bombbag) ups.push(['bomb', itemName('bombbag', me.cls), 'CARRY 8 BOMBS']);
   if (me.items.bombarrow) ups.push(['scroll', itemName('bombarrows', me.cls), 'SHIFT + BOW: COSTS AN ARROW AND A BOMB']);
   for (const k of Object.keys(me.items)) { if (!me.items[k] || owned.includes(k) || ['loaded', 'loaded2', 'lunge', 'heavypommel', 'cloakslam', 'bombbag', 'bombbag2', 'frostarrows', 'silver', 'potion', 'bombarrow'].includes(k)) continue; const d = Content.items[k]; if (!d || d.slot === 'b') continue; ups.push([itemSprite(k, me.cls), itemName(k, me.cls), k === 'skeletonkey' ? 'OPENS EVERY LOCK' : k === 'silver' ? 'ONLY THEY CAN FINISH THE HOLLOW KING' : k === 'magmaboots' ? 'WALK ON LAVA AND VENTS' : k === 'raft' ? 'OPEN WATER ONLY' : null]); }
-  if (page === 'upgrades' && ups.length) { const r = sec('UPGRADES & TECHNIQUES'); for (const [spr, name, sub] of ups) tag(r, spr, name, sub); }
+  if (page === 'upgrades' && me.dbg) { // debug: every upgrade and scroll, switched on and off with a click
+    const all = sec('DEBUG: CLICK TO SWITCH ON OR OFF'); btn(all, 'scroll', 'ALL ON', 'AND THE BOW, BOOMERANG, CLOAK AND BOMBS', false, () => sendAction({ t: 'dbgup', all: true })); btn(all, 'scroll', 'ALL OFF', null, false, () => sendAction({ t: 'dbgup', all: false }));
+    // one compact grid (no scrolling): name and ON/OFF on each button, the description on hover
+    const row = sec('SWORD / BOW / BOOMERANG / CLOAK / BOMBS'); row.classList.add('compact');
+    for (const u of Content.upgrades) { const on = u.has(me); btn(row, itemSprite(u.id, me.cls), itemName(u.id, me.cls).replace('SCROLL: ', ''), on ? 'ON' : 'OFF', on, () => sendAction({ t: 'dbgup', id: u.id, on: !on })); row.lastChild.title = u.desc; }
+    const rest = ups.filter(([, name]) => !Content.upgrades.some(u => itemName(u.id, me.cls) === name)); if (rest.length) { const r = sec('OTHER'); for (const [spr, name, sub] of rest) tag(r, spr, name, sub); }
+  } else if (page === 'upgrades' && ups.length) { const r = sec('UPGRADES & TECHNIQUES'); for (const [spr, name, sub] of ups) tag(r, spr, name, sub); }
 }
 function Lc_sel() { return G.local && G.local.sel; }
 function resume() { G.state = 'play'; showScreen(null); try { const r = $('game').requestPointerLock(); if (r && r.catch) r.catch(() => { }); } catch (e) { } }

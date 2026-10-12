@@ -35,6 +35,8 @@ label { font-size:11px; color:var(--dim); display:block; margin:10px 0 4px; }
 .bag .row2 button.on { border-color:var(--gold); color:var(--gold); background:#3a2c14; }
 .bag .row2 button canvas { width:32px; height:32px; image-rendering:pixelated; flex:none; }
 .bag .row2 button small { display:block; color:var(--dim); font-size:10px; letter-spacing:0; text-transform:none; }
+.bag .row2.compact button { flex:1 1 30%; padding:3px 6px; gap:6px; font-size:11px; }
+.bag .row2.compact button canvas { width:22px; height:22px; }
 .bag .row2 .fav { margin-left:auto; font-size:20px; color:var(--dim); padding:0 4px; cursor:pointer; flex:none; }
 .bag .row2 .fav.on { color:var(--gold); }
 .bag .favnote { display:block; color:var(--dim); font-size:10px; margin-top:6px; }
@@ -4155,6 +4157,31 @@ defineItem({ id: 'chain', name: 'CHAIN TUNIC', sprite: 'armor', monk: { name: 'B
 defineItem({ id: 'plate', name: 'PLATE TUNIC', sprite: 'armor', monk: { name: 'GOLDEN AURA' }, team: true, give(sim, p, ctx) { p.armor = 2; ctx.banner(); } });
 
 })();
+// ---- src/content/items/upgrades.js ----
+(function () {
+// ===== content/items/upgrades.js : the list of upgrades and technique scrolls, for the inventory's UPGRADES page =====
+// Each: id (the item that grants it), group, has(p), and in debug mode on(p) / off(p) so it can be switched on and off for
+// testing (ui/main.js renderBag, game/sim.js 'dbgup'). Add new scrolls here so they show up.
+'use strict';
+const flag = (k) => ({ has: (p) => !!p.items[k], on: (p) => { p.items[k] = true; }, off: (p) => { delete p.items[k]; } });
+Content.upgrades = [
+  Object.assign({ id: 'lunge', group: 'SWORD', desc: 'SHIFT + HOLD ATTACK TO THE CHIME, LET GO: LUNGE AND SLASH' }, flag('lunge')),
+  Object.assign({ id: 'heavypommel', group: 'SWORD', desc: 'POMMEL STRIKES KNOCK ARMOR OFF (ONCE PER FOE)' }, flag('heavypommel')),
+  Object.assign({ id: 'loadedshot', group: 'BOW', desc: 'HOLD TO NOCK ONE MORE ARROW' }, flag('loaded')),
+  Object.assign({ id: 'tripleshot', group: 'BOW', desc: 'HOLD LONGER TO NOCK ONE MORE ARROW' }, flag('loaded2')),
+  Object.assign({ id: 'bombarrows', group: 'BOW', desc: 'SHIFT + BOW: AN ARROW WITH A BOMB TIED ON' }, flag('bombarrow')),
+  { id: 'quiver', group: 'BOW', desc: 'CARRY 30 ARROWS', has: (p) => (p.maxArrows || ARROWS_START) >= 30, on: (p) => { p.maxArrows = Math.max(p.maxArrows || ARROWS_START, 30); }, off: (p) => { p.maxArrows = ARROWS_START; p.arrows = Math.min(p.arrows, ARROWS_START); } },
+  { id: 'quiver50', group: 'BOW', desc: 'CARRY 50 ARROWS', has: (p) => (p.maxArrows || ARROWS_START) >= 50, on: (p) => { p.maxArrows = 50; }, off: (p) => { p.maxArrows = (p.maxArrows || ARROWS_START) >= 30 ? 30 : ARROWS_START; p.arrows = Math.min(p.arrows, p.maxArrows); } },
+  Object.assign({ id: 'widethrow', group: 'BOOMERANG', desc: 'SHIFT + BOOMERANG: A WIDE SWEEP THAT HITS HARD' }, flag('widethrow')),
+  Object.assign({ id: 'boomerang2', group: 'BOOMERANG', desc: 'TWO BOOMERANGS OUT AT ONCE' }, flag('boomerang2')),
+  Object.assign({ id: 'galeslam', group: 'GALE CLOAK', desc: 'END A FLIGHT EARLY TO SLAM DOWN' }, flag('cloakslam')),
+  Object.assign({ id: 'bombbag', group: 'BOMBS', desc: 'CARRY 8 BOMBS' }, flag('bombbag')),
+  Object.assign({ id: 'bombbag2', group: 'BOMBS', desc: 'CARRY 16 BOMBS' }, flag('bombbag2')),
+];
+// the items those upgrades need, handed over by ALL ON
+Content.upgradeBase = ['bow', 'boomerang', 'galecloak', 'bombs'];
+
+})();
 // ---- src/content/items/whistle.js ----
 (function () {
 // ===== content/items/whistle.js : warps you to the gate of any dungeon you've cleared =====
@@ -4961,6 +4988,12 @@ class Sim {
         const L = this.W.levels[p.lvl]; let x = p.x + Math.cos(p.a) * 2.5, y = p.y + Math.sin(p.a) * 2.5; if (L.solidAt(x, y) && !(enemyDef(a.type).swim && TINFO[L.get(Math.floor(x), Math.floor(y))].water)) { x = p.x; y = p.y; }
         const e = this.spawnEnemy(a.type, p.lvl, x, y, { dmgMul: 1 }); if (a.elite) { const el = Content.elites.find(d => d.id === a.elite); if (el) { e.elite = el.idx; if (el.apply) el.apply(e, this); } } } break;
       case 'dbgboss': if (p.dbg) { const D = this.W.levels['d' + (a.d | 0)]; const r = D && D.rooms[D.bossRoom]; if (r) { const at = r.rewardAt || [6.5, 6.5]; this.teleport(p, D.id, r.rx * DSX + at[0], r.ry * DSY + at[1], -Math.PI / 2); } } break; // debug: straight to a boss
+      case 'dbgup': if (p.dbg) { // debug: switch upgrades and technique scrolls on and off (inventory, UPGRADES page)
+        const list = a.all != null ? Content.upgrades : Content.upgrades.filter(u => u.id === a.id); const on = a.all != null ? !!a.all : !!a.on;
+        if (on && a.all != null) for (const id of Content.upgradeBase) p.items[id] = true;
+        for (const u of list) { if (on) u.on(p); else u.off(p); }
+        p.maxBombs = bombCap(p); if (p.bombs > p.maxBombs) p.bombs = p.maxBombs;
+      } break;
       case 'dbgmap': if (p.dbg && this.W.levels[p.lvl].kind === 'dungeon') { const t = a.what === 'comp' ? 'comps' : 'maps'; this.team[t] = this.team[t] || {}; this.team[t][p.lvl] = true; this.hint(p, (a.what === 'comp' ? 'COMPASS' : 'MAP') + ' GIVEN (DEBUG)'); } break; // sanity checks for dungeon maps
       case 'god': if (p.dbg) { p.god = !!a.on; p.hp = p.maxHp; p.chill = 0; this.hint(p, 'GOD MODE ' + (p.god ? 'ON' : 'OFF')); } break;
       case 'warp': if (p.dbg) { const T = this.W.levels[a.to]; if (T) this.teleport(p, T.id, T.spawn.x, T.spawn.y, T.spawn.a); } break;
@@ -7100,7 +7133,13 @@ function renderBag() {
   if (me.items.bombbag2) ups.push(['bomb', itemName('bombbag2', me.cls), 'CARRY 16 BOMBS']); else if (me.items.bombbag) ups.push(['bomb', itemName('bombbag', me.cls), 'CARRY 8 BOMBS']);
   if (me.items.bombarrow) ups.push(['scroll', itemName('bombarrows', me.cls), 'SHIFT + BOW: COSTS AN ARROW AND A BOMB']);
   for (const k of Object.keys(me.items)) { if (!me.items[k] || owned.includes(k) || ['loaded', 'loaded2', 'lunge', 'heavypommel', 'cloakslam', 'bombbag', 'bombbag2', 'frostarrows', 'silver', 'potion', 'bombarrow'].includes(k)) continue; const d = Content.items[k]; if (!d || d.slot === 'b') continue; ups.push([itemSprite(k, me.cls), itemName(k, me.cls), k === 'skeletonkey' ? 'OPENS EVERY LOCK' : k === 'silver' ? 'ONLY THEY CAN FINISH THE HOLLOW KING' : k === 'magmaboots' ? 'WALK ON LAVA AND VENTS' : k === 'raft' ? 'OPEN WATER ONLY' : null]); }
-  if (page === 'upgrades' && ups.length) { const r = sec('UPGRADES & TECHNIQUES'); for (const [spr, name, sub] of ups) tag(r, spr, name, sub); }
+  if (page === 'upgrades' && me.dbg) { // debug: every upgrade and scroll, switched on and off with a click
+    const all = sec('DEBUG: CLICK TO SWITCH ON OR OFF'); btn(all, 'scroll', 'ALL ON', 'AND THE BOW, BOOMERANG, CLOAK AND BOMBS', false, () => sendAction({ t: 'dbgup', all: true })); btn(all, 'scroll', 'ALL OFF', null, false, () => sendAction({ t: 'dbgup', all: false }));
+    // one compact grid (no scrolling): name and ON/OFF on each button, the description on hover
+    const row = sec('SWORD / BOW / BOOMERANG / CLOAK / BOMBS'); row.classList.add('compact');
+    for (const u of Content.upgrades) { const on = u.has(me); btn(row, itemSprite(u.id, me.cls), itemName(u.id, me.cls).replace('SCROLL: ', ''), on ? 'ON' : 'OFF', on, () => sendAction({ t: 'dbgup', id: u.id, on: !on })); row.lastChild.title = u.desc; }
+    const rest = ups.filter(([, name]) => !Content.upgrades.some(u => itemName(u.id, me.cls) === name)); if (rest.length) { const r = sec('OTHER'); for (const [spr, name, sub] of rest) tag(r, spr, name, sub); }
+  } else if (page === 'upgrades' && ups.length) { const r = sec('UPGRADES & TECHNIQUES'); for (const [spr, name, sub] of ups) tag(r, spr, name, sub); }
 }
 function Lc_sel() { return G.local && G.local.sel; }
 function resume() { G.state = 'play'; showScreen(null); try { const r = $('game').requestPointerLock(); if (r && r.catch) r.catch(() => { }); } catch (e) { } }

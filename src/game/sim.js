@@ -179,6 +179,12 @@ class Sim {
         const L = this.W.levels[p.lvl]; let x = p.x + Math.cos(p.a) * 2.5, y = p.y + Math.sin(p.a) * 2.5; if (L.solidAt(x, y) && !(enemyDef(a.type).swim && TINFO[L.get(Math.floor(x), Math.floor(y))].water)) { x = p.x; y = p.y; }
         const e = this.spawnEnemy(a.type, p.lvl, x, y, { dmgMul: 1 }); if (a.elite) { const el = Content.elites.find(d => d.id === a.elite); if (el) { e.elite = el.idx; if (el.apply) el.apply(e, this); } } } break;
       case 'dbgboss': if (p.dbg) { const D = this.W.levels['d' + (a.d | 0)]; const r = D && D.rooms[D.bossRoom]; if (r) { const at = r.rewardAt || [6.5, 6.5]; this.teleport(p, D.id, r.rx * DSX + at[0], r.ry * DSY + at[1], -Math.PI / 2); } } break; // debug: straight to a boss
+      case 'dbgup': if (p.dbg) { // debug: switch upgrades and technique scrolls on and off (inventory, UPGRADES page)
+        const list = a.all != null ? Content.upgrades : Content.upgrades.filter(u => u.id === a.id); const on = a.all != null ? !!a.all : !!a.on;
+        if (on && a.all != null) for (const id of Content.upgradeBase) p.items[id] = true;
+        for (const u of list) { if (on) u.on(p); else u.off(p); }
+        p.maxBombs = bombCap(p); if (p.bombs > p.maxBombs) p.bombs = p.maxBombs;
+      } break;
       case 'dbgmap': if (p.dbg && this.W.levels[p.lvl].kind === 'dungeon') { const t = a.what === 'comp' ? 'comps' : 'maps'; this.team[t] = this.team[t] || {}; this.team[t][p.lvl] = true; this.hint(p, (a.what === 'comp' ? 'COMPASS' : 'MAP') + ' GIVEN (DEBUG)'); } break; // sanity checks for dungeon maps
       case 'god': if (p.dbg) { p.god = !!a.on; p.hp = p.maxHp; p.chill = 0; this.hint(p, 'GOD MODE ' + (p.god ? 'ON' : 'OFF')); } break;
       case 'warp': if (p.dbg) { const T = this.W.levels[a.to]; if (T) this.teleport(p, T.id, T.spawn.x, T.spawn.y, T.spawn.a); } break;
