@@ -3422,13 +3422,13 @@ defineEnemy({
 const SKEL_ARMOR = [null,
   [ // 1: breastplate
     '................', '.....kkkkkk.....', '....kzzzzzzk....', '....kzkkzkkz....', '....kzkkzkkz....', '.....kzzzzk.....', '......kzkzk.....',
-    '...kk.kUuUk.kk..', '..kzzkUuuuUkzzk.', '..kzk.kUuUk.kzk.', '..kzk.kUUUk.kzk.', '......kzzzk..u..', '......kz.zk..u..', '......kz.zk.....', '.....kzk.kzk....', '................'],
+    '...kk.kGgGk.kk..', '..kzzkGgggGkzzk.', '..kzk.kGgGk.kzk.', '..kzk.kGGGk.kzk.', '......kzzzk..u..', '......kz.zk..u..', '......kz.zk.....', '.....kzk.kzk....', '................'],
   [ // 2: + helmet with a nose guard
-    '................', '....kkkkkkkk....', '...kUuuuuuuUk...', '....kzkkUkkz....', '....kzkkUkkz....', '.....kzzzzk.....', '......kzkzk.....',
-    '...kk.kUuUk.kk..', '..kzzkUuuuUkzzk.', '..kzk.kUuUk.kzk.', '..kzk.kUUUk.kzk.', '......kzzzk..u..', '......kz.zk..u..', '......kz.zk.....', '.....kzk.kzk....', '................'],
+    '................', '....kkkkkkkk....', '...kGggggggGk...', '....kzkkGkkz....', '....kzkkGkkz....', '.....kzzzzk.....', '......kzkzk.....',
+    '...kk.kGgGk.kk..', '..kzzkGgggGkzzk.', '..kzk.kGgGk.kzk.', '..kzk.kGGGk.kzk.', '......kzzzk..u..', '......kz.zk..u..', '......kz.zk.....', '.....kzk.kzk....', '................'],
   [ // 3: + gauntlets and greaves
-    '................', '....kkkkkkkk....', '...kUuuuuuuUk...', '....kzkkUkkz....', '....kzkkUkkz....', '.....kzzzzk.....', '......kzkzk.....',
-    '...kk.kUuUk.kk..', '..kUUkUuuuUkUUk.', '..kUk.kUuUk.kUk.', '..kuk.kUUUk.kuk.', '......kzzzk..u..', '......kU.Uk..u..', '......kU.Uk.....', '.....kUk.kUk....', '................'],
+    '................', '....kkkkkkkk....', '...kGggggggGk...', '....kzkkGkkz....', '....kzkkGkkz....', '.....kzzzzk.....', '......kzkzk.....',
+    '...kk.kGgGk.kk..', '..kGGkGgggGkGGk.', '..kGk.kGgGk.kGk.', '..kgk.kGGGk.kgk.', '......kzzzk..u..', '......kG.Gk..u..', '......kG.Gk.....', '.....kGk.kGk....', '................'],
 ];
 for (let n = 1; n <= 3; n++) defineEnemy(Object.assign({}, enemyDef('skeleton'), {
   id: 'skeleton_a' + n, title: 'ARMORED SKELETON', armor: n, hp: 3, spawns: {}, noElites: ['giant'], sprite: SKEL_ARMOR[n],
@@ -5627,6 +5627,7 @@ class Sim {
     if (e.k === 'en' && enemyDef(e.type).boss) v.push(Math.max(0, e.hp / e.maxHp)); else v.push(-1);
     if (e.k === 'npc') v.push(e.text); else v.push(0);
     v.push(e.k === 'en' && e.elite ? e.elite : 0);
+    v.push(e.k === 'en' && !e.dead ? 1 : 0); // [11]: a foe (the lunge stops at one)
     return v;
   }
   snapshotFor(pid) {
@@ -6050,7 +6051,7 @@ function drawViewmodel(st) {
     const gk = Math.min(1, (st.grip || 0) / 0.15); // reverse grip: blade flipped down along your side, pommel toward the foe
     const pk = st.pommelT != null ? Math.sin(Math.min(1, st.pommelT / 0.3) * Math.PI) : 0; // the pommel driving forward
     if (k >= 0) { const kk = rev ? 1 - k : k; ang = lerp(-0.4, -2.6, kk); hx = lerp(W * 0.78, W * 0.42, kk) + bx; hy = lerp(H - 22, H - 44, Math.sin(kk * Math.PI)) + by; }
-    else if (gk > 0 || pk > 0) { const g = Math.max(gk, pk); ang = lerp(-0.95, 1.2, g); hx = lerp(W * 0.8, W * 0.7, g) - pk * W * 0.16 + bx; hy = lerp(H - 10, H - 34, g) - pk * 26 + by;
+    else if (gk > 0 || pk > 0) { const g = Math.max(gk, pk); ang = lerp(-0.95, 1.95, g); hx = lerp(W * 0.8, W * 0.74, g) - pk * W * 0.14 + bx; hy = lerp(H - 10, H - 62, g) - pk * 30 + by;
       if (st.grip > 0.3) { hx += (Math.random() - 0.5) * Math.min(2, st.grip); hy += (Math.random() - 0.5) * Math.min(2, st.grip); } } // trembling as it builds
     else { ang = -0.95; hx = W * 0.8 + bx; hy = H - 10 + by; } // resting low at your side
     const len = 70; const tipX = hx + Math.cos(ang) * len, tipY = hy + Math.sin(ang) * len;
@@ -6773,7 +6774,8 @@ function updateLocal(dt, inp) {
   let mvx = (Math.cos(Lc.a) * inp.fwd + Math.cos(Lc.a + Math.PI / 2) * inp.str) * spd, mvy = (Math.sin(Lc.a) * inp.fwd + Math.sin(Lc.a + Math.PI / 2) * inp.str) * spd;
   if (Lc.lunge && Lc.lunge.t < LUNGE_DUR && !Lc.lunge.stop) { // the lunge: a burst forward that stops at the edge of anything that would hurt
     const da = Lc.lunge.dir, ax = Lc.x + Math.cos(da) * 0.55, ay = Lc.y + Math.sin(da) * 0.55; const ta = TINFO[L.get(Math.floor(ax), Math.floor(ay))];
-    if (!flying && (ta.pit || ta.hurt || (ta.water && !ta.frozen && !raftOK(me, L, ta)) || ta.lava || ta.vent)) Lc.lunge.stop = true;
+    const foeAhead = (snap.en || []).some(e => e[11] === 1 && dist2(e[2], e[3], Lc.x, Lc.y) < 1.1 && Math.abs(angDiff(da, Math.atan2(e[3] - Lc.y, e[2] - Lc.x))) < 0.8); // stop at the foe, don't slide past it
+    if (foeAhead || (!flying && (ta.pit || ta.hurt || (ta.water && !ta.frozen && !raftOK(me, L, ta)) || ta.lava || ta.vent))) Lc.lunge.stop = true;
     else { mvx = Math.cos(da) * LUNGE_SPD; mvy = Math.sin(da) * LUNGE_SPD; }
   }
   if (Lc.dashT > 0) { Lc.dashT -= dt; const da = Lc.a + (Lc.dashDir || 0); mvx = Math.cos(da) * 15; mvy = Math.sin(da) * 15; }

@@ -140,7 +140,8 @@ function updateLocal(dt, inp) {
   let mvx = (Math.cos(Lc.a) * inp.fwd + Math.cos(Lc.a + Math.PI / 2) * inp.str) * spd, mvy = (Math.sin(Lc.a) * inp.fwd + Math.sin(Lc.a + Math.PI / 2) * inp.str) * spd;
   if (Lc.lunge && Lc.lunge.t < LUNGE_DUR && !Lc.lunge.stop) { // the lunge: a burst forward that stops at the edge of anything that would hurt
     const da = Lc.lunge.dir, ax = Lc.x + Math.cos(da) * 0.55, ay = Lc.y + Math.sin(da) * 0.55; const ta = TINFO[L.get(Math.floor(ax), Math.floor(ay))];
-    if (!flying && (ta.pit || ta.hurt || (ta.water && !ta.frozen && !raftOK(me, L, ta)) || ta.lava || ta.vent)) Lc.lunge.stop = true;
+    const foeAhead = (snap.en || []).some(e => e[11] === 1 && dist2(e[2], e[3], Lc.x, Lc.y) < 1.1 && Math.abs(angDiff(da, Math.atan2(e[3] - Lc.y, e[2] - Lc.x))) < 0.8); // stop at the foe, don't slide past it
+    if (foeAhead || (!flying && (ta.pit || ta.hurt || (ta.water && !ta.frozen && !raftOK(me, L, ta)) || ta.lava || ta.vent))) Lc.lunge.stop = true;
     else { mvx = Math.cos(da) * LUNGE_SPD; mvy = Math.sin(da) * LUNGE_SPD; }
   }
   if (Lc.dashT > 0) { Lc.dashT -= dt; const da = Lc.a + (Lc.dashDir || 0); mvx = Math.cos(da) * 15; mvy = Math.sin(da) * 15; }

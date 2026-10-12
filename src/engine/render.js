@@ -392,7 +392,7 @@ function drawViewmodel(st) {
     const gk = Math.min(1, (st.grip || 0) / 0.15); // reverse grip: blade flipped down along your side, pommel toward the foe
     const pk = st.pommelT != null ? Math.sin(Math.min(1, st.pommelT / 0.3) * Math.PI) : 0; // the pommel driving forward
     if (k >= 0) { const kk = rev ? 1 - k : k; ang = lerp(-0.4, -2.6, kk); hx = lerp(W * 0.78, W * 0.42, kk) + bx; hy = lerp(H - 22, H - 44, Math.sin(kk * Math.PI)) + by; }
-    else if (gk > 0 || pk > 0) { const g = Math.max(gk, pk); ang = lerp(-0.95, 1.2, g); hx = lerp(W * 0.8, W * 0.7, g) - pk * W * 0.16 + bx; hy = lerp(H - 10, H - 34, g) - pk * 26 + by;
+    else if (gk > 0 || pk > 0) { const g = Math.max(gk, pk); ang = lerp(-0.95, 1.95, g); hx = lerp(W * 0.8, W * 0.74, g) - pk * W * 0.14 + bx; hy = lerp(H - 10, H - 62, g) - pk * 30 + by;
       if (st.grip > 0.3) { hx += (Math.random() - 0.5) * Math.min(2, st.grip); hy += (Math.random() - 0.5) * Math.min(2, st.grip); } } // trembling as it builds
     else { ang = -0.95; hx = W * 0.8 + bx; hy = H - 10 + by; } // resting low at your side
     const len = 70; const tipX = hx + Math.cos(ang) * len, tipY = hy + Math.sin(ang) * len;

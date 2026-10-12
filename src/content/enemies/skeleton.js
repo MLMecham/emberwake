@@ -32,13 +32,13 @@ defineEnemy({
 const SKEL_ARMOR = [null,
   [ // 1: breastplate
     '................', '.....kkkkkk.....', '....kzzzzzzk....', '....kzkkzkkz....', '....kzkkzkkz....', '.....kzzzzk.....', '......kzkzk.....',
-    '...kk.kUuUk.kk..', '..kzzkUuuuUkzzk.', '..kzk.kUuUk.kzk.', '..kzk.kUUUk.kzk.', '......kzzzk..u..', '......kz.zk..u..', '......kz.zk.....', '.....kzk.kzk....', '................'],
+    '...kk.kGgGk.kk..', '..kzzkGgggGkzzk.', '..kzk.kGgGk.kzk.', '..kzk.kGGGk.kzk.', '......kzzzk..u..', '......kz.zk..u..', '......kz.zk.....', '.....kzk.kzk....', '................'],
   [ // 2: + helmet with a nose guard
-    '................', '....kkkkkkkk....', '...kUuuuuuuUk...', '....kzkkUkkz....', '....kzkkUkkz....', '.....kzzzzk.....', '......kzkzk.....',
-    '...kk.kUuUk.kk..', '..kzzkUuuuUkzzk.', '..kzk.kUuUk.kzk.', '..kzk.kUUUk.kzk.', '......kzzzk..u..', '......kz.zk..u..', '......kz.zk.....', '.....kzk.kzk....', '................'],
+    '................', '....kkkkkkkk....', '...kGggggggGk...', '....kzkkGkkz....', '....kzkkGkkz....', '.....kzzzzk.....', '......kzkzk.....',
+    '...kk.kGgGk.kk..', '..kzzkGgggGkzzk.', '..kzk.kGgGk.kzk.', '..kzk.kGGGk.kzk.', '......kzzzk..u..', '......kz.zk..u..', '......kz.zk.....', '.....kzk.kzk....', '................'],
   [ // 3: + gauntlets and greaves
-    '................', '....kkkkkkkk....', '...kUuuuuuuUk...', '....kzkkUkkz....', '....kzkkUkkz....', '.....kzzzzk.....', '......kzkzk.....',
-    '...kk.kUuUk.kk..', '..kUUkUuuuUkUUk.', '..kUk.kUuUk.kUk.', '..kuk.kUUUk.kuk.', '......kzzzk..u..', '......kU.Uk..u..', '......kU.Uk.....', '.....kUk.kUk....', '................'],
+    '................', '....kkkkkkkk....', '...kGggggggGk...', '....kzkkGkkz....', '....kzkkGkkz....', '.....kzzzzk.....', '......kzkzk.....',
+    '...kk.kGgGk.kk..', '..kGGkGgggGkGGk.', '..kGk.kGgGk.kGk.', '..kgk.kGGGk.kgk.', '......kzzzk..u..', '......kG.Gk..u..', '......kG.Gk.....', '.....kGk.kGk....', '................'],
 ];
 for (let n = 1; n <= 3; n++) defineEnemy(Object.assign({}, enemyDef('skeleton'), {
   id: 'skeleton_a' + n, title: 'ARMORED SKELETON', armor: n, hp: 3, spawns: {}, noElites: ['giant'], sprite: SKEL_ARMOR[n],

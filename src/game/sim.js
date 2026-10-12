@@ -845,6 +845,7 @@ class Sim {
     if (e.k === 'en' && enemyDef(e.type).boss) v.push(Math.max(0, e.hp / e.maxHp)); else v.push(-1);
     if (e.k === 'npc') v.push(e.text); else v.push(0);
     v.push(e.k === 'en' && e.elite ? e.elite : 0);
+    v.push(e.k === 'en' && !e.dead ? 1 : 0); // [11]: a foe (the lunge stops at one)
     return v;
   }
   snapshotFor(pid) {
