@@ -24,7 +24,9 @@ function migrateSave(s) {
     for (const d of ['d3', 'd6']) { delete s.mods[d]; for (const t of ['cleared', 'taken']) for (const k of Object.keys(s.team[t] || {})) if (k.startsWith(d + ':')) delete s.team[t][k]; for (const t of ['keys', 'maps', 'comps']) if (s.team[t]) delete s.team[t][d]; }
     for (const c in (s.players || {})) { const pl = s.players[c]; if (pl.lvl === 'd3' || pl.lvl === 'd6') pl.respawn = true; }
   }
-  if ((s.v || 1) < 7) { // v7: no bag now means 1 bomb; the old Bramble Keep bag (16) is now the 8 bag
+  if ((s.v || 1) < 7) { // v7: no bag now means 1 bomb; the old Bramble Keep bag (16) is now the 8 bag. Bramble Keep was rebuilt (no keys), so it starts over.
+    delete s.mods.d2; for (const t of ['cleared', 'taken']) for (const k of Object.keys(s.team[t] || {})) if (k.startsWith('d2:')) delete s.team[t][k]; for (const t of ['keys', 'maps', 'comps']) if (s.team[t]) delete s.team[t].d2;
+    for (const c in (s.players || {})) { const pl = s.players[c]; if (pl.lvl === 'd2') pl.respawn = true; }
     for (const c in (s.players || {})) { const pl = s.players[c]; if ((pl.maxBombs || 0) > 8) { pl.items = pl.items || {}; pl.items.bombbag = true; } }
   }
   if (s.tileNames) for (const lvl in s.mods) for (const i in s.mods[lvl]) { const m = s.mods[lvl][i]; const tn = s.tileNames[m[0]]; if (tn && TL[tn] != null) m[0] = TL[tn]; const pn = s.propNames && s.propNames[m[1]]; if (pn) { const pi = PROPS.indexOf(pn); if (pi >= 0) m[1] = pi; } }

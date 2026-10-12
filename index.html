@@ -2127,6 +2127,8 @@ defineDropTable('common', 34, [
 // Optional dungeons (10+) can also set: mapLabel (letter on the maps), bossDrop (item the boss leaves),
 // bossParty (several bosses at once, instead of the single bossOf one).
 // bossEye: [item ids] puts an eye in the boss room's wall; an arrow opens a niche holding those items.
+// noKeys: true turns every lock (and the way out of the entrance) into a cracked wall with a gourd before it; no keys at all.
+// gourds: 'asked' grows breakables only where the dungeon's gimmicks ask for them (room.gourdAt), not at random.
 // Any dungeon can set intro: '<gimmick id>' to use that gimmick's hand-built first two rooms (the second holds the key onward).
 'use strict';
 defineDungeon(1, {
@@ -2144,7 +2146,9 @@ defineDungeon(1, {
   lore: ['THE WYRMLING OF THIS HOLLOW HATCHED FROM A FROST-BLUE EGG. ITS MOTHER SLEEPS FAR TO THE WEST, BEYOND THE PASS.'],
 });
 defineDungeon(2, {
-  name: 'BRAMBLE KEEP', item: 'bombbag', gimmicks: ['cracked'], loops: 0.4, bombLoops: 1,
+  // No keys: its keepers melted them and brought the halls down. Every lock is a cracked wall you bomb (noKeys), with a powder
+  // gourd in the room before it, so a pommel strike always gets you a bomb. Optional cracks hide prizes (gimmicks/cracked.js).
+  name: 'BRAMBLE KEEP', item: 'bombbag', gimmicks: ['cracked'], loops: 0.25, bombLoops: 0, noKeys: true, gourds: 'asked',
   bossEye: ['quiver', 'loadedshot'], // an eye in the boss room's wall hides these until someone comes back with a bow
   theme: { wall: [118, 110, 104], mortar: [52, 46, 44], hi: [150, 142, 134], floor: [104, 70, 60], edge: [58, 36, 30], fhi: [130, 90, 76], trim: [120, 50, 40] },
   shape: [ // a key
@@ -2157,7 +2161,7 @@ defineDungeon(2, {
     '...##H..',
     '...S....',
   ],
-  lore: ['THE KEEP WAS BUILT TO GUARD AN EMBER SHARD. ITS BUILDERS CRACKED EVERY WALL THEY COULD NOT AFFORD TO FINISH.'],
+  lore: ['WE MELTED THE KEYS. WE DROPPED THE SKY. LET HIM DIG.'],
 });
 defineDungeon(3, {
   name: 'THE SUNKEN STAIR', item: 'bow', gimmicks: ['drain'], secret: 'EYE', loops: 0.35, bombLoops: 0.3,
@@ -2513,16 +2517,25 @@ defineGimmick('conveyors', {
 })();
 // ---- src/content/gimmicks/cracked.js ----
 (function () {
-// ===== content/gimmicks/cracked.js : cracked pillars inside rooms that bombs can clear (Bramble Keep) =====
-// Bramble Keep also sets loops: 0.4 and bombLoops: 1 in content/dungeons.js, so many shortcuts are behind cracked walls.
+// ===== content/gimmicks/cracked.js : Bramble Keep's collapsed halls =====
+// The keep has no keys (dungeons.js noKeys): every lock is a cracked wall, with a powder gourd before it (game/world.js).
+// Here: some rooms have a corner nook walled off by rubble, with a cracked block for a way in and a prize inside, so a
+// bomb spent on a crack is never wasted. The entrance has a tablet that teaches the pommel strike and the gourds.
 'use strict';
 defineTile('CRACKED_PILLAR', { solid: true, wall: 'brick_bomb', floor: 'dfloor', bomb: true, opensTo: 'DFLOOR' });
+// one corner nook (room-relative, top-right; the others are mirrored): bricks around a 2x2 pocket, a cracked block in the gap
+const NOOK = { walls: [[9, 1], [9, 3], [10, 3], [11, 3]], crack: [9, 2], prize: [11, 2] }; // prize is a point (the pocket's middle)
+const PRIZES = [['gems30', 35], ['bomb', 20], ['heart', 15], ['gems50', 20], ['gems100', 10]];
+function rollPrize(rnd) { let t = rnd() * 100; for (const [id, w] of PRIZES) { t -= w; if (t < 0) return id; } return 'gems30'; }
 defineGimmick('cracked', {
-  room(L, r, { rnd, set, lane }) {
-    if (rnd() < 0.5) return false;
-    for (const [x, y] of [[3, 2], [9, 2], [3, 6], [9, 6], [5, 3], [7, 5]]) if (!lane(x, y) && rnd() < 0.7) set(x, y, 'CRACKED_PILLAR');
+  room(L, r, { rnd, set }) {
+    if (rnd() > 0.4) return false;
+    const fx = rnd() < 0.5, fy = rnd() < 0.5; const m = ([x, y]) => [fx ? 12 - x : x, fy ? 8 - y : y];
+    for (const w of NOOK.walls) set(...m(w), 'BRICK'); set(...m(NOOK.crack), 'CRACKED_PILLAR');
+    const px = fx ? 13 - NOOK.prize[0] : NOOK.prize[0], py = fy ? 9 - NOOK.prize[1] : NOOK.prize[1]; r.stash = [{ item: rollPrize(rnd), x: px, y: py }];
     return true;
   },
+  start(L, r, { sign, prop }) { prop(5, 3, PR.SIGN); sign(5, 3, 'THE GOURDS ARE OURS. STRIKE THEM LOW, WITH THE HILT.   (SHIFT + HOLD ATTACK, THEN LET GO. A GOURD GIVES A BOMB.)'); },
 });
 
 })();
@@ -4640,8 +4653,15 @@ function genDungeon(W, d, rnd) {
   let lockList = [...locked].filter(id => !reach.has(id));
   const keySpots = rnd.shuffle(order.filter(r => reach.has(r.id) && r !== start && !r.item && !r.boss && !r.intro));
   while (lockList.length > keySpots.length) { const drop = lockList.find(id => id !== boss.id) || lockList[0]; lockList = lockList.filter(id => id !== drop); }
-  for (let i = 0; i < lockList.length; i++) keySpots[i].key = true;
-  for (const id of lockList) { const r = rooms[id]; if (r.parent) setDoor(r.parent, r, TL.LOCKED, true); }
+  // A powder gourd waits in the room before a wall you must bomb, a little to one side of it (content/gourds.js)
+  const gourdBefore = (from, to) => { const dx = to.rx - from.rx, dy = to.ry - from.ry; (from.gourdAt = from.gourdAt || []).push(dx > 0 ? [8, 5] : dx < 0 ? [4, 5] : dy > 0 ? [5, 6] : [7, 2]); };
+  if (def.noKeys) { // locks become cracked walls (bombs, not keys), and so does the way out of the entrance
+    for (const id of [...locked]) { const r = rooms[id]; if (r.parent) { setDoor(r.parent, r, TL.BRICK_BOMB, true); gourdBefore(r.parent, r); } }
+    const first = start.children[0]; if (first) { setDoor(start, first, TL.BRICK_BOMB, true); gourdBefore(start, first); start.tutorial = true; }
+  } else {
+    for (let i = 0; i < lockList.length; i++) keySpots[i].key = true;
+    for (const id of lockList) { const r = rooms[id]; if (r.parent) setDoor(r.parent, r, TL.LOCKED, true); }
+  }
   if (intro) setDoor(intro.r2, intro.r3, TL.LOCKED, true); // its key waits in the intro room itself, so the usual key rules still hold beyond it
   const mc = rnd.shuffle(order.filter(r => r !== start && !r.boss && !r.item && !r.intro));
   if (mc[0]) mc[0].map = true; if (mc[1]) mc[1].compass = true;
@@ -4671,7 +4691,7 @@ function genDungeon(W, d, rnd) {
     const ix = r.rx * DSX, iy = r.ry * DSY;
     const sign = (x, y, text) => { L.signText = L.signText || {}; L.signText[L.idx(ix + x, iy + y)] = text; };
     const ictx = Object.assign({}, gctx, { ix, iy, set: (x, y, t) => L.set(ix + x, iy + y, typeof t === 'string' ? TL[t] : t), prop: (x, y, pr) => { L.props[L.idx(ix + x, iy + y)] = pr; }, sign });
-    if (r === start) { if (intro) intro.g.intro.start(L, r, ictx); L.set(ix + 6, iy + DSY, TL.DEXIT); continue; }
+    if (r === start) { if (intro) intro.g.intro.start(L, r, ictx); for (const g of gimmicks) if (g.start) g.start(L, r, ictx); L.set(ix + 6, iy + DSY, TL.DEXIT); continue; }
     if (r.intro) { intro.g.intro.room(L, r, ictx); continue; }
     if (r.boss) { r.enemies = def.bossParty ? def.bossParty.slice() : [r.boss]; if (d >= 4 && !def.bossParty && pool.length) r.enemies.push(rnd.pick(pool)); r.shutter = true; if (def.bossEye) bossEyeAlcove(L, r, def.bossEye); for (const g of gimmicks) if (g.arena) g.arena(L, r, ictx); continue; }
     const lane = (x, y) => x === 6 || y === 4; // keep the cross through each room's doors clear
@@ -4697,7 +4717,7 @@ function genDungeon(W, d, rnd) {
     r.shutter = (rnd() < 0.25 || r.key) && !r.needsBow; // never seal someone without a bow in with foes across the water
   }
   for (const g of gimmicks) if (g.level) g.level(L, gctx);
-  placeGourds(W, L, d, start, boss);
+  if (def.gourds === 'asked') L.gourdsOnlyAsked = true; placeGourds(W, L, d, start, boss);
   L.gimmicks = def.gimmicks || [];
   L.spawn = { x: start.rx * DSX + 6.5, y: start.ry * DSY + 6.2, a: -Math.PI / 2 };
   L.bossRoom = boss.id;
@@ -4761,7 +4781,9 @@ function migrateSave(s) {
     for (const d of ['d3', 'd6']) { delete s.mods[d]; for (const t of ['cleared', 'taken']) for (const k of Object.keys(s.team[t] || {})) if (k.startsWith(d + ':')) delete s.team[t][k]; for (const t of ['keys', 'maps', 'comps']) if (s.team[t]) delete s.team[t][d]; }
     for (const c in (s.players || {})) { const pl = s.players[c]; if (pl.lvl === 'd3' || pl.lvl === 'd6') pl.respawn = true; }
   }
-  if ((s.v || 1) < 7) { // v7: no bag now means 1 bomb; the old Bramble Keep bag (16) is now the 8 bag
+  if ((s.v || 1) < 7) { // v7: no bag now means 1 bomb; the old Bramble Keep bag (16) is now the 8 bag. Bramble Keep was rebuilt (no keys), so it starts over.
+    delete s.mods.d2; for (const t of ['cleared', 'taken']) for (const k of Object.keys(s.team[t] || {})) if (k.startsWith('d2:')) delete s.team[t][k]; for (const t of ['keys', 'maps', 'comps']) if (s.team[t]) delete s.team[t].d2;
+    for (const c in (s.players || {})) { const pl = s.players[c]; if (pl.lvl === 'd2') pl.respawn = true; }
     for (const c in (s.players || {})) { const pl = s.players[c]; if ((pl.maxBombs || 0) > 8) { pl.items = pl.items || {}; pl.items.bombbag = true; } }
   }
   if (s.tileNames) for (const lvl in s.mods) for (const i in s.mods[lvl]) { const m = s.mods[lvl][i]; const tn = s.tileNames[m[0]]; if (tn && TL[tn] != null) m[0] = TL[tn]; const pn = s.propNames && s.propNames[m[1]]; if (pn) { const pi = PROPS.indexOf(pn); if (pi >= 0) m[1] = pi; } }

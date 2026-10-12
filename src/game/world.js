@@ -503,8 +503,15 @@ function genDungeon(W, d, rnd) {
   let lockList = [...locked].filter(id => !reach.has(id));
   const keySpots = rnd.shuffle(order.filter(r => reach.has(r.id) && r !== start && !r.item && !r.boss && !r.intro));
   while (lockList.length > keySpots.length) { const drop = lockList.find(id => id !== boss.id) || lockList[0]; lockList = lockList.filter(id => id !== drop); }
-  for (let i = 0; i < lockList.length; i++) keySpots[i].key = true;
-  for (const id of lockList) { const r = rooms[id]; if (r.parent) setDoor(r.parent, r, TL.LOCKED, true); }
+  // A powder gourd waits in the room before a wall you must bomb, a little to one side of it (content/gourds.js)
+  const gourdBefore = (from, to) => { const dx = to.rx - from.rx, dy = to.ry - from.ry; (from.gourdAt = from.gourdAt || []).push(dx > 0 ? [8, 5] : dx < 0 ? [4, 5] : dy > 0 ? [5, 6] : [7, 2]); };
+  if (def.noKeys) { // locks become cracked walls (bombs, not keys), and so does the way out of the entrance
+    for (const id of [...locked]) { const r = rooms[id]; if (r.parent) { setDoor(r.parent, r, TL.BRICK_BOMB, true); gourdBefore(r.parent, r); } }
+    const first = start.children[0]; if (first) { setDoor(start, first, TL.BRICK_BOMB, true); gourdBefore(start, first); start.tutorial = true; }
+  } else {
+    for (let i = 0; i < lockList.length; i++) keySpots[i].key = true;
+    for (const id of lockList) { const r = rooms[id]; if (r.parent) setDoor(r.parent, r, TL.LOCKED, true); }
+  }
   if (intro) setDoor(intro.r2, intro.r3, TL.LOCKED, true); // its key waits in the intro room itself, so the usual key rules still hold beyond it
   const mc = rnd.shuffle(order.filter(r => r !== start && !r.boss && !r.item && !r.intro));
   if (mc[0]) mc[0].map = true; if (mc[1]) mc[1].compass = true;
@@ -534,7 +541,7 @@ function genDungeon(W, d, rnd) {
     const ix = r.rx * DSX, iy = r.ry * DSY;
     const sign = (x, y, text) => { L.signText = L.signText || {}; L.signText[L.idx(ix + x, iy + y)] = text; };
     const ictx = Object.assign({}, gctx, { ix, iy, set: (x, y, t) => L.set(ix + x, iy + y, typeof t === 'string' ? TL[t] : t), prop: (x, y, pr) => { L.props[L.idx(ix + x, iy + y)] = pr; }, sign });
-    if (r === start) { if (intro) intro.g.intro.start(L, r, ictx); L.set(ix + 6, iy + DSY, TL.DEXIT); continue; }
+    if (r === start) { if (intro) intro.g.intro.start(L, r, ictx); for (const g of gimmicks) if (g.start) g.start(L, r, ictx); L.set(ix + 6, iy + DSY, TL.DEXIT); continue; }
     if (r.intro) { intro.g.intro.room(L, r, ictx); continue; }
     if (r.boss) { r.enemies = def.bossParty ? def.bossParty.slice() : [r.boss]; if (d >= 4 && !def.bossParty && pool.length) r.enemies.push(rnd.pick(pool)); r.shutter = true; if (def.bossEye) bossEyeAlcove(L, r, def.bossEye); for (const g of gimmicks) if (g.arena) g.arena(L, r, ictx); continue; }
     const lane = (x, y) => x === 6 || y === 4; // keep the cross through each room's doors clear
@@ -560,7 +567,7 @@ function genDungeon(W, d, rnd) {
     r.shutter = (rnd() < 0.25 || r.key) && !r.needsBow; // never seal someone without a bow in with foes across the water
   }
   for (const g of gimmicks) if (g.level) g.level(L, gctx);
-  placeGourds(W, L, d, start, boss);
+  if (def.gourds === 'asked') L.gourdsOnlyAsked = true; placeGourds(W, L, d, start, boss);
   L.gimmicks = def.gimmicks || [];
   L.spawn = { x: start.rx * DSX + 6.5, y: start.ry * DSY + 6.2, a: -Math.PI / 2 };
   L.bossRoom = boss.id;

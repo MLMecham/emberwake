@@ -501,6 +501,38 @@ attempt('bombs and gourds', () => {
   // monks punch them open (until his rework)
   L.props[gi] = PR.GOURD; const m = sim.players.p2; sim.teleport(m, 'd2', gx + 0.5, gy + 1.3, -Math.PI / 2); sim.playerAttack(m, { kind: 'punch' }); __ok(L.props[gi] === PR.NONE, 'a monk punch splits it');
 });
+attempt('bramble keep: no keys, every crack pays', () => {
+  for (const [seed, mode] of [[7319, 'adv'], [1234, 'rogue'], [99, 'rogue'], [4242, 'adv'], [555, 'adv']]) {
+    const W = genWorld(seed, mode); const L = W.levels.d2; const tag = ' (seed ' + seed + ' ' + mode + ')';
+    __ok(!Array.from(L.tiles).includes(TL.LOCKED), 'no locked doors in Bramble Keep' + tag);
+    __ok(!Object.values(L.rooms).some(r => r.key), 'no keys in Bramble Keep' + tag);
+    const rooms = Object.values(L.rooms);
+    // every crack on the way through has a gourd in the room before it
+    for (const r of rooms) for (const c of r.children) {
+      const [x, y] = r.ry === c.ry ? [Math.max(r.rx, c.rx) * DSX, r.ry * DSY + 4] : [r.rx * DSX + 6, Math.max(r.ry, c.ry) * DSY];
+      if (L.get(x, y) !== TL.BRICK_BOMB) continue;
+      let g = false; for (let yy = r.ry * DSY + 1; yy < r.ry * DSY + DSY; yy++) for (let xx = r.rx * DSX + 1; xx < r.rx * DSX + DSX; xx++) if (L.props[L.idx(xx, yy)] === PR.GOURD) g = true;
+      __ok(g, 'a gourd before every crack you must bomb' + tag);
+    }
+    const st = L.startRoom; const first = st.children[0]; __ok(L.get(st.rx * DSX + 6, st.ry * DSY) === TL.BRICK_BOMB || first.ry === st.ry, 'the way out of the entrance is a crack' + tag);
+    __ok(Object.values(L.signText || {}).some(t => /STRIKE THEM LOW/.test(t)), 'the entrance tablet teaches the pommel' + tag);
+    __ok(Object.values(L.signText || {}).some(t => /WE MELTED THE KEYS/.test(t)), 'the hidden tablet' + tag);
+    // every cracked block guards a prize; there are no bare pillars
+    let nooks = 0;
+    for (const r of rooms) for (let yy = 1; yy < DSY; yy++) for (let xx = 1; xx < DSX; xx++) if (L.get(r.rx * DSX + xx, r.ry * DSY + yy) === TL.CRACKED_PILLAR) { nooks++; __ok(r.stash && r.stash.length === 1, 'a cracked block always guards a prize' + tag); }
+    __ok(nooks > 0, 'some rooms have a prize nook' + tag);
+    // breakables only where asked
+    const gourds = Object.keys(L.gourds).length; const walls = Array.from(L.tiles).filter(t => t === TL.BRICK_BOMB).length; __ok(gourds >= 1 && gourds <= walls + 1, 'not too many gourds (' + gourds + ')' + tag);
+  }
+  // the whole loop: pommel a gourd, take the bomb, blow the crack
+  const sim = freshSim(); const p = sim.players.p1; p.god = false; p.items = {}; p.bombs = 0; p.sword = 1; const L = sim.W.levels.d2; const st = L.startRoom;
+  const gi = +Object.keys(L.gourds).find(i => dungeonRoomAt(L, i % L.w, Math.floor(i / L.w)) === st); const gx = gi % L.w, gy = Math.floor(gi / L.w);
+  sim.teleport(p, 'd2', gx + 0.5, gy + 1.4, -Math.PI / 2); sim.tick(1 / 60); sim.playerAttack(p, { kind: 'pommel' });
+  const pick = sim.ents.find(e => e.k === 'pick' && e.item === 'bomb'); __ok(pick, 'the gourd drops a bomb');
+  p.x = pick.x; p.y = pick.y; run(sim, 0.3); __ok(p.bombs === 1, 'picked up: one bomb');
+  const dx = st.rx * DSX + 6, dy = st.ry * DSY; sim.teleport(p, 'd2', dx + 0.5, dy + 1.5, -Math.PI / 2); sim.useItem(p, 'bombs', {}); run(sim, 2);
+  __ok(L.get(dx, dy) !== TL.BRICK_BOMB, 'the bomb opens the way out of the entrance');
+});
 attempt('tideglass opening', () => {
   for (const [seed, mode] of [[7319, 'adv'], [1234, 'rogue'], [99, 'rogue'], [4242, 'adv']]) {
     const W = genWorld(seed, mode); const D = W.levels.d6; const st = D.startRoom; const r2 = st.children[0]; const r3 = r2.children[0];

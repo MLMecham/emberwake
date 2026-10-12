@@ -7,6 +7,8 @@
 // Optional dungeons (10+) can also set: mapLabel (letter on the maps), bossDrop (item the boss leaves),
 // bossParty (several bosses at once, instead of the single bossOf one).
 // bossEye: [item ids] puts an eye in the boss room's wall; an arrow opens a niche holding those items.
+// noKeys: true turns every lock (and the way out of the entrance) into a cracked wall with a gourd before it; no keys at all.
+// gourds: 'asked' grows breakables only where the dungeon's gimmicks ask for them (room.gourdAt), not at random.
 // Any dungeon can set intro: '<gimmick id>' to use that gimmick's hand-built first two rooms (the second holds the key onward).
 'use strict';
 defineDungeon(1, {
@@ -24,7 +26,9 @@ defineDungeon(1, {
   lore: ['THE WYRMLING OF THIS HOLLOW HATCHED FROM A FROST-BLUE EGG. ITS MOTHER SLEEPS FAR TO THE WEST, BEYOND THE PASS.'],
 });
 defineDungeon(2, {
-  name: 'BRAMBLE KEEP', item: 'bombbag', gimmicks: ['cracked'], loops: 0.4, bombLoops: 1,
+  // No keys: its keepers melted them and brought the halls down. Every lock is a cracked wall you bomb (noKeys), with a powder
+  // gourd in the room before it, so a pommel strike always gets you a bomb. Optional cracks hide prizes (gimmicks/cracked.js).
+  name: 'BRAMBLE KEEP', item: 'bombbag', gimmicks: ['cracked'], loops: 0.25, bombLoops: 0, noKeys: true, gourds: 'asked',
   bossEye: ['quiver', 'loadedshot'], // an eye in the boss room's wall hides these until someone comes back with a bow
   theme: { wall: [118, 110, 104], mortar: [52, 46, 44], hi: [150, 142, 134], floor: [104, 70, 60], edge: [58, 36, 30], fhi: [130, 90, 76], trim: [120, 50, 40] },
   shape: [ // a key
@@ -37,7 +41,7 @@ defineDungeon(2, {
     '...##H..',
     '...S....',
   ],
-  lore: ['THE KEEP WAS BUILT TO GUARD AN EMBER SHARD. ITS BUILDERS CRACKED EVERY WALL THEY COULD NOT AFFORD TO FINISH.'],
+  lore: ['WE MELTED THE KEYS. WE DROPPED THE SKY. LET HIM DIG.'],
 });
 defineDungeon(3, {
   name: 'THE SUNKEN STAIR', item: 'bow', gimmicks: ['drain'], secret: 'EYE', loops: 0.35, bombLoops: 0.3,
