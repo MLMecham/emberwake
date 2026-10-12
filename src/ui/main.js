@@ -255,7 +255,7 @@ function updateLocal(dt, inp) {
   // low hp beep
   if (me.hp <= 4 && me.hp > 0) { Lc.lowT -= dt; if (Lc.lowT <= 0) { Lc.lowT = 0.5; sfx('lowhp'); } }
   // music
-  let track = L.kind === 'ow' ? 'ow' : L.kind === 'cave' ? 'cave' : L.dnum === 10 ? 'frost' : L.dnum === 11 ? 'fire' : L.dnum === 12 ? 'hearth' : (L.dnum >= 5 && L.dnum <= 8 ? 'deep' : 'dungeon');
+  let track = L.kind === 'ow' ? 'ow' : L.kind === 'cave' ? 'cave' : L.kind === 'tunnel' ? (((dungeonRoomAt(L, Lc.x, Lc.y) || {}).miniboss && snap.en.some(e => e[8] >= 0)) ? 'boss' : L.tunnelBiome === 'snow' ? 'tunnel_cold' : 'tunnel_ember') : L.dnum === 10 ? 'frost' : L.dnum === 11 ? 'fire' : L.dnum === 12 ? 'hearth' : (L.dnum >= 5 && L.dnum <= 8 ? 'deep' : 'dungeon');
   if (L.kind === 'ow') { const rg = owRegionAt(L, Lc.x, Lc.y); if (rg.biome === 'snow') track = 'frost'; else if (rg.biome === 'ash') track = 'fire'; }
   if (L.kind === 'dungeon') { const r = dungeonRoomAt(L, Lc.x, Lc.y); if (r && r.boss && snap.en.some(e => e[8] >= 0)) track = L.dnum === 9 ? 'final' : L.dnum >= 10 ? 'dragon' : 'boss'; }
   musicPlay(track);

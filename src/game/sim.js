@@ -212,6 +212,7 @@ class Sim {
   teleport(p, lvl, x, y, a) {
     p.lvl = lvl; p.x = x; p.y = y; p.a = a; this.ev({ t: 'tp', pid: p.id, lvl, x, y, a });
     this.initLevel(lvl);
+    if (this.W.levels[lvl] && this.W.levels[lvl].kind === 'tunnel') { const T = this.W.levels[lvl]; this.ev({ t: 'title', pid: p.id, text: T.label, sub: T.tunnelBiome === 'snow' ? 'TO THE FROZEN REACH' : 'TO THE CINDER WASTES' }); }
     if (lvl === 'dbg') { this.ev({ t: 'title', pid: p.id, text: 'TEST ZONE', sub: 'DEBUG' }); // and its training dummies (world.js genTestZone L.dummies)
       for (const [type, x, y] of (this.W.levels.dbg.dummies || [])) if (!this.ents.some(e => e.k === 'en' && e.lvl === 'dbg' && e.type === type && !e.dead)) { const d = this.spawnEnemy(type, 'dbg', x, y, {}); d.spawnFx = 0; d.f = Math.PI / 2; } }
     else if (lvl[0] === 'd') { const d = +lvl.slice(1); this.ev({ t: 'title', pid: p.id, text: d <= 9 ? 'LEVEL-' + d : dungeonName(d), sub: d <= 9 ? dungeonName(d) : (d === 12 ? 'THE LAST FLAME' : 'OPTIONAL DUNGEON') }); }
@@ -236,11 +237,12 @@ class Sim {
     const px = idx % L.w, py = Math.floor(idx / L.w);
     if (Math.abs(p.x - (px + 0.5)) > 1.8 || Math.abs(p.y - (py + 0.5)) > 1.8) return;
     this.sfx('stairs', p.lvl);
-    this.teleport(p, T.id, T.spawn.x, T.spawn.y, T.spawn.a);
+    const at = portal.at || T.spawn; this.teleport(p, T.id, at.x, at.y, at.a); // portal.at: a way in somewhere other than the level's start (the tunnels' far ends)
   }
   tryExit(p) {
     const L = this.W.levels[p.lvl]; if (!L.exit) return;
-    this.teleport(p, L.exit.lvl, L.exit.x, L.exit.y, L.exit.a);
+    let ex = L.exit; if (L.exits) { let best = 1e9; for (const e of L.exits) { const d = dist2(p.x, p.y, e.x + 0.5, e.y + 0.5); if (d < best) { best = d; ex = e.to; } } } // a level with several ways out: the nearest one
+    this.teleport(p, ex.lvl, ex.x, ex.y, ex.a);
   }
   tryUnlock(p, idx) {
     const L = this.W.levels[p.lvl]; if (L.tiles[idx] !== TL.LOCKED) return;
@@ -355,7 +357,7 @@ class Sim {
   // ---- groups (rooms / regions) ----
   groupKeyFor(p) {
     const L = this.W.levels[p.lvl];
-    if (L.kind === 'dungeon') { const r = dungeonRoomAt(L, p.x, p.y); return r ? { key: L.id + ':' + r.id, room: r, L } : null; }
+    if (L.kind === 'dungeon' || L.kind === 'tunnel') { const r = dungeonRoomAt(L, p.x, p.y); return r ? { key: L.id + ':' + r.id, room: r, L } : null; }
     if (L.kind === 'ow') { const r = owRegionAt(L, p.x, p.y); return { key: 'ow:' + (r.ry * RW + r.rx), room: r, L }; }
     return null;
   }
@@ -363,7 +365,7 @@ class Sim {
     const gk = this.groupKeyFor(p); if (!gk) return;
     const { key, room, L } = gk; p.room = key;
     if (this.groups[key]) { this.groups[key].seen = this.time; return; }
-    if (this.team.cleared[key] && L.kind === 'dungeon') { this.groups[key] = { key, ents: [], cleared: true, seen: this.time, room, lvl: L.id }; this.roomStatics(L, room, key, true); return; }
+    if (this.team.cleared[key] && (L.kind === 'dungeon' || L.kind === 'tunnel')) { this.groups[key] = { key, ents: [], cleared: true, seen: this.time, room, lvl: L.id }; this.roomStatics(L, room, key, true); return; }
     if (L.kind === 'ow' && this.team.clearedAt[key] && this.time - this.team.clearedAt[key] < 90) { this.groups[key] = { key, ents: [], cleared: true, seen: this.time, room, lvl: L.id }; return; }
     const g = { key, ents: [], cleared: false, seen: this.time, room, lvl: L.id, mul: 1 }; this.groups[key] = g;
     const b = roomBounds(L, room);
@@ -394,7 +396,7 @@ class Sim {
       const e = this.spawn({ k: 'en', type: s.type, lvl: L.id, x: s.x, y: s.y, hp: Math.ceil(enemyDef(s.type).hp * tierMul), f: Math.PI / 2, b, g: key, st: 0, tm: 0.5, stun: 0, hurt: 0, spawnFx: 0, dmgMul: L.kind === 'dungeon' ? Math.ceil(Math.min(9, L.dnum) / 3) : 1, dormant: true });
       e.maxHp = e.hp; g.ents.push(e);
     }
-    if (L.kind === 'dungeon') this.roomStatics(L, room, key, false);
+    if (L.kind === 'dungeon' || L.kind === 'tunnel') this.roomStatics(L, room, key, false);
     if (!g.ents.length) this.groupCleared(g, true);
   }
   roomStatics(L, room, key, cleared) {
@@ -442,7 +444,7 @@ class Sim {
   groupCleared(g, silent) {
     g.cleared = true; this.team.cleared[g.key] = true; this.team.clearedAt[g.key] = this.time;
     const L = this.W.levels[g.lvl];
-    if (L.kind === 'dungeon') {
+    if (L.kind === 'dungeon' || L.kind === 'tunnel') {
       const room = g.room;
       if (!silent && (room.key || room.map || room.compass || room.boss)) this.sfx('appear', L.id);
       this.roomRewards(L, room, g.key);

@@ -498,7 +498,7 @@ function owSpot(world, p) {
   const L = world.levels[p[1]]; if (!L || !L.exit || L.exit.lvl !== 'ow') return null;
   return { x: L.exit.x, y: L.exit.y - 1.1, inside: true };
 }
-function caveLabel(L) { const c = Content.caves[L.caveKind]; return (c && c.name) || 'CAVE'; }
+function caveLabel(L) { if (L.label) return L.label; const c = Content.caves[L.caveKind]; return (c && c.name) || 'CAVE'; }
 // Dungeon map rules: the map shows the main layout only. Secret rooms, and walls you can bomb or open, stay off it until
 // someone has been through them. The compass marks the boss room on its own, map or no map.
 function mapLinkShown(st, L, r, o) {
@@ -575,7 +575,7 @@ function drawBigMap(st) {
   const Lo = st.world.levels.ow; const seen = st.seenOW;
   const sc = Math.max(1, Math.min(Math.floor((W - 8) / Lo.w), Math.floor((H - 24) / Lo.h)));
   const x0 = Math.round(W / 2 - Lo.w * sc / 2), y0 = 16;
-  textC(L.kind === 'cave' ? 'THE WILDS - YOU ARE IN: ' + caveLabel(L) : 'THE WILDS', W / 2, 4, rgb(255, 220, 120));
+  textC(L.kind === 'cave' || L.kind === 'tunnel' ? 'THE WILDS - YOU ARE IN: ' + caveLabel(L) : 'THE WILDS', W / 2, 4, rgb(255, 220, 120));
   for (let y = 0; y < Lo.h; y++) for (let x = 0; x < Lo.w; x++) { const i = y * Lo.w + x; if (!seen[i]) continue; rect(x0 + x * sc, y0 + y * sc, sc, sc, mmColor(Lo.tiles[i], Lo.props[i])); }
   for (let d = 1; d <= NDUNGEONS(); d++) { const g = st.world.dungeons[d]; if (!g || !seen[g.y * Lo.w + g.x]) continue; const done = st.team.done.includes(d); const lb = d <= 9 ? String(d) : (Content.dungeons[d].mapLabel || String(d)); text(lb, x0 + g.x * sc - 2, y0 + g.y * sc - 8, done ? rgb(120, 255, 120) : d >= 10 ? rgb(170, 140, 255) : rgb(255, 120, 80)); }
   for (const p of st.players) {

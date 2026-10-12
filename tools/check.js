@@ -53,11 +53,21 @@ function solveDungeon(D) {
 for (let s = 1; s <= SEEDS; s++) {
   const seed = s === 1 ? 7319 : s * 7919; const W = genWorld(seed, 'rogue'); const L = W.levels.ow;
   for (let d = 1; d <= NDUNGEONS(); d++) { const D = W.levels['d' + d]; __ok(solveDungeon(D), 'seed ' + seed + ': dungeon ' + d + ' has unreachable rooms'); __ok(!!W.dungeons[d], 'seed ' + seed + ': dungeon ' + d + ' gate missing'); }
-  const seen = new Uint8Array(L.w * L.h); const q = [[Math.floor(L.spawn.x), Math.floor(L.spawn.y)]]; seen[q[0][1] * L.w + q[0][0]] = 1;
-  while (q.length) { const [x, y] = q.pop(); for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { const nx = x + dx, ny = y + dy, i = ny * L.w + nx; if (seen[i] || L.solidAt(nx + 0.5, ny + 0.5)) continue; seen[i] = 1; q.push([nx, ny]); } }
+  // walking the Wilds; the frontier tunnels join their two cave mouths (if the tunnel itself can be walked end to end)
+  const tunnelOk = {}; for (const b of ['snow', 'ash']) { const T = W.levels['t' + b]; __ok(!!T && T.exits.length === 2, 'seed ' + seed + ': the ' + b + ' tunnel exists with two ways out'); if (!T) continue;
+    const sn = new Uint8Array(T.w * T.h); const s0 = [T.exits[0].x, T.exits[0].y]; const qq = [s0]; sn[s0[1] * T.w + s0[0]] = 1;
+    while (qq.length) { const [x, y] = qq.pop(); for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { const nx = x + dx, ny = y + dy, i = ny * T.w + nx; if (sn[i] || T.solidAt(nx + 0.5, ny + 0.5) || TINFO[T.get(nx, ny)].hurt) continue; sn[i] = 1; qq.push([nx, ny]); } }
+    tunnelOk[b] = !!sn[T.exits[1].y * T.w + T.exits[1].x]; __ok(tunnelOk[b], 'seed ' + seed + ': the ' + b + ' tunnel can be walked end to end (no lava in the way)');
+    __ok(Object.keys(T.rooms).length >= 10, 'seed ' + seed + ': the ' + b + ' tunnel has 10+ rooms'); }
+  const flood = (opts) => { const seen = new Uint8Array(L.w * L.h); const q = [[Math.floor(L.spawn.x), Math.floor(L.spawn.y)]]; seen[q[0][1] * L.w + q[0][0]] = 1;
+    const jumps = []; for (const b of ['snow', 'ash']) { const ps = L.passes[b]; if (ps && ps.mouths && tunnelOk[b]) jumps.push(ps.mouths.map(m => [Math.floor(m.x), Math.floor(m.y)])); }
+    while (q.length) { const [x, y] = q.pop();
+      for (const pair of jumps) for (let k = 0; k < 2; k++) if (pair[k][0] === x && pair[k][1] === y) { const [ox, oy] = pair[1 - k], oi = oy * L.w + ox; if (!seen[oi]) { seen[oi] = 1; q.push([ox, oy]); } } // through the tunnel
+      for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { const nx = x + dx, ny = y + dy, i = ny * L.w + nx; if (seen[i] || L.solidAt(nx + 0.5, ny + 0.5, opts)) continue; seen[i] = 1; q.push([nx, ny]); } }
+    return seen; };
+  const seen = flood();
   // with the raft (level 6's treasure) everything is reachable; without it, level 7's island is not
-  const seenR = new Uint8Array(L.w * L.h); const qr = [[Math.floor(L.spawn.x), Math.floor(L.spawn.y)]]; seenR[qr[0][1] * L.w + qr[0][0]] = 1;
-  while (qr.length) { const [x, y] = qr.pop(); for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { const nx = x + dx, ny = y + dy, i = ny * L.w + nx; if (seenR[i] || L.solidAt(nx + 0.5, ny + 0.5, { raft: true })) continue; seenR[i] = 1; qr.push([nx, ny]); } }
+  const seenR = flood({ raft: true });
   for (let d = 1; d <= NDUNGEONS(); d++) { const g = W.dungeons[d]; if (!g) continue; const gi = (g.y + 1) * L.w + g.x;
     if (d === 7) { __ok(!!seenR[gi], 'seed ' + seed + ': island gate 7 unreachable even with the raft'); __ok(!seen[gi], 'seed ' + seed + ': island gate 7 reachable without the raft'); }
     else __ok(!!seen[gi], 'seed ' + seed + ': gate ' + d + ' unreachable'); }
@@ -695,6 +705,28 @@ attempt('stronger knights', () => {
   k.stripped = {}; sim.playerAttack(p, { kind: 'pommel' }); __ok(k.disarmed, 'then the shield can be knocked away');
   __ok(['knight_sword', 'knight_armored', 'knight_champion'].every(id => Content.enemies[id]), 'all three new knights exist');
   __ok(Content.hints.some(t => /GLINT OF HIS SWORD/.test(t)), 'the old men warn about sword knights');
+});
+attempt('frontier tunnels', () => {
+  const sim = freshSim(); const p = sim.players.p1; p.god = true; const OW = sim.W.levels.ow;
+  for (const b of ['snow', 'ash']) {
+    const ps = OW.passes[b]; const T = sim.W.levels['t' + b]; const [mIn, mOut] = ps.mouths;
+    // the cave mouth on the main-land side leads to the near end; the step out at the far end leads to the frontier side
+    sim.teleport(p, 'ow', mIn.x, mIn.y, mIn.a); sim.tryEnter(p, mIn.idx); __ok(p.lvl === T.id && Math.abs(p.x - T.spawn.x) < 0.01, b + ': in at the near end');
+    const far = T.exits[1]; p.x = far.x + 0.5; p.y = far.y + 0.5; sim.tryExit(p); __ok(p.lvl === 'ow' && Math.abs(p.x - mOut.x) < 0.01, b + ': out on the frontier side');
+    sim.teleport(p, 'ow', mOut.x, mOut.y, mOut.a); sim.tryEnter(p, mOut.idx); __ok(p.lvl === T.id && Math.hypot(p.x - (far.x + 0.5), p.y - (far.y + 0.5)) < 2, b + ': back in at the far end');
+    const near = T.exits[0]; p.x = near.x + 0.5; p.y = near.y + 0.5; sim.tryExit(p); __ok(p.lvl === 'ow' && Math.abs(p.x - mIn.x) < 0.01, b + ': and out where you came in');
+    // it gets colder (hotter) toward the frontier end, and the foes change
+    const rooms = Object.values(T.rooms).filter(r => !r.side).sort((a, c) => a.heat - c.heat);
+    const themed = (r) => { let n = 0, all = 0; for (let y = r.ry * DSY; y <= r.ry * DSY + DSY; y++) for (let x = r.rx * DSX; x <= r.rx * DSX + DSX; x++) { const t = T.get(x, y); all++; if ([TL.ICEWALL, TL.SNOW, TL.ICE, TL.BASALT, TL.ASH, TL.LAVA].includes(t)) n++; } return n / all; };
+    __ok(themed(rooms[rooms.length - 1]) > themed(rooms[1]) + 0.3, b + ': the far end is much ' + (b === 'snow' ? 'colder' : 'hotter') + ' (' + themed(rooms[1]).toFixed(2) + ' -> ' + themed(rooms[rooms.length - 1]).toFixed(2) + ')');
+    __ok(Object.values(T.rooms).filter(r => r.side).every(r => r.reward), b + ': every side room guards a prize');
+    const mbr = Object.values(T.rooms).find(r => r.miniboss); __ok(mbr && mbr.enemies.length === 2 && mbr.enemies.every(t => enemyDef(t).boss) && mbr.reward === 'hpiece', b + ': a pair of wyrmlings guards a heart piece');
+    __ok(Object.values(T.rooms).every(r => r.enemies.every(t => t !== 'skeleton' && t !== 'slime')), b + ': skeletons here are always armored');
+    sim.teleport(p, T.id, mbr.rx * DSX + 1.5, DSY + 4.5, 0); sim.tick(1 / 60); __ok(sim.ents.filter(e => e.k === 'en' && e.lvl === T.id && !e.dead && enemyDef(e.type).boss).length === 2, b + ': both wyrmlings show up together');
+    for (const e of sim.ents) if (e.k === 'en' && e.lvl === T.id) e.dead = true; sim.tick(1 / 60); sim.tick(1 / 60); __ok(sim.ents.some(e => e.k === 'pick' && e.item === 'hpiece' && e.lvl === T.id), b + ': beating them drops the heart piece');
+    // walking in wakes a room's foes
+    const mid = rooms[6]; sim.teleport(p, T.id, mid.rx * DSX + 6.5, DSY + 4.5, 0); sim.tick(1 / 60); __ok(sim.ents.some(e => e.k === 'en' && e.lvl === T.id && !e.dead), b + ': foes in the rooms');
+  }
 });
 attempt('tideglass opening', () => {
   for (const [seed, mode] of [[7319, 'adv'], [1234, 'rogue'], [99, 'rogue'], [4242, 'adv']]) {

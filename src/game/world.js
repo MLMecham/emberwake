@@ -85,9 +85,84 @@ function genWorld(seed, mode) {
   const W = { seed, mode, levels: {}, caveCount: 0, dungeons: [] };
   const rnd = mulberry32(seed);
   genOverworld(W, rnd);
+  for (const biome of ['snow', 'ash']) genTunnel(W, biome, mulberry32(seed * 53 + (biome === 'snow' ? 11 : 29))); // the caves into the frontier lands
   for (let d = 1; d <= NDUNGEONS(); d++) genDungeon(W, d, mulberry32(seed * 31 + d * 977));
   genTestZone(W);
   return W;
+}
+
+// ---------- FRONTIER TUNNELS ----------
+// The mountain pass into each frontier land is a cave instead of an open gap: a mostly straight run of TUNNEL_LEN rooms
+// with a few side rooms (each guarding a little prize) and a miniboss pair of wyrmlings near the far end, getting colder (or hotter) room by room: ice walls, snow and ice
+// patches toward the frozen end; basalt, ash and lava pools toward the burning end. Enemies shift from cave foes to the
+// frontier's own along the way. Level kind 'tunnel' (rooms like a dungeon's, on a wider grid: L.gw).
+// A cave mouth on each side of the old pass leads in at the matching end (portal.at), and the EXIT step at each end leads out
+// beside that mouth (L.exits). Its own random stream, so the rest of the land doesn't move.
+const TUNNEL_LEN = 12;
+function genTunnel(W, biome, rnd) {
+  const OW = W.levels.ow; const ps = OW.passes && OW.passes[biome]; if (!ps) return;
+  const snow = biome === 'snow'; const gw = TUNNEL_LEN; const w = gw * DSX + 1, h = 3 * DSY + 1;
+  const L = new Level('t' + biome, 'tunnel', w, h); W.levels[L.id] = L; L.gw = gw; L.tunnelBiome = biome; L.label = snow ? 'THE COLD ROAD' : 'THE EMBER ROAD'; L.theme = snow ? 'd10' : 'd11'; L.signText = {};
+  for (let i = 0; i < w * h; i++) L.tiles[i] = TL.CWALL;
+  const rooms = {}; const mk = (rx, ry) => { const r = { rx, ry, id: ry * gw + rx, links: {}, enemies: [], children: [], tier: 2 }; rooms[r.id] = r; return r; };
+  // the run: room 0 at the main-land end, room gw-1 at the frontier end (west for the snow, east for the ash)
+  const colOf = (i) => snow ? gw - 1 - i : i; const main = [];
+  for (let i = 0; i < gw; i++) main.push(mk(colOf(i), 1));
+  const sides = []; const cols = rnd.shuffle([2, 3, 4, 5, 6, 7, 8, 9]).slice(0, 4).sort((a, b) => a - b);
+  cols.forEach((i, k) => { const r = mk(colOf(i), k % 2 ? 0 : 2); r.side = true; r.from = main[i]; sides.push(r); });
+  for (const r of Object.values(rooms)) for (let y = r.ry * DSY + 1; y < r.ry * DSY + DSY; y++) for (let x = r.rx * DSX + 1; x < r.rx * DSX + DSX; x++) L.set(x, y, TL.CFLOOR);
+  const heat = (r) => (r.side ? main.indexOf(r.from) : main.indexOf(r)) / (gw - 1); // 0 at the way in, 1 at the frontier
+  // doors: along the run (a little up or down so it isn't a perfect straight line), and up or down into the side rooms
+  for (let i = 0; i < gw - 1; i++) { const a = main[i], b = main[i + 1]; const x = Math.max(a.rx, b.rx) * DSX, c = DSY + 4 + rnd.range(-1, 1); for (let y = c - 1; y <= c + 1; y++) L.set(x, y, TL.CFLOOR); a.links[b.id] = b.links[a.id] = 1; a.children.push(b); }
+  for (const r of sides) { const y = r.ry === 0 ? DSY : 2 * DSY; for (let x = r.rx * DSX + 5; x <= r.rx * DSX + 7; x++) L.set(x, y, TL.CFLOOR); r.links[r.from.id] = r.from.links[r.id] = 1; }
+  // the look, room by room
+  for (const r of Object.values(rooms)) {
+    const t = heat(r), x0 = r.rx * DSX, y0 = r.ry * DSY;
+    const lane = (x, y) => (r.side ? x >= x0 + 4 && x <= x0 + 8 : y >= y0 + 3 && y <= y0 + 5); // keep the way through clear
+    if (!r.side && rnd() < 0.6) for (let k = 0; k < 2 + rnd.int(3); k++) { const x = x0 + 2 + rnd.int(9), y = y0 + (rnd() < 0.5 ? 2 : 6); if (!lane(x, y)) L.set(x, y, TL.CWALL); } // a few rocks
+    for (let y = y0; y <= y0 + DSY; y++) for (let x = x0; x <= x0 + DSX; x++) {
+      const i = L.idx(x, y); const tile = L.tiles[i];
+      if (tile === TL.CWALL) { if (rnd() < t * 1.1 - 0.05) L.tiles[i] = snow ? TL.ICEWALL : TL.BASALT; continue; }
+      if (tile !== TL.CFLOOR) continue;
+      if (rnd() < t * 0.8 - 0.1) L.tiles[i] = snow ? TL.SNOW : TL.ASH;
+    }
+    if (t > 0.45 && !r.side) { // ice sheets / lava pools, off the path
+      const n = 1 + Math.floor(t * 3); for (let k = 0; k < n; k++) { const x = x0 + 2 + rnd.int(8), y = y0 + (rnd() < 0.5 ? 1 : 6);
+        for (const [dx, dy] of [[0, 0], [1, 0], [0, 1], [1, 1]]) { const xx = x + dx, yy = y + dy; if (L.get(xx, yy) === TL.CFLOOR || L.get(xx, yy) === TL.SNOW || L.get(xx, yy) === TL.ASH) { if (!lane(xx, yy) && (snow || dx + dy < 2)) L.set(xx, yy, snow ? TL.ICE : TL.LAVA); } } }
+    }
+  }
+  // who lives where: cave foes near the way in, the frontier's own deeper in. The two end rooms are quiet.
+  // bats and armored skeletons (never plain ones: armor 1-3 at random) near the way in, the frontier's own deeper in
+  const early = ['bat', 'bat', 'skeleton_a1', 'skeleton_a2', 'skeleton_a3'], late = snow ? ['frostling', 'frostling', 'snowwolf'] : ['cinderling', 'cinderling', 'magmite'];
+  for (const r of Object.values(rooms)) r.heat = heat(r);
+  main.forEach((r, i) => { const t = heat(r); r.tier = 2 + Math.round(t); if (i === 0 || i === gw - 1) return; const n = 2 + rnd.int(2); for (let k = 0; k < n; k++) r.enemies.push(rnd.pick(rnd() < t ? late : early)); });
+  // the miniboss: two wyrmlings at once (Mossy Hollow's frost pair on the cold road, Emberforge's magma pair on the ember road),
+  // two rooms before the far end. Beat them for a heart piece.
+  const mb = main[gw - 3]; mb.enemies = snow ? ['wyrm_frost', 'wyrm_frost'] : ['wyrm', 'wyrm']; mb.reward = 'hpiece'; mb.miniboss = true;
+  for (const r of sides) { const t = heat(r); r.tier = 2 + Math.round(t); r.reward = rnd.pick(['gems30', 'heart', 'bomb', 'gems50', 'arrows']); for (let k = 0; k < 2; k++) r.enemies.push(rnd.pick(rnd() < t ? late : early)); }
+  L.rooms = rooms; L.startRoom = main[0];
+  // the ends: an archway out at each end, with the step in front of it
+  const endAt = (r, frontier) => { const outward = (frontier ? (snow ? -1 : 1) : (snow ? 1 : -1)); const x = outward < 0 ? r.rx * DSX : (r.rx + 1) * DSX; const y = DSY + 4; L.set(x, y, TL.CEXIT); L.set(x - outward, y, TL.EXIT); return { x: x - outward, y, inX: x - outward * 2 + 0.5, a: outward < 0 ? 0 : Math.PI }; };
+  const inEnd = endAt(main[0], false), outEnd = endAt(main[gw - 1], true);
+  L.spawn = { x: inEnd.inX, y: inEnd.y + 0.5, a: inEnd.a };
+  L.sign = null; const signAt = (r, text) => { const si = L.idx(r.rx * DSX + 6, DSY + 2); L.props[si] = PR.SIGN; L.signText[si] = text; };
+  signAt(main[0], snow ? 'THE COLD ROAD. RIMEFANG HOLLOW AND THE FROZEN REACH LIE AT ITS FAR END. THE DEEPER YOU GO, THE COLDER IT GETS.' : 'THE EMBER ROAD. THE CINDER WASTES LIE AT ITS FAR END. THE DEEPER YOU GO, THE HOTTER IT GETS.');
+  // close the old open pass and put a cave mouth on each side of it
+  const bx = Math.max(ps.fx, ps.inner) * RSX; const wallT = snow ? TL.PEAKS : TL.FIREPEAKS; const dirIn = ps.inner > ps.fx ? 1 : -1;
+  for (let y = ps.ry * RSY + 1; y < ps.ry * RSY + RSY; y++) if (!TINFO[OW.get(bx, y)].solid) OW.set(bx, y, wallT);
+  for (const r of OW.regions) if (r.rx === ps.inner || r.rx === ps.fx) r.doors = r.doors.filter(([x, y]) => !(Math.abs(x - bx) <= 1 && Math.floor(y / RSY) === ps.ry));
+  const mouth = (side, y0) => { // side: +1 into the main land, -1 into the frontier; returns where you stand in front of it
+    let y = y0; for (let k = 0; k < 4 && OW.portals[OW.idx(bx + side, y)]; k++) y++;
+    const mx = bx + side; OW.set(mx, y, TL.CAVE); OW.set(mx, y - 1, wallT); OW.set(mx, y + 1, wallT);
+    const fx = mx + side; if (TINFO[OW.get(fx, y)].solid) OW.set(fx, y, snow ? TL.SNOW : TL.ASH); OW.props[OW.idx(fx, y)] = 0;
+    return { idx: OW.idx(mx, y), x: fx + 0.5, y: y + 0.5, a: side > 0 ? 0 : Math.PI };
+  };
+  const mIn = mouth(dirIn, ps.ry * RSY + 3), mOut = mouth(-dirIn, ps.ry * RSY + 6);
+  OW.portals[mIn.idx] = { to: L.id, at: { x: L.spawn.x, y: L.spawn.y, a: L.spawn.a } };
+  OW.portals[mOut.idx] = { to: L.id, at: { x: outEnd.inX, y: outEnd.y + 0.5, a: outEnd.a } };
+  L.exits = [{ x: inEnd.x, y: inEnd.y, to: { lvl: 'ow', x: mIn.x, y: mIn.y, a: mIn.a } }, { x: outEnd.x, y: outEnd.y, to: { lvl: 'ow', x: mOut.x, y: mOut.y, a: mOut.a } }];
+  L.exit = L.exits[0].to;
+  ps.tunnel = L.id; ps.mouths = [mIn, mOut];
 }
 
 // ---------- DEBUG TEST ZONE ----------
@@ -599,10 +674,10 @@ function bossEyeAlcove(L, r, items) {
   L.eyeLinks = L.eyeLinks || {}; L.eyeLinks[at(9, 2)] = { kind: 'seal', opens: [at(10, 3)], openTo: TL.DFLOOR, text: 'THE GREAT EYE BLINKS... A NICHE OPENS IN THE WALL.' };
   r.stash = items.map((item, i) => ({ item, x: 10.5 + (i % 2), y: 1.5 + Math.floor(i / 2) }));
 }
-function dungeonRoomAt(L, x, y) { const rx = Math.floor(x / DSX), ry = Math.floor(y / DSY); return L.rooms[ry * DGW + rx]; }
+function dungeonRoomAt(L, x, y) { const rx = Math.floor(x / DSX), ry = Math.floor(y / DSY); return L.rooms[ry * (L.gw || DGW) + rx]; } // L.gw: a wider room grid (the frontier tunnels)
 function owRegionAt(L, x, y) { const rx = clamp(Math.floor(x / RSX), 0, RW - 1), ry = clamp(Math.floor(y / RSY), 0, RH - 1); return L.regions[ry * RW + rx]; }
 function roomBounds(L, room) {
-  if (L.kind === 'dungeon') return { x0: room.rx * DSX + 1, y0: room.ry * DSY + 1, x1: room.rx * DSX + DSX, y1: room.ry * DSY + DSY };
+  if (L.kind === 'dungeon' || L.kind === 'tunnel') return { x0: room.rx * DSX + 1, y0: room.ry * DSY + 1, x1: room.rx * DSX + DSX, y1: room.ry * DSY + DSY };
   if (L.kind === 'ow') return { x0: room.rx * RSX + 1, y0: room.ry * RSY + 1, x1: room.rx * RSX + RSX, y1: room.ry * RSY + RSY };
   return { x0: 1, y0: 1, x1: L.w - 1, y1: L.h - 1 };
 }
