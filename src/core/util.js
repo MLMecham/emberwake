@@ -33,6 +33,6 @@ function uid() { return _uid++; }
 
 // Developer names: only heroes with these names can use debug mode (title-screen DEBUG button, pause-menu toggle, Warp Stone).
 const DEV_NAMES = ['MITCH', 'LOGAN'];
-const CANDLE_COOLDOWN = 4; // seconds between candle flames (items/candle.js)
+const CANDLE_COOLDOWN = 2.5; // seconds between candle flames (items/candle.js)
 const ARROWS_START = 15; // arrows a hero can carry before any quiver (items/techniques.js)
 function isDevName(name) { return DEV_NAMES.includes(String(name || '').trim().toUpperCase()); }

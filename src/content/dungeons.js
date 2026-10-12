@@ -41,6 +41,7 @@ defineDungeon(2, {
 });
 defineDungeon(3, {
   name: 'THE SUNKEN STAIR', item: 'bow', gimmicks: ['drain'], secret: 'EYE', loops: 0.35, bombLoops: 0.3,
+  itemSpots: [[0, 0], [3, 0], [6, 0]], // the bow waits at the tip of a trident prong, never right by the door
   theme: { wall: [44, 104, 110], mortar: [18, 46, 52], hi: [70, 140, 146], floor: [56, 96, 92], edge: [26, 54, 52], fhi: [80, 124, 118], trim: [40, 80, 90] },
   shape: [ // a trident: three prongs off a long hall, and a loop of rooms at the foot
     '#..#..#.',

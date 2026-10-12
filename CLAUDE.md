@@ -17,6 +17,7 @@ Read this first in a new chat. It's the context from the long first build sessio
 ## How to work
 - **Never edit `index.html` by hand.** It's the bundle. Edit `src/`, then run `python3 build.py`. File order is in `build_order.json`; folder globs pick up new files automatically.
 - **Run `node tools/check.js` after every change.** It validates content and runs headless sim tests in a Node vm (add `--full` for 300 worlds). Add a test for each new mechanic, near the end of the `tests` string.
+- **check.js also lints every source file for code hidden after a `//` comment on the same line.** That mistake froze the game once and broke the tides once. Put comments at the end of a line, never in the middle.
 - **check.js does not run browser code** (render, input, net, ui; it only parses those). Smoke-test in a real browser before delivering. One bad `//` comment once commented out the movement line and froze the game. Playwright plus a headless Chromium works: start a new game, close the intro dialog (it pauses the sim), teleport with `G.sim.teleport(...)`, take screenshots, and watch for page errors. For co-op, run two browsers against a local PeerJS server.
 - **Delivering:**
   1. Copy the changed files (including the rebuilt `index.html` and any new `docs/art` GIFs) to Mitch's folder.
@@ -45,9 +46,11 @@ Read this first in a new chat. It's the context from the long first build sessio
 - **Saves:** `SAVE_VERSION = 6`, with `migrateSave` in sim.js. When a dungeon layout changes, bump the version and reset that dungeon's progress.
 
 ## Systems and where they live
+- **Map:** the map shows the compass room, the compass shows the map room, and with both a blinking `?` marks the dungeon treasure until you have it.
+- **Frogs:** 1 in 10 spawns as a poison frog (never placed directly), and frogs never spawn in rooms with no water.
 - **Dungeons:**
   - Each is drawn as a shape in `content/dungeons.js`. The generator builds a random tree, loops, locks and keys (keys always reachable), map, compass, and hidden rooms (`H`).
-  - Optional fields on a dungeon: `intro` (hand-built first rooms), `bossEye` (eye niche in the boss room), `secret: 'EYE'` (hidden room opened by a small eye), `loops`, `bombLoops`, `bossParty`, `bossDrop`.
+  - Optional fields on a dungeon: `itemSpots` (shape cells the treasure may sit in; the Sunken Stair's bow sits at a trident tip), `intro` (hand-built first rooms), `bossEye` (eye niche in the boss room), `secret: 'EYE'` (hidden room opened by a small eye), `loops`, `bombLoops`, `bossParty`, `bossDrop`.
   - Gimmick hooks: `room`, `doors`, `plan` (pre-pass with `solve(hasBow)`), `arena` (boss room), `update`, `level`.
 - **The 12 dungeons:**
 
@@ -83,15 +86,20 @@ Read this first in a new chat. It's the context from the long first build sessio
 - **Player status:** chill (slow), poison (5% of max health per tick, 2–5 ticks, restarts on a new dose, goes through shields, can't kill), Gale Cloak flight (`p.flyUntil`; tiles below don't affect you).
 - **Controls:**
   - Click/Space: attack. Space is dash for the martial artist.
-  - Right-click/E: item. Hold for power: the bow fires on release and holding nocks a Loaded Shot. Shift (LB) + item: the item's technique (`useAlt`), none yet.
+  - Right-click/E: item. Hold for power: the bow fires on release and holding nocks a Loaded Shot. Shift (LB) + item: the item's technique (`useAlt`): bomb arrows, the wide boomerang throw.
   - I: inventory. M: map.
   - Attacking or switching items lets a drawn arrow go slack.
-- **Inventory** (`renderBag` in main.js, `sim.equip`): wear any sword or tunic up to the best you've earned (`swordMax`/`armorMax`), pick plain or frost arrows, set the item button, and see upgrades and techniques.
+- **Inventory** (`renderBag` in main.js, `sim.equip`; three pages: GEAR, ITEMS, UPGRADES, no scrolling): wear any sword or tunic up to the best you've earned (`swordMax`/`armorMax`), pick plain or frost arrows, set the item button, and see upgrades and techniques.
 - **Items of note:**
   - Quivers: 15 to start, Big Quiver 30, a 50 one planned.
   - Loaded Shot: 2 arrows for double damage and more knockback; against a shield it does one arrow's damage and makes the knight reel.
+  - Arrow kinds: plain, frost or silver, picked in the inventory (`p.arrowType`). Only silver finishes the Hollow King.
+  - Bomb arrows (scroll, debug only so far): Shift + bow costs an arrow and a bomb, bursts like a bomb, and seals a timed eye for good.
+  - Thunder Rod (debug only): a bolt that hops between up to 3 foes and stuns them. Fire and lightning belong to rods.
+  - Boomerang drags loot and small keys back. A normal throw stuns for 3 s with a 0.25 chip. Hitting an already stunned foe only renews the stun (no damage). After 6 s of chained stun the foe gets a short immunity (`STUN_LOCK` in sim.js), so two boomerangs can't lock it forever. Bats still die in one hit (`boomerangKills`).
+  - Boomerang upgrades (debug only so far, order: wide throw first, then the second): the WIDE THROW scroll (`widethrow`, Shift + boomerang) sweeps a curving arc that hits at sword strength with knockback, never stuns, and doesn't stop on a hit. The SECOND BOOMERANG (`boomerang2`) allows two out at once, and the wide throw becomes a mirrored pair of arcs.
   - Gale Cloak and Skeleton Key: built, given by debug, not placed in the world yet.
-  - Candle: one flame every 4 s.
+  - Candle: one flame every 2.5 s. Holding it (selected) lights dark rooms around you.
   - Raft: works outdoors only, never in dungeons.
 - **Bosses leave a glowing WARP tile** (`sim.openWarp`) instead of throwing everyone out.
 - **Death:** a downed friend can be helped up (hold F); markers show downed friends through walls. After 30 s you can respawn alone with Enter, which costs half your gems; they're left in a bag only you can pick up. No team-wipe penalty yet.
@@ -99,10 +107,11 @@ Read this first in a new chat. It's the context from the long first build sessio
 - **Armor visuals** (`armorOverlay` in spritekit.js, `sleeveArmor` in render.js):
   - Chain: rings over the tunic color, on the chest, upper arms and both first-person arms.
   - Plate: steel with a tabard in the tunic color, a helmet with a plume, pauldrons, banded steel arms.
-- **Debug** (dev names only):
+- **Debug** (dev names only). It also gives infinite arrows, bombs, potions and gems, and the full map shows every room plus where the map, compass and treasure are:
   - Title DEBUG loadout, and EVERYTHING (Dawnblade, all items, relics, shards, god mode).
   - Pause menu: DEBUG ON/OFF, GOD MODE (god mode does triple damage), MAP HERE / COMPASS HERE, and a warp list.
   - Warp Stone (hops between dungeons) and Boss Bell (cycles 12, 9, 10, 11).
+  - Pause menu also has TEST ZONE (level `dbg` from `genTestZone` in world.js: a strip of every hazard, an eye moat, a sealed eye, a bomb wall, vents and open floor), SPAWN A FOE (any enemy plus an elite), and BOSS ROOMS (warp into any boss room).
 - **Networking:**
   - PeerJS with 5-character join codes. ICE servers: 1 Google STUN plus Metered's public openrelay.
   - Mitch decided not to run his own relay; never ask for or embed the Metered secret key.
@@ -115,6 +124,7 @@ Read this first in a new chat. It's the context from the long first build sessio
 - The opening dialog pauses the sim. In browser tests, set `G.local.dialog = null` first.
 - New snapshot fields go in `snapshotFor` (`me.*` for the player's own state). The client reads them from `G.snap`.
 - When making something only some enemy types have, add a field to the enemy def (`swim`, `spawnAt`, `noElites`, `sprFor`, `onDamage`, `view`). Don't special-case ids in the sim.
+- **Knights** are the only enemy with a back sprite (`def.backSprite`, picked per viewer in `sim.entView`) when you're more than ~120° behind them. No side sprites, on purpose: players learn about the back from an old man's hint (`defineHints` in knight.js).
 - Underwater sprites are named `<enemy id>_sub` so the boss bar can find the name.
 
 ## Decisions already made (don't relitigate)

@@ -24,5 +24,6 @@ defineProjectile({ id: 'dawnbeam', spr: 'beam_dawn', spd: 11, dmg: 1, sc: 1.0, p
 defineProjectile({ id: 'dart', spr: 'beam', spd: 12, dmg: 2, sc: 0.5, player: true, eyeHit: true });
 defineProjectile({ id: 'candle', spr: 'flame', spd: 4, dmg: 1, sc: 0.8, z: -0.05, player: true, range: 2.2, fire: true });
 defineProjectile({ id: 'palm', spr: 'flame', spd: 6, dmg: 2, sc: 1.1, z: -0.05, player: true, range: 3.5, fire: true, pierce: true });
+defineProjectile({ id: 'bolt', spr: 'beam', spd: 13, dmg: 2, sc: 0.9, player: true, chain: true, stun: 0.5, range: 9 }); // thunder rod: hops to the next foe (game/sim.js)
 defineProjectile({ id: 'rodbolt', spr: 'magic', spd: 8, dmg: 3, player: true });
 defineProjectile({ id: 'thunder', spr: 'beam', spd: 14, dmg: 3, sc: 0.9, player: true, pierce: true, pierceShield: true, endFx: 'boom' });

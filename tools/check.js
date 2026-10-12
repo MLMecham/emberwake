@@ -382,6 +382,57 @@ attempt('the bog king', () => {
   const s2 = freshSim(); const L2 = s2.W.levels.d3; s2.rigShots['d3:' + room.id] = s2.time; s2.updateRigs(L2); const p2 = s2.players.p1; p2.god = true; s2.teleport(p2, 'd3', ix + entry[0], iy + entry[1], 0); s2.tick(1 / 60);
   const k2 = s2.ents.find(e => e.k === 'en' && e.type === 'bogking'); k2.spawnFx = 0; s2.updateEnemy(k2, 1 / 60); __ok(k2.ph === 1, 'no water, no hiding');
 });
+attempt('batch: keys, bow spot, frogs, arrows, bomb arrows, thunder, debug', () => {
+  // the lake island's sign survives, so it can be read
+  const W = genWorld(7319, 'adv'); const O = W.levels.ow; let lakeSign = false; for (const k in O.signText) if (/LEVEL-7/.test(O.signText[k]) && O.props[k] === PR.SIGN) lakeSign = true; __ok(lakeSign, 'the level 7 sign should be readable');
+  // the bow sits at the tip of a trident prong in the Sunken Stair
+  for (const [seed, mode] of [[7319, 'adv'], [11, 'rogue'], [12, 'rogue'], [99, 'adv']]) { const D = genWorld(seed, mode).levels.d3; const r = Object.values(D.rooms).find(r => r.item === 'bow'); __ok(r && r.ry === DGH - 6, 'bow should be at a prong tip (' + seed + ' ' + mode + ')'); }
+  const sim = freshSim(); const p = sim.players.p1; p.god = false;
+  // the boomerang drags small keys back
+  const key = sim.spawn({ k: 'pick', lvl: p.lvl, x: p.x + 2, y: p.y, item: 'key', perm: true, tk: 'test:key', spr: 'key', sc: 0.5, team: true });
+  const bm = { lvl: p.lvl, x: p.x + 2, y: p.y }; for (const en of sim.ents) if (en.k === 'pick' && (!en.perm || en.item === 'key') && dist2(en.x, en.y, bm.x, bm.y) < 0.4) { en.x = bm.x - 1; } __ok(key.x < p.x + 2, 'keys can be dragged');
+  // frogs: none in dry rooms, and roughly 1 in 10 is poisonous
+  const D3 = sim.W.levels.d3; const dry = Object.values(D3.rooms).find(r => !r.boss && !r.hidden && !r.drain && r !== D3.startRoom && !r.item);
+  if (dry) { dry.enemies = ['frog', 'frog', 'skeleton']; sim.teleport(p, 'd3', dry.rx * DSX + 6.5, dry.ry * DSY + 4.5, 0); sim.tick(1 / 60); __ok(!sim.ents.some(e => e.k === 'en' && enemyDef(e.type).swim && e.g === p.room), 'no frogs in a room without water'); }
+  // arrow kinds: silver only when picked
+  sim.teleport(p, 'ow', sim.W.levels.ow.spawn.x, sim.W.levels.ow.spawn.y, 0); p.items.bow = true; p.items.silver = true; p.items.frostarrows = true; p.arrows = 9; p.arrowType = 'frost'; sim.ents = sim.ents.filter(e => e.k !== 'proj');
+  sim.useItem(p, 'bow', {}); let pr = sim.ents.find(e => e.k === 'proj'); __ok(pr && pr.frost && !pr.silver, 'frost arrows when frost is picked');
+  sim.ents = sim.ents.filter(e => e.k !== 'proj'); sim.onAction('p1', { t: 'equip', slot: 'arrows', kind: 'silver' }); sim.useItem(p, 'bow', {}); pr = sim.ents.find(e => e.k === 'proj'); __ok(pr && pr.silver && !pr.frost && pr.dmg === 4, 'silver arrows when silver is picked');
+  // bomb arrows: Shift + bow costs an arrow and a bomb and bursts where it lands; it seals an eye for good
+  sim.ents = sim.ents.filter(e => e.k !== 'proj'); p.items.bombarrow = true; p.bombs = 3; const a0 = p.arrows;
+  sim.useItem(p, 'bow', { alt: true }); pr = sim.ents.find(e => e.k === 'proj'); __ok(pr && pr.bomb && p.bombs === 2 && p.arrows === a0 - 1, 'bomb arrow costs one of each');
+  for (let i = 0; i < 300 && !pr.dead; i++) sim.updateProj(pr, 1 / 60); __ok(sim.ents.some(e => e.k === 'bomb'), 'bomb arrow bursts where it stops');
+  const Z = sim.W.levels.dbg; __ok(Z && Z.rigs.tz, 'the test zone exists'); const eye = Z.rigs.tz.eyes[0]; sim.teleport(p, 'dbg', Z.spawn.x, Z.spawn.y, 0); sim.hitEye(Z, eye, true); for (let i = 0; i < 60 * 20; i++) sim.tick(1 / 20); __ok(Z.tiles[Z.rigs.tz.cells[0]] === TL.WET, 'a bomb-arrowed eye keeps the water away');
+  // thunder rod hops from foe to foe
+  const f1 = sim.spawnEnemy('skeleton', 'dbg', 10.5, 19.5, {}), f2 = sim.spawnEnemy('skeleton', 'dbg', 12.5, 19.5, {}); for (const f of [f1, f2]) { f.spawnFx = 0; f.hp = 50; }
+  const bolt = sim.fireProj('bolt', 'dbg', 8.5, 19.5, 0, 'p', 'p1', { chainLeft: 2 }); for (let i = 0; i < 120 && !bolt.dead; i++) sim.updateProj(bolt, 1 / 60); __ok(f1.hp < 50 && f2.hp < 50, 'the bolt should hit both');
+  // debug: spawner, boss warp, never out of supplies
+  p.name = 'MITCH'; sim.onAction('p1', { t: 'debug', on: true }); p.arrows = 0; p.bombs = 0; sim.tick(1 / 60); __ok(p.arrows > 0 && p.bombs > 0, 'debug refills arrows and bombs');
+  const n0 = sim.ents.filter(e => e.k === 'en').length; sim.onAction('p1', { t: 'dbgspawn', type: 'knight', elite: 'giant' }); const kn = sim.ents.filter(e => e.k === 'en'); __ok(kn.length === n0 + 1 && kn[kn.length - 1].elite, 'debug spawner makes a giant knight');
+  sim.onAction('p1', { t: 'dbgboss', d: 3 }); __ok(p.lvl === 'd3' && sim.W.levels.d3.rooms[sim.W.levels.d3.bossRoom] === dungeonRoomAt(sim.W.levels.d3, p.x, p.y), 'debug boss warp lands in the boss room');
+});
+attempt('boomerangs and knight backs', () => {
+  const sim = freshSim(); const p = sim.players.p1; p.items.boomerang = true; p.a = 0;
+  const sk = sim.spawnEnemy('skeleton', p.lvl, p.x + 3, p.y, {}); sk.spawnFx = 0; sk.hp = 10;
+  // first hit stuns with a little damage; a dizzy foe only gets its stun renewed
+  sim.damageEnemy(sk, BOOMERANG_DMG, { x: p.x, y: p.y }, { stunOnly: true }); __ok(sk.stun > 2 && sk.hp < 10, 'boomerang stuns and chips');
+  const h = sk.hp; sk.hurt = 0; sk.stun = 1; sim.damageEnemy(sk, BOOMERANG_DMG, { x: p.x, y: p.y }, { stunOnly: true }); __ok(sk.hp === h && sk.stun >= BOOMERANG_STUN, 'a dizzy foe only gets re-stunned');
+  sim.time += STUN_LOCK + 0.1; sk.stun = 0.5; sk.hurt = 0; sim.damageEnemy(sk, BOOMERANG_DMG, { x: p.x, y: p.y }, { stunOnly: true }); __ok(sk.stun <= 0.5 && sk.stunImmune > sim.time, 'held too long: a moment of immunity');
+  const bat = sim.spawnEnemy('bat', p.lvl, p.x + 3, p.y, {}); bat.spawnFx = 0; sim.damageEnemy(bat, BOOMERANG_DMG, { x: p.x, y: p.y }, { stunOnly: true }); __ok(bat.dead, 'bats still drop to one throw');
+  sk.dead = true; bat.dead = true;
+  // one out at a time, two with the second boomerang; Shift with the scroll sweeps wide, hits hard, no stun
+  const count = () => sim.ents.filter(e => e.k === 'boomer' && !e.dead).length;
+  sim.useItem(p, 'boomerang', {}); sim.useItem(p, 'boomerang', {}); __ok(count() === 1, 'one boomerang at a time');
+  sim.giveItem(p, 'boomerang2', false); sim.useItem(p, 'boomerang', {}); __ok(count() === 2, 'two with the second boomerang');
+  for (const e of sim.ents) if (e.k === 'boomer') e.dead = true; sim.ents = sim.ents.filter(e => !e.dead);
+  sim.giveItem(p, 'widethrow', false); sim.useItem(p, 'boomerang', { alt: true }); const arcs = sim.ents.filter(e => e.k === 'boomer'); __ok(arcs.length === 2 && arcs[0].wide === -arcs[1].wide, 'both boomerangs sweep in mirrored arcs');
+  const f = sim.spawnEnemy('skeleton', p.lvl, 0, 0, {}); f.spawnFx = 0; f.hp = 10; f.x = arcs[0].x; f.y = arcs[0].y; sim.updateEnt(arcs[0], 1 / 60); __ok(f.hp < 9 && !(f.stun > 0), 'a wide throw hits hard and does not stun');
+  // a knight shows its back only to someone behind it
+  const k = sim.spawnEnemy('knight', p.lvl, p.x + 3, p.y, {}); k.spawnFx = 0; k.f = Math.PI; // facing the hero
+  const view = () => sim.snapshotFor('p1').en.find(v => v[0] === k.id)[1]; __ok(view() !== 'knight_back', 'facing you: front');
+  k.f = 0; __ok(view() === 'knight_back', 'facing away: its back');
+  __ok(Content.hints.some(t => /KNIGHTS TURN SLOWLY/.test(t)), 'the old men know about knights');
+});
 attempt('tideglass opening', () => {
   for (const [seed, mode] of [[7319, 'adv'], [1234, 'rogue'], [99, 'rogue'], [4242, 'adv']]) {
     const W = genWorld(seed, mode); const D = W.levels.d6; const st = D.startRoom; const r2 = st.children[0]; const r3 = r2.children[0];
@@ -419,6 +470,9 @@ attempt('dungeon minute', () => {
 `;
 try { vm.runInContext(tests, ctx, { filename: 'tests.js' }); } catch (e) { failures.push('test harness crashed: ' + e.stack); }
 
+// a // comment followed by more code on the same line silently swallows that code (this once froze the game)
+const allSrc = []; (function walk(d) { for (const n of fs.readdirSync(path.join(root, d))) { const p = d + '/' + n; if (fs.statSync(path.join(root, p)).isDirectory()) walk(p); else if (n.endsWith('.js')) allSrc.push(p); } })('src');
+for (const f of allSrc) { const src = fs.readFileSync(path.join(root, f), 'utf8').split('\n'); src.forEach((line, i) => { const m = line.match(/\/\/[^'"`]*\b(const|let) [A-Za-z_]\w* = /); if (m && !/^\s*\/\//.test(line.slice(0, line.indexOf('//')) + '//')) failures.push(f + ':' + (i + 1) + ' has code after a // comment: ' + line.trim().slice(0, 80)); }); }
 // browser-only files (render, input, net, ui) aren't run here, so at least make sure they parse
 for (const f of ['src/engine/render.js', 'src/engine/audio.js', 'src/engine/input.js', 'src/net/relay.js', 'src/net/net.js', 'src/ui/debug.js', 'src/ui/main.js']) {
   const fp = path.join(__dirname, '..', f); if (!fs.existsSync(fp)) continue;

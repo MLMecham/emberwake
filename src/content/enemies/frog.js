@@ -77,7 +77,7 @@ defineEnemy({
 // POISON FROG: its bubble poisons (projectiles.js 'poisonbubble'), even through a shield. Never comes as a giant.
 defineEnemy(Object.assign({}, enemyDef('frog'), {
   id: 'frog_poison', ai: frogAi('poisonbubble'), sprFor: (e) => e.sub ? 'frog_poison_sub' : null, noElites: ['giant'],
-  pal: { l: '#b048e0', e: '#5a1a80', z: '#f8d840' }, spawns: { biomes: ['lake'], dungeons: [3, 7] },
+  pal: { l: '#b048e0', e: '#5a1a80', z: '#f8d840' }, spawns: {}, // never placed directly: 1 in 10 frogs is born poisonous (game/sim.js)
 }));
 // THE BOG KING. Phase 1: hides in the water, surfaces near you and spits a fan of bubbles; three hits drive him out.
 // Phase 2 (or straight away if the room is drained): leaps from platform to platform (anywhere, once the water's gone),

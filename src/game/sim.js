@@ -31,7 +31,9 @@ const REVIVE_TIME = 1.5, REVIVE_R2 = 2.6 * 2.6; // seconds to help a teammate up
 const RESPAWN_WAIT = 30; // seconds a downed hero waits before they may give up and respawn at the start on their own
 const BUY_COOLDOWN = 0.8; // seconds between shop purchases for one player
 const FLY_TIME = 4, FLY_COOLDOWN = 2; // Gale Cloak: seconds aloft, and the rest after landing before it works again
-const POISON_FRAC = 0.05; // poison takes 5% of max health a tick
+const POISON_FRAC = 0.05, POISON_FROG_CHANCE = 0.1; // poison frogs are 1 in 10 frogs // poison takes 5% of max health a tick
+const BOOMERANG_STUN = 3, STUN_LOCK = 6, BOOMERANG_DMG = 0.25; // boomerang: stun seconds, the longest a foe can be kept dizzy, chip damage
+const BACK_ANGLE = 2.1; // radians off a foe's facing that count as behind it (about 120 degrees)
 const SHIELD_STUN = 0.9; // seconds a knight reels after a loaded shot hits its shield
 const FREEZE_TIME = 6, FREEZE_PATH = 6; // seconds frost-arrow ice lasts; how many tiles of water one arrow freezes along its flight
 const HAZARD_TICK = 0.5, ICE_KB = 1.5, SHALLOW_SLOW = 0.75; // how often lava/spikes/vents burn a grounded enemy; how much harder hits shove enemies standing on ice
@@ -76,7 +78,7 @@ class Sim {
     return p;
   }
   removePlayer(id) { const p = this.players[id]; if (!p) return; this.savedPlayers = this.savedPlayers || {}; this.savedPlayers[p.color] = this.playerSaveData(p); delete this.players[id]; this.ev({ t: 'msg', text: p.name + ' LEFT.' }); }
-  playerSaveData(p) { const o = {}; for (const k of ['cls', 'lvl', 'x', 'y', 'a', 'hp', 'maxHp', 'gems', 'bombs', 'maxBombs', 'arrows', 'maxArrows', 'swordMax', 'armorMax', 'plainArrows', 'sword', 'armor', 'items', 'potions', 'sel']) o[k] = p[k]; o.alive = true; if (o.hp <= 0) o.hp = 12; return o; }
+  playerSaveData(p) { const o = {}; for (const k of ['cls', 'lvl', 'x', 'y', 'a', 'hp', 'maxHp', 'gems', 'bombs', 'maxBombs', 'arrows', 'maxArrows', 'swordMax', 'armorMax', 'arrowType', 'sword', 'armor', 'items', 'potions', 'sel']) o[k] = p[k]; o.alive = true; if (o.hp <= 0) o.hp = 12; return o; }
   ev(e) { this.events.push(e); }
   sfx(s, lvl, x, y) { this.ev({ t: 'sfx', s, lvl, x, y }); }
   msg(text, pid) { this.ev({ t: 'msg', text, pid }); }
@@ -100,10 +102,10 @@ class Sim {
     if (!L.rigs) return;
     for (const rid in L.rigs) {
       const k = L.id + ':' + rid; const shot = this.rigShots[k];
-      const code = tideCode(shot != null ? this.time - shot : null); const prev = (L.rigCode && L.rigCode[rid]) || 0;
+      const code = shot === Infinity ? 1 : tideCode(shot != null ? this.time - shot : null); const prev = (L.rigCode && L.rigCode[rid]) || 0; // (shot Infinity: a bomb arrow sealed its eye)
       if (code === prev) continue;
       applyRig(L, rid, code); if (code === 0) delete this.rigShots[k];
-      const r = L.rooms[rid]; this.sfx(['flood', 'drain', 'eyecreak', 'flood', 'tidewarn'][code], L.id, r.rx * DSX + 6.5, r.ry * DSY + 4.5);
+      const r = L.rooms && L.rooms[rid]; const c0 = L.rigs[rid].cells[0]; this.sfx(['flood', 'drain', 'eyecreak', 'flood', 'tidewarn'][code], L.id, r ? r.rx * DSX + 6.5 : c0 % L.w + 0.5, r ? r.ry * DSY + 4.5 : Math.floor(c0 / L.w) + 0.5);
     }
   }
   // frost arrows freeze the deep fresh water they fly over: a path of ice three tiles wide, up to FREEZE_PATH long, that melts after a while
@@ -121,9 +123,10 @@ class Sim {
   }
   frozenList(lvl) { const L = this.W.levels[lvl]; if (!L || !L.frozen) return undefined; const k = Object.keys(L.frozen); return k.length ? k.map(Number) : undefined; } // for snapshots
   rigCodes(lvl) { const L = this.W.levels[lvl]; if (!L || !L.rigCode) return undefined; const o = {}; let any = false; for (const rid in L.rigCode) if (L.rigCode[rid]) { o[rid] = L.rigCode[rid]; any = true; } return any ? o : undefined; } // for snapshots
-  hitEye(L, idx) {
+  projBurst(e) { if (e.bomb && !e.burst) { e.burst = true; this.spawn({ k: 'bomb', lvl: e.lvl, x: e.x - e.vx * 0.03, y: e.y - e.vy * 0.03, fuse: 0, pid: e.pid, spr: 'bomb', sc: 0.5 }); } } // a bomb arrow bursts where it stops
+  hitEye(L, idx, forGood) {
     const link = L.eyeLinks && L.eyeLinks[idx]; if (!link) return; const t = L.tiles[idx]; const x = idx % L.w + 0.5, y = Math.floor(idx / L.w) + 0.5;
-    if (link.kind === 'timed') { this.rigShots[L.id + ':' + link.rid] = this.time; this.sfx('eyeshut', L.id, x, y); return; } // shooting it again keeps it shut longer
+    if (link.kind === 'timed') { this.rigShots[L.id + ':' + link.rid] = forGood ? Infinity : this.time; if (forGood) this.msg('THE EYE IS SEALED SHUT.'); this.sfx('eyeshut', L.id, x, y); return; } // shooting it again keeps it shut longer
     if (link.kind === 'seal' && !TINFO[t].shut) {
       this.setTile(L.id, idx, TINFO[t].small ? TL.EYE_SMALL_SHUT : TL.EYE_SHUT); this.sfx('eyeshut', L.id, x, y);
       for (const o of link.opens || []) this.setTile(L.id, o, link.openTo != null ? link.openTo : TL.OPENDOOR);
@@ -159,6 +162,10 @@ class Sim {
         if (!isDevName(p.name)) break; p.dbg = !!a.on; p.god = !!(a.on && a.god); if (!p.dbg && p.sel === 'devwarp') p.sel = null;
         if (p.dbg && a.loadout) this.grantLoadout(p, a.loadout); // switching debug on mid-game hands over the debug loadout
         this.hint(p, 'DEBUG ' + (p.dbg ? 'ON' : 'OFF') + (p.god ? ' + GOD MODE' : '')); break;
+      case 'dbgspawn': if (p.dbg && enemyDef(a.type)) { // debug: a foe (optionally an elite) a few steps in front of you
+        const L = this.W.levels[p.lvl]; let x = p.x + Math.cos(p.a) * 2.5, y = p.y + Math.sin(p.a) * 2.5; if (L.solidAt(x, y) && !(enemyDef(a.type).swim && TINFO[L.get(Math.floor(x), Math.floor(y))].water)) { x = p.x; y = p.y; }
+        const e = this.spawnEnemy(a.type, p.lvl, x, y, { dmgMul: 1 }); if (a.elite) { const el = Content.elites.find(d => d.id === a.elite); if (el) { e.elite = el.idx; if (el.apply) el.apply(e, this); } } } break;
+      case 'dbgboss': if (p.dbg) { const D = this.W.levels['d' + (a.d | 0)]; const r = D && D.rooms[D.bossRoom]; if (r) { const at = r.rewardAt || [6.5, 6.5]; this.teleport(p, D.id, r.rx * DSX + at[0], r.ry * DSY + at[1], -Math.PI / 2); } } break; // debug: straight to a boss
       case 'dbgmap': if (p.dbg && this.W.levels[p.lvl].kind === 'dungeon') { const t = a.what === 'comp' ? 'comps' : 'maps'; this.team[t] = this.team[t] || {}; this.team[t][p.lvl] = true; this.hint(p, (a.what === 'comp' ? 'COMPASS' : 'MAP') + ' GIVEN (DEBUG)'); } break; // sanity checks for dungeon maps
       case 'god': if (p.dbg) { p.god = !!a.on; p.hp = p.maxHp; p.chill = 0; this.hint(p, 'GOD MODE ' + (p.god ? 'ON' : 'OFF')); } break;
       case 'warp': if (p.dbg) { const T = this.W.levels[a.to]; if (T) this.teleport(p, T.id, T.spawn.x, T.spawn.y, T.spawn.a); } break;
@@ -274,6 +281,7 @@ class Sim {
       const L = this.W.levels[p.lvl];
       // hazard tiles
       if (p.chill > 0) p.chill -= dt; this.tickPoison(p);
+      if (p.dbg) { p.arrows = Math.max(p.arrows, p.maxArrows || ARROWS_START); p.bombs = Math.max(p.bombs, p.maxBombs); p.items.bombs = true; p.potions = 2; p.items.potion = true; p.gems = Math.max(p.gems, 999); } // debug: never run out
       const t = L.get(Math.floor(p.x), Math.floor(p.y)); const ti = TINFO[t]; const boots = !!p.items.magmaboots;
       if (p.inv <= 0 && !this.flying(p) && ((ti.hurt && !(boots && ti.lava)) || (ti.vent && this.ventPhase() === 2 && !boots))) this.hurtPlayer(p, 1, null); // fliers are above it all
       p.swordMax = Math.max(p.swordMax || 0, p.sword); p.armorMax = Math.max(p.armorMax || 0, p.armor); // best gear ever owned (the inventory lets you wear less)
@@ -332,7 +340,13 @@ class Sim {
     const b = roomBounds(L, room);
     const rnd = mulberry32(hashStr(key) + Math.floor(this.time * 1000));
     const tierMul = L.kind === 'dungeon' ? 1 + (Math.min(10, L.dnum) - 1) * 0.25 : 1 + room.tier * 0.4;
+    let dryRoom = null; // frogs only appear where there's water to hide in
     room.enemies.forEach((type, ei) => {
+      if (enemyDef(type) && enemyDef(type).swim && !enemyDef(type).boss) {
+        if (dryRoom == null) { dryRoom = true; for (let y = b.y0; y < b.y1 && dryRoom; y++) for (let x = b.x0; x < b.x1; x++) { const ti = TINFO[L.get(x, y)]; if (ti.water && !ti.ocean) { dryRoom = false; break; } } }
+        if (dryRoom) { const alt = room.enemies.filter(t => enemyDef(t) && !enemyDef(t).swim); type = alt.length ? alt[ei % alt.length] : 'slime'; }
+        else if (type === 'frog' && rnd() < POISON_FROG_CHANCE) type = 'frog_poison';
+      }
       const def = enemyDef(type); if (!def) return;
       let x, y, tries = 0;
       const at = room.at && room.at[ei]; // a hand-built room can pin where each enemy appears
@@ -539,7 +553,13 @@ class Sim {
         dmg = opt.shieldBreak * (atk && atk.god ? 3 : 1); e.stun = Math.max(e.stun, SHIELD_STUN); e.reelUntil = this.time + SHIELD_STUN; // a loaded shot jars the shield: half damage, and the knight reels long enough for a sword strike
       }
     }
-    if (opt.stunOnly && !def.boss) { e.stun = 3; this.sfx('clink', e.lvl, e.x, e.y); if (!def.boomerangKills) return true; }
+    if (opt.stunOnly && !def.boss) { // a boomerang hit: stun with a little damage. Hitting a dizzy foe only renews the stun (no damage),
+      // and a foe that's been held dizzy for STUN_LOCK seconds gets a moment of immunity, so two boomerangs can't pin it forever.
+      this.sfx('clink', e.lvl, e.x, e.y);
+      if (this.time < (e.stunImmune || 0)) return false;
+      if (e.stun > 0) { if (this.time - (e.stunFrom != null ? e.stunFrom : this.time) < STUN_LOCK) e.stun = Math.max(e.stun, BOOMERANG_STUN); else { e.stunImmune = this.time + e.stun + 1.2; } return true; }
+      e.stun = BOOMERANG_STUN; e.stunFrom = this.time; if (def.boomerangKills) dmg = Math.max(dmg, e.hp); // bats and the like drop to one throw
+    }
     if (def.onDamage && def.onDamage(this, e, dmg, opt) === false) return true;
     e.hp -= dmg; e.hurt = 0.35; this.sfx('hit', e.lvl, e.x, e.y); if (opt.pid) e.lastPid = opt.pid;
     if (src && !def.boss) { const a = Math.atan2(e.y - src.y, e.x - src.x); const [v, t] = this.knockFor(e, def, 9 * (opt.kbMul || 1)); e.kb = [Math.cos(a) * v, Math.sin(a) * v]; e.kbT = t || 0.12; }
@@ -613,7 +633,7 @@ class Sim {
   equip(p, a) {
     if (a.slot === 'sword') { const lv = a.lv | 0; if (lv >= 1 && lv <= Math.max(p.swordMax || 0, p.sword)) p.sword = lv; }
     else if (a.slot === 'armor') { const lv = a.lv | 0; if (lv >= 0 && lv <= Math.max(p.armorMax || 0, p.armor)) p.armor = lv; }
-    else if (a.slot === 'arrows') p.plainArrows = !!a.plain;
+    else if (a.slot === 'arrows') p.arrowType = ['plain', 'frost', 'silver'].includes(a.kind) ? a.kind : (a.plain ? 'plain' : 'frost');
   }
   updateProj(e, dt) {
     const L = this.W.levels[e.lvl]; const def = Content.projectiles[e.type];
@@ -634,11 +654,11 @@ class Sim {
       this.burnAt(L, nx, ny);
     }
     if (e.life <= 0 || (ti.solid && !ti.low) || (pr && PROP_INFO[pr] && PROP_INFO[pr].solid && pr !== PR.PEDESTAL)) {
-      if (ti.eye && def.eyeHit && e.life > 0) this.hitEye(L, L.idx(Math.floor(nx), Math.floor(ny)));
+      if (ti.eye && def.eyeHit && e.life > 0) this.hitEye(L, L.idx(Math.floor(nx), Math.floor(ny)), e.bomb);
       else if (ti.eye && !ti.shut && def.player && e.pid && this.players[e.pid]) { const pl = this.players[e.pid]; if (this.time - (pl.eyeHintAt || -99) > 8) { pl.eyeHintAt = this.time; this.hint(pl, 'THE EYE DOESN\'T EVEN BLINK. MAYBE AN ARROW...'); } }
       if (def.fire || e.fireTrail) { this.spawn({ k: 'fire', lvl: e.lvl, x: e.x, y: e.y, life: 1.2, spr: 'flame', sc: 0.8, z: -0.05, pid: e.pid }); }
       if (def.endFx) this.spawn({ k: 'fx', lvl: e.lvl, x: e.x, y: e.y, spr: def.endFx, life: 0.25, sc: 0.8 });
-      e.dead = true; return;
+      this.projBurst(e); e.dead = true; return;
     }
     e.x = nx; e.y = ny;
     if (e.frost && e.owner !== 'e') this.freezeAlong(e, L, nx, ny);
@@ -663,7 +683,12 @@ class Sim {
           const landed = this.damageEnemy(en, e.dmg * (e.frost && enemyDef(en.type).hot ? 2 : 1), { x: e.x - e.vx * 0.1, y: e.y - e.vy * 0.1 }, { pid: e.pid, silver: e.silver, pierceShield: def.pierceShield, ignoreIframes: def.pierce, kbMul: e.kbMul, shieldBreak: e.shieldBreak ? e.dmg / 2 : 0 });
           if (e.frost && landed && !en.dead) { en.stun = Math.max(en.stun, enemyDef(en.type).boss ? 0.6 : 2.5); this.spawn({ k: 'fx', lvl: e.lvl, x: en.x, y: en.y, spr: 'icefx', life: 0.4, sc: 1 }); this.sfx('freeze', e.lvl, en.x, en.y); }
           if (def.fire) this.spawn({ k: 'fire', lvl: e.lvl, x: e.x, y: e.y, life: 0.8, spr: 'flame', sc: 0.8, z: -0.05, pid: e.pid });
-          if (!def.pierce) { e.dead = true; return; }
+          if (def.stun && landed && !en.dead && !enemyDef(en.type).boss) en.stun = Math.max(en.stun, def.stun);
+          if (def.chain && e.chainLeft > 0) { // leap to the nearest other foe
+            let nx2 = null, nd = 3.5 * 3.5; for (const o of this.ents) { if (o.k !== 'en' || o.dead || o.lvl !== e.lvl || e.hitSet[o.id] || o.sub || o.air) continue; const d = dist2(o.x, o.y, e.x, e.y); if (d < nd) { nd = d; nx2 = o; } }
+            if (nx2) { e.chainLeft--; const a = Math.atan2(nx2.y - e.y, nx2.x - e.x), sp = Math.hypot(e.vx, e.vy); e.vx = Math.cos(a) * sp; e.vy = Math.sin(a) * sp; e.life = Math.max(e.life, 0.8); this.sfx('beam', e.lvl, e.x, e.y); return; }
+          }
+          if (!def.pierce) { this.projBurst(e); e.dead = true; return; }
         }
       }
     }
@@ -730,12 +755,13 @@ class Sim {
     }
   }
   // ---- snapshot for a player ----
-  entView(e) {
+  entView(e, viewer) { // viewer: the hero this snapshot is for (a knight shows them its back when they're behind it)
     let spr = e.spr, sc = e.sc || 0.8, z = e.z || 0, fl = 0;
     if (e.k === 'en') {
       const def = enemyDef(e.type); spr = e.dormant ? 'statue' : e.type; sc = e.dormant ? 1.1 : def.sc * (e.scMul || 1); z = e.dormant ? 0 : def.z || 0;
       if (def.fly) z += Math.sin(e.t * 6) * 0.06;
-      if (def.sprFor) { const s2 = def.sprFor(e); if (s2) spr = s2; } // e.g. a frog's head poking out of the water
+      if (def.sprFor) { const s2 = def.sprFor(e); if (s2) spr = s2; }
+      if (def.backSprite && viewer && !e.dormant && Math.abs(angDiff(e.f, Math.atan2(viewer.y - e.y, viewer.x - e.x))) > BACK_ANGLE) spr = def.backSprite; // e.g. a frog's head poking out of the water
       if (e.hurt > 0) fl |= 1; if (e.stun > 0) fl |= 2; if (def.phase) fl |= 4; if (e.spawnFx > 0) { spr = 'puff'; }
       if (def.view) z += def.view(e);
     }
@@ -750,9 +776,9 @@ class Sim {
   }
   snapshotFor(pid) {
     const p = this.players[pid]; if (!p) return null;
-    const en = []; for (const e of this.ents) if (e.lvl === p.lvl) en.push(this.entView(e));
+    const en = []; for (const e of this.ents) if (e.lvl === p.lvl) en.push(this.entView(e, p));
     const pl = []; for (const o of Object.values(this.players)) pl.push([o.id, o.lvl, Math.round(o.x * 100) / 100, Math.round(o.y * 100) / 100, Math.round(o.a * 100) / 100, o.color, o.armor, o.cls, o.alive ? 1 : 0, o.atk, o.name, Math.round(o.revive / REVIVE_TIME * 100) / 100, o.hp, o.maxHp, o.reviver || 0]);
-    const me = {}; for (const k of ['lvl', 'hp', 'maxHp', 'gems', 'bombs', 'maxBombs', 'arrows', 'maxArrows', 'swordMax', 'armorMax', 'plainArrows', 'sword', 'armor', 'items', 'potions', 'alive', 'cls', 'sel', 'color', 'name', 'dbg', 'god']) me[k] = p[k]; me.chill = p.chill > 0 ? 1 : 0; me.poison = p.poisonTicks > 0 ? p.poisonTicks : 0; me.fly = this.flying(p) ? Math.round((p.flyUntil - this.time) * 10) / 10 : 0; me.respawnIn = p.alive ? 0 : Math.max(0, Math.ceil(RESPAWN_WAIT - (this.time - (p.downAt || 0))));
+    const me = {}; for (const k of ['lvl', 'hp', 'maxHp', 'gems', 'bombs', 'maxBombs', 'arrows', 'maxArrows', 'swordMax', 'armorMax', 'arrowType', 'sword', 'armor', 'items', 'potions', 'alive', 'cls', 'sel', 'color', 'name', 'dbg', 'god']) me[k] = p[k]; me.chill = p.chill > 0 ? 1 : 0; me.poison = p.poisonTicks > 0 ? p.poisonTicks : 0; me.fly = this.flying(p) ? Math.round((p.flyUntil - this.time) * 10) / 10 : 0; me.respawnIn = p.alive ? 0 : Math.max(0, Math.ceil(RESPAWN_WAIT - (this.time - (p.downAt || 0))));
     return { t: 's', paused: !!this.paused, pausedBy: this.pausedBy, me, pl, en, team: { keys: this.team.keys, maps: this.team.maps, comps: this.team.comps, shards: this.team.shards, done: this.team.done, relics: this.team.relics }, vp: this.ventPhase(), rg: this.rigCodes(p.lvl), fz: this.frozenList(p.lvl), mv: this.modVer, over: this.over > 0 };
   }
   // ---- save ----

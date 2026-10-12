@@ -84,7 +84,35 @@ function genWorld(seed, mode) {
   const rnd = mulberry32(seed);
   genOverworld(W, rnd);
   for (let d = 1; d <= NDUNGEONS(); d++) genDungeon(W, d, mulberry32(seed * 31 + d * 977));
+  genTestZone(W);
   return W;
+}
+
+// ---------- DEBUG TEST ZONE ----------
+// One open hall with a strip of every hazard, an eye-drained moat, a sealed eye, a bomb wall and vents, plus open floor
+// for the debug enemy spawner. Only dev names can warp here (pause menu > TEST ZONE). Fixed layout, no randomness.
+function genTestZone(W) {
+  const w = 36, h = 23; const L = new Level('dbg', 'cave', w, h); W.levels.dbg = L; L.theme = 'd3'; L.signText = {};
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) L.set(x, y, (x === 0 || y === 0 || x === w - 1 || y === h - 1) ? TL.BRICK : TL.DFLOOR);
+  const fill = (x0, y0, x1, y1, t) => { for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) L.set(x, y, t); };
+  const sign = (x, y, text) => { L.props[L.idx(x, y)] = PR.SIGN; L.signText[L.idx(x, y)] = text; };
+  // top row: a strip of every floor hazard, each with a sign under it
+  const strips = [[2, 7, 'WATER', 'DEEP FRESH WATER. FROST ARROWS FREEZE IT; FROGS HIDE IN IT.'], [9, 11, 'SHALLOW', 'SHALLOW WATER: 25% SLOWER.'], [13, 15, 'ICE', 'ICE: SLIPPERY, AND HITS SHOVE FOES FURTHER.'],
+    [17, 19, 'LAVA', 'LAVA: BURNS HEROES AND WALKING FOES.'], [21, 23, 'SPIKES', 'ICE SPIKES: THEY HURT.'], [25, 27, 'PIT', 'A PIT: FALL IN, LOSE A HEART.'], [29, 33, 'GLASS', 'GLASS: CRACKS IF YOU STAND STILL.']];
+  for (const [x0, x1, t, text] of strips) { fill(x0, 2, x1, 6, TL[t]); sign(Math.floor((x0 + x1) / 2), 8, text); }
+  // middle row: a moat the eye drains, a sealed eye that opens a closet, a bomb wall, vents
+  const cells = []; for (let y = 11; y <= 15; y++) for (let x = 3; x <= 9; x++) if (!(x >= 5 && x <= 7 && y >= 12 && y <= 14)) cells.push(L.idx(x, y));
+  for (const i of cells) L.tiles[i] = TL.WATER; L.set(6, 10, TL.EYE);
+  L.rigs = { tz: { cells, eyes: [L.idx(6, 10)] } }; L.eyeLinks = { [L.idx(6, 10)]: { kind: 'timed', rid: 'tz' } }; sign(11, 13, 'AN EYE: SHOOT IT TO DRAIN THE MOAT FOR A WHILE. A BOMB ARROW SEALS IT FOR GOOD.');
+  fill(14, 11, 18, 15, TL.BRICK); fill(15, 12, 17, 14, TL.DFLOOR); L.set(14, 13, TL.BRICK); L.set(13, 11, TL.EYE_SMALL);
+  L.eyeLinks[L.idx(13, 11)] = { kind: 'seal', opens: [L.idx(14, 13)], openTo: TL.DFLOOR, text: 'A HIDDEN WAY OPENS.' }; sign(12, 14, 'A SMALL EYE IN THE CORNER OPENS THE CLOSET.');
+  fill(21, 11, 21, 15, TL.BRICK); L.set(21, 13, TL.BRICK_BOMB); sign(20, 16, 'A BOMBABLE WALL (TRY A BOMB ARROW).');
+  for (let y = 11; y <= 15; y++) for (let x = 24; x <= 32; x++) if ((x + y) % 2 === 0) L.set(x, y, TL.VENT); sign(28, 16, 'VENTS BLOW ON A 3 SECOND BEAT.');
+  // the open floor below is for spawning foes (pause > debug > SPAWN)
+  sign(18, 18, 'OPEN FLOOR: SPAWN FOES HERE FROM THE PAUSE MENU (DEBUG).');
+  L.set(18, h - 1, TL.CEXIT); L.set(18, h - 2, TL.EXIT); L.spawn = { x: 18.5, y: h - 3.5, a: -Math.PI / 2 };
+  const ow = W.levels.ow; L.exit = { lvl: 'ow', x: ow.spawn.x, y: ow.spawn.y, a: ow.spawn.a };
+  L.gimmicks = ['glass', 'vents'];
 }
 
 // ---------- OVERWORLD ----------
@@ -225,7 +253,7 @@ function genOverworld(W, rnd) {
     for (let i = 0; i < n; i++) r.enemies.push(rnd.pick(pool));
   }
   // signs near start
-  L.signText = {};
+  L.signText = L.signText || {}; // (the lake island's sign is already in here)
   const sx = sr.rx * RSX + 5, sy = sr.ry * RSY + 7; if (!TINFO[L.get(sx, sy)].solid) { L.props[L.idx(sx, sy)] = PR.SIGN; L.signText[L.idx(sx, sy)] = 'NINE DUNGEONS. EIGHT EMBER SHARDS. ONE HOLLOW CROWN. THE NUMBERED GATES GROW DEADLIER THE FARTHER YOU ROAM.'; }
   // signposts at the passes
   for (const [biome, txt] of [['snow', 'RIMEFANG PASS. BEYOND LIES THE FROZEN REACH, WHERE THE MOTHER OF WYRMS SLEEPS. MIND THE ICE.'], ['ash', 'CINDER PASS. BEYOND LIES THE CINDER WASTES, WHERE THE FATHER OF WYRMS BROODS. THE GROUND ITSELF BURNS.']]) {
@@ -417,7 +445,7 @@ function genDungeon(W, d, rnd) {
   for (let i = 0; i < w * h; i++) L.tiles[i] = TL.BRICK;
   // ---- read the shape (roguelike runs may mirror it) ----
   let shape = (def.shape || ['S']).map(r => r.padEnd(DGW, '.'));
-  if (W.mode === 'rogue' && rnd() < 0.5) shape = shape.map(r => r.split('').reverse().join(''));
+  const mirrored = W.mode === 'rogue' && rnd() < 0.5; if (mirrored) shape = shape.map(r => r.split('').reverse().join(''));
   const ox = 0, oy = DGH - shape.length; // shapes sit at the bottom of the 8x8 grid
   const cellAt = (x, y) => { const r = shape[y - oy]; return r ? (r[x - ox] || '.') : '.'; };
   const rooms = {}; const key = (x, y) => y * DGW + x; const order = [];
@@ -457,7 +485,12 @@ function genDungeon(W, d, rnd) {
   const sorted = order.slice().sort((a, b) => b.depth - a.depth);
   const boss = sorted[0]; boss.boss = bossFor(d);
   const leaves = order.filter(r => r !== boss && r !== start && r.children.length === 0).sort((a, b) => b.depth - a.depth);
-  const itemRoom = leaves[0] || sorted[1]; if (def.item && itemRoom) itemRoom.item = def.item;
+  let itemRoom = leaves[0] || sorted[1];
+  if (def.itemSpots) { // the treasure sits at one of these shape cells (the deepest one that isn't the boss), e.g. the tip of a trident prong
+    const spots = def.itemSpots.map(([x, y]) => rooms[key(mirrored ? DGW - 1 - x : x, oy + y)]).filter(r => r && r !== boss && !r.hidden).sort((a, b) => b.depth - a.depth);
+    if (spots.length) itemRoom = spots[0];
+  }
+  if (def.item && itemRoom) itemRoom.item = def.item;
   const locked = new Set([boss.id]);
   const lockN = Math.min(1 + Math.floor(d / 2), 5);
   const lockCand = rnd.shuffle(order.filter(r => r.depth >= 2 && r !== boss && r !== itemRoom && !(intro && (r === intro.r2 || r === intro.r3))));

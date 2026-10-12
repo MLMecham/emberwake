@@ -54,7 +54,7 @@ function lightFor(kind, d) {
 // Dark levels (L.dark): a small glow around you plus light from lit braziers (FLAME props) nearby.
 let _torches = [];
 function darkLight(wx, wy, camDist) {
-  let l = clamp(1.0 - camDist / 2.8, 0.02, 1);
+  let l = clamp(1.0 - camDist / (R.heldLight ? 5.5 : 2.8), 0.02, 1); // a held candle lights much further (R.heldLight, set by ui/main.js)
   for (let i = 0; i < _torches.length; i += 2) { const dx = wx - _torches[i], dy = wy - _torches[i + 1]; const tl = 1.2 - Math.sqrt(dx * dx + dy * dy) / 4.8; if (tl > l) l = tl; }
   return l > 1 ? 1 : l;
 }
@@ -548,11 +548,17 @@ function drawBigMap(st) {
       const r = L.rooms[id]; const vis = st.seenRooms.has(L.id + ':' + id);
       const rx = x0 + r.rx * cw, ry = y0 + r.ry * ch;
       if (r.boss && hasComp && !vis && !hasMap) { frame(rx + 2, ry + 2, cw - 4, ch - 4, rgb(120, 30, 30)); rect(rx + cw / 2 - 2, ry + ch / 2 - 2, 5, 5, Math.floor(R.time * 3) & 1 ? rgb(255, 50, 50) : rgb(120, 20, 20)); } // the compass alone still finds the boss
-      if (!vis && (!hasMap || r.hidden)) continue;
+      if (!vis && (!hasMap || r.hidden) && !(st.me && st.me.dbg && !r.hidden)) continue;
       rect(rx + 2, ry + 2, cw - 4, ch - 4, vis ? rgb(80, 100, 190) : rgb(40, 46, 90));
       for (const oid in r.links) { const o = L.rooms[oid]; if (!o || !mapLinkShown(st, L, r, o)) continue; const t = L.get(...(r.ry === o.ry ? [Math.max(r.rx, o.rx) * DSX, r.ry * DSY + 4] : [r.rx * DSX + 6, Math.max(r.ry, o.ry) * DSY])); const c = t === TL.LOCKED ? rgb(240, 200, 60) : rgb(160, 180, 255); if (o.rx > r.rx) rect(rx + cw - 3, ry + ch / 2 - 2, 6, 4, c); if (o.ry > r.ry) rect(rx + cw / 2 - 2, ry + ch - 3, 4, 6, c); }
       if (r.boss && hasComp) rect(rx + cw / 2 - 2, ry + ch / 2 - 2, 5, 5, Math.floor(R.time * 3) & 1 ? rgb(255, 50, 50) : rgb(120, 20, 20));
       if (r.item && st.seenRooms.has(L.id + ':' + id)) blit(SPR[itemSprite(r.item)], rx + 2, ry + 1, 1);
+      // the map points to the compass, the compass to the map, and both together to the dungeon's treasure ('?').
+      // Debug mode shows them all.
+      const dbg = st.me && st.me.dbg, held = (it) => st.me && (st.me.items[it] || (it === 'plate' && st.me.armorMax >= 2) || (it === 'bombbag' && st.me.maxBombs > 8));
+      if (r.compass && !hasComp && (hasMap || dbg)) blit(SPR[itemSprite('compass')], rx + cw - 17, ry + 1, 1);
+      if (r.map && !hasMap && (hasComp || dbg)) blit(SPR[itemSprite('map')], rx + cw - 17, ry + 1, 1);
+      if (r.item && !held(r.item) && ((hasMap && hasComp) || dbg) && !st.seenRooms.has(L.id + ':' + id)) text('?', rx + cw / 2 - 2, ry + ch / 2 - 3, Math.floor(R.time * 2) & 1 ? rgb(255, 220, 120) : rgb(255, 255, 255));
     }
     for (const p of st.players) { if (p[1] !== L.id) continue; const c = p[0] === st.myId ? rgb(255, 255, 255) : c32(hexToRgb((PCOLORS.find(c => c.name === p[5]) || PCOLORS[0]).c)); rect(x0 + p[2] / DSX * cw - 2, y0 + p[3] / DSY * ch - 2, 4, 4, c); }
     text((hasMap ? 'MAP ' : '') + (hasComp ? 'COMPASS' : ''), 6, H - 10, rgb(200, 200, 200));

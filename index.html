@@ -26,6 +26,9 @@ button:active { transform:translateY(2px); box-shadow:0 1px 0 #000; }
 button.primary { background:#7a2c0c; border-color:var(--ember); }
 .row { display:flex; gap:8px; } .row > * { flex:1; }
 label { font-size:11px; color:var(--dim); display:block; margin:10px 0 4px; }
+.bag .tabs { display:flex; gap:6px; margin:2px 0 4px; }
+.bag .tabs button { flex:1; margin:0; padding:7px 4px; }
+.bag .tabs button.on { border-color:var(--gold); color:var(--gold); background:#3a2c14; }
 .bag .counts { font-size:12px; color:var(--gold); margin:4px 0 6px; line-height:1.7; }
 .bag .row2 { display:flex; flex-wrap:wrap; gap:6px; }
 .bag .row2 button { width:auto; flex:1 1 140px; display:flex; align-items:center; gap:8px; text-align:left; padding:6px 8px; }
@@ -144,7 +147,7 @@ summary:hover { color:var(--gold); }
     <div class="status" id="pInfo"></div>
     <button id="pResume" class="primary">RESUME</button>
     <button id="pDbgToggle" style="display:none">DEBUG: OFF</button>
-    <div id="pDebug" style="display:none"><button id="pGodToggle">GOD MODE: OFF</button><div class="row"><button id="pDbgMap">MAP HERE</button><button id="pDbgComp">COMPASS HERE</button></div><label>DEBUG WARP</label><div class="warps" id="pWarps"></div></div>
+    <div id="pDebug" style="display:none"><button id="pGodToggle">GOD MODE: OFF</button><div class="row"><button id="pDbgMap">MAP HERE</button><button id="pDbgComp">COMPASS HERE</button></div><button id="pDbgZone">TEST ZONE</button><label>SPAWN A FOE (IN FRONT OF YOU)</label><div class="row"><select id="pDbgFoe"></select><select id="pDbgElite"></select><button id="pDbgSpawn">SPAWN</button></div><label>BOSS ROOMS</label><div class="warps" id="pDbgBosses"></div><label>DEBUG WARP</label><div class="warps" id="pWarps"></div></div>
     <button id="pBag">INVENTORY (I)</button>
     <button id="pInvite">INVITE PLAYERS (CO-OP)</button>
     <button id="pSave">SAVE</button>
@@ -250,7 +253,7 @@ function uid() { return _uid++; }
 
 // Developer names: only heroes with these names can use debug mode (title-screen DEBUG button, pause-menu toggle, Warp Stone).
 const DEV_NAMES = ['MITCH', 'LOGAN'];
-const CANDLE_COOLDOWN = 4; // seconds between candle flames (items/candle.js)
+const CANDLE_COOLDOWN = 2.5; // seconds between candle flames (items/candle.js)
 const ARROWS_START = 15; // arrows a hero can carry before any quiver (items/techniques.js)
 function isDevName(name) { return DEV_NAMES.includes(String(name || '').trim().toUpperCase()); }
 
@@ -1976,6 +1979,25 @@ defineSprite('quiver', [
   '................',
   '................',
 ]);
+defineSpriteVariant('arrow_silver', 'arrow', { u: '#f4f8ff', n: '#9aa4c0', w: '#e0e8ff' });
+defineSprite('arrow_bomb', [
+  '................',
+  '................',
+  '................',
+  '................',
+  '.......x........',
+  '......kkk.......',
+  '.....kkkkk......',
+  '.....kBkkk......',
+  '......kkk.......',
+  '.......n........',
+  '.......n........',
+  '......wnw.......',
+  '......w.w.......',
+  '................',
+  '................',
+  '................',
+]);
 
 // ---- src/content/ai.js ----
 // ===== content/ai.js : reusable enemy behaviors =====
@@ -2135,6 +2157,7 @@ defineDungeon(2, {
 });
 defineDungeon(3, {
   name: 'THE SUNKEN STAIR', item: 'bow', gimmicks: ['drain'], secret: 'EYE', loops: 0.35, bombLoops: 0.3,
+  itemSpots: [[0, 0], [3, 0], [6, 0]], // the bow waits at the tip of a trident prong, never right by the door
   theme: { wall: [44, 104, 110], mortar: [18, 46, 52], hi: [70, 140, 146], floor: [56, 96, 92], edge: [26, 54, 52], fhi: [80, 124, 118], trim: [40, 80, 90] },
   shape: [ // a trident: three prongs off a long hall, and a loop of rooms at the foot
     '#..#..#.',
@@ -2395,6 +2418,7 @@ defineProjectile({ id: 'dawnbeam', spr: 'beam_dawn', spd: 11, dmg: 1, sc: 1.0, p
 defineProjectile({ id: 'dart', spr: 'beam', spd: 12, dmg: 2, sc: 0.5, player: true, eyeHit: true });
 defineProjectile({ id: 'candle', spr: 'flame', spd: 4, dmg: 1, sc: 0.8, z: -0.05, player: true, range: 2.2, fire: true });
 defineProjectile({ id: 'palm', spr: 'flame', spd: 6, dmg: 2, sc: 1.1, z: -0.05, player: true, range: 3.5, fire: true, pierce: true });
+defineProjectile({ id: 'bolt', spr: 'beam', spd: 13, dmg: 2, sc: 0.9, player: true, chain: true, stun: 0.5, range: 9 }); // thunder rod: hops to the next foe (game/sim.js)
 defineProjectile({ id: 'rodbolt', spr: 'magic', spd: 8, dmg: 3, player: true });
 defineProjectile({ id: 'thunder', spr: 'beam', spd: 14, dmg: 3, sc: 0.9, player: true, pierce: true, pierceShield: true, endFx: 'boom' });
 
@@ -3003,7 +3027,7 @@ defineEnemy({
 // POISON FROG: its bubble poisons (projectiles.js 'poisonbubble'), even through a shield. Never comes as a giant.
 defineEnemy(Object.assign({}, enemyDef('frog'), {
   id: 'frog_poison', ai: frogAi('poisonbubble'), sprFor: (e) => e.sub ? 'frog_poison_sub' : null, noElites: ['giant'],
-  pal: { l: '#b048e0', e: '#5a1a80', z: '#f8d840' }, spawns: { biomes: ['lake'], dungeons: [3, 7] },
+  pal: { l: '#b048e0', e: '#5a1a80', z: '#f8d840' }, spawns: {}, // never placed directly: 1 in 10 frogs is born poisonous (game/sim.js)
 }));
 // THE BOG KING. Phase 1: hides in the water, surfaces near you and spits a fan of bubbles; three hits drive him out.
 // Phase 2 (or straight away if the room is drained): leaps from platform to platform (anywhere, once the water's gone),
@@ -3190,6 +3214,8 @@ defineEnemy({
 (function () {
 // ===== content/enemies/knight.js =====
 // Armored chaser. Its shield blocks hits from the front, so strike from the side or use bombs.
+// It turns slowly in that armor, so you can get behind it. From behind you see its back (backSprite), and only then
+// do you know you're clear of the shield.
 'use strict';
 defineEnemy({
   id: 'knight',
@@ -3197,7 +3223,7 @@ defineEnemy({
   spawns: { biomes: ['mountain'], dungeons: [5, 6, 7, 8, 9] },
   ai: AI.chase,
   anim: { fps: 4, frames: (s, kit) => [s, kit.step(s, 12, -1, 0), s, kit.step(s, 12, 0, -1)] },
-  shield: true,
+  shield: true, backSprite: 'knight_back',
   sprite: [
     '................',
     '.....kkkkkk.....',
@@ -3217,6 +3243,26 @@ defineEnemy({
     '................',
   ],
 });
+defineSprite('knight_back', [
+  '................',
+  '.....kkrrkk.....',
+  '....kuurruuk....',
+  '....kuurruuk....',
+  '....kuuuuuuk....',
+  '.....kuuuuk.....',
+  '...kUuuuuuUkk...',
+  '..kuUuuuuuUBBk..',
+  '..kuUuUUuuUkBk..',
+  '..kuUuUUuuUkBk..',
+  '..k.UuuuuuUkk...',
+  '....UuuuuuU.....',
+  '.....UU.UU......',
+  '.....UU.UU......',
+  '....kUk.kUk.....',
+  '................',
+]);
+// the old men know (cave hint pool)
+defineHints(['KNIGHTS TURN SLOWLY IN ALL THAT ARMOR. GET BEHIND ONE AND ITS SHIELD WON\'T SAVE IT.']);
 
 })();
 // ---- src/content/enemies/magmite.js ----
@@ -3613,32 +3659,51 @@ defineItem({
   id: 'boomerang', name: 'BOOMERANG', sprite: 'boomerang', monk: { name: 'ORBIT DISC', sprite: 'disc' }, slot: 'b', order: 1, team: true, debug: true,
   owned: (p) => !!p.items.boomerang,
   give(sim, p, ctx) { p.items.boomerang = true; ctx.banner(); },
+  // a straight throw: stuns what it hits (the disc cuts instead). One out at a time, two with the second boomerang.
   use(sim, p) {
-    if (sim.ents.some(e => e.k === 'boomer' && e.pid === p.id)) return; // one at a time
-    const disc = p.cls === 'monk';
-    sim.spawn({ k: 'boomer', lvl: p.lvl, x: p.x, y: p.y, a: p.a, pid: p.id, out: true, t: 0, spr: disc ? 'disc_spin' : 'boomerang_spin', sc: 0.6, z: 0.15, disc, hitSet: {} });
+    const out = sim.ents.filter(e => e.k === 'boomer' && e.pid === p.id).length; if (out >= (p.items.boomerang2 ? 2 : 1)) return;
+    throwBoomer(sim, p, p.a, 0); sim.sfx('boomer', p.lvl);
+  },
+  // Shift (with the Wide Throw scroll): a wide sweeping arc that hits every foe it passes for a sword's worth and knocks
+  // them back, but doesn't stun. With the second boomerang in hand, both go at once in mirrored arcs.
+  useAlt(sim, p, a) {
+    if (!p.items.widethrow) return this.use(sim, p, a);
+    const out = sim.ents.filter(e => e.k === 'boomer' && e.pid === p.id).length; const have = (p.items.boomerang2 ? 2 : 1) - out; if (have <= 0) return;
+    if (have >= 2) { throwBoomer(sim, p, p.a - 0.9, 1); throwBoomer(sim, p, p.a + 0.9, -1); } else throwBoomer(sim, p, p.a - 0.9, 1);
     sim.sfx('boomer', p.lvl);
   },
 });
+// the second boomerang: two can be out at once. Found after the Wide Throw scroll (docs/IDEAS.md for where).
+defineItem({ id: 'boomerang2', name: 'SECOND BOOMERANG', sprite: 'boomerang', monk: { name: 'SECOND DISC', sprite: 'disc' }, team: true, debug: true,
+  give(sim, p, ctx) { p.items.boomerang2 = true; ctx.banner('SECOND BOOMERANG: TWO IN THE AIR AT ONCE'); } });
+defineItem({ id: 'widethrow', name: 'SCROLL: WIDE THROW', sprite: 'scroll', monk: { name: 'SCROLL: WIDE ORBIT' }, team: true, debug: true,
+  give(sim, p, ctx) { p.items.widethrow = true; ctx.banner(); sim.ev({ t: 'dialog', pid: p.id, text: 'HOLD SHIFT AS YOU THROW. IT SWEEPS WIDE AND HITS HARD, BUT IT WON\'T STUN.' }); } });
+// wide: 0 for a straight throw, +1/-1 for an arc curving one way or the other
+function throwBoomer(sim, p, a, wide) {
+  const disc = p.cls === 'monk';
+  sim.spawn({ k: 'boomer', lvl: p.lvl, x: p.x, y: p.y, a, pid: p.id, out: true, t: 0, spr: disc ? 'disc_spin' : 'boomerang_spin', sc: 0.6, z: 0.15, disc, wide, hitSet: {} });
+}
 defineEntity('boomer', {
   update(sim, e, dt) {
     const p = sim.players[e.pid]; if (!p || p.lvl !== e.lvl) { e.dead = true; return; }
-    const L = sim.W.levels[e.lvl]; const spd = e.disc ? 10 : 8;
+    const L = sim.W.levels[e.lvl]; const spd = e.disc ? 10 : e.wide ? 7.5 : 8;
     if (e.out) {
+      if (e.wide) e.a += e.wide * 2.6 * dt; // curve round
       const nx = e.x + Math.cos(e.a) * spd * dt, ny = e.y + Math.sin(e.a) * spd * dt;
-      if (e.t > (e.disc ? 0.65 : 0.5) || L.solidAt(nx, ny) && !TINFO[L.get(Math.floor(nx), Math.floor(ny))].low) e.out = false; else { e.x = nx; e.y = ny; }
+      if (e.t > (e.wide ? 0.85 : e.disc ? 0.65 : 0.5) || L.solidAt(nx, ny) && !TINFO[L.get(Math.floor(nx), Math.floor(ny))].low) e.out = false; else { e.x = nx; e.y = ny; }
     } else {
       const a = Math.atan2(p.y - e.y, p.x - e.x); e.x += Math.cos(a) * spd * dt; e.y += Math.sin(a) * spd * dt;
       if (dist2(p.x, p.y, e.x, e.y) < 0.3) e.dead = true;
     }
     for (const en of sim.ents) {
       if (en.lvl !== e.lvl || en.dead) continue;
-      if (en.k === 'en' && !e.hitSet[en.id] && dist2(en.x, en.y, e.x, e.y) < (sim.enemyRadius(en) + 0.25) ** 2) {
+      if (en.k === 'en' && !e.hitSet[en.id] && dist2(en.x, en.y, e.x, e.y) < (sim.enemyRadius(en) + (e.wide ? 0.4 : 0.25)) ** 2) {
         e.hitSet[en.id] = 1;
-        if (e.disc) sim.damageEnemy(en, 2, e, { pid: e.pid, ignoreIframes: true }); else sim.damageEnemy(en, 1, e, { pid: e.pid, stunOnly: true });
-        if (!e.disc) e.out = false;
+        if (e.wide) sim.damageEnemy(en, e.disc ? 3 : SWORD_DMG[1] * 2, e, { pid: e.pid, ignoreIframes: true, kbMul: 1.4 }); // sweeps on through
+        else if (e.disc) sim.damageEnemy(en, 2, e, { pid: e.pid, ignoreIframes: true });
+        else { sim.damageEnemy(en, BOOMERANG_DMG, e, { pid: e.pid, stunOnly: true }); e.out = false; }
       }
-      if (en.k === 'pick' && !en.perm && dist2(en.x, en.y, e.x, e.y) < 0.4) { en.x = e.x; en.y = e.y; } // drag loot back
+      if (en.k === 'pick' && (!en.perm || en.item === 'key') && dist2(en.x, en.y, e.x, e.y) < 0.4) { en.x = e.x; en.y = e.y; } // drag loot (and small keys) back
     }
   },
 });
@@ -3655,23 +3720,34 @@ defineItem({
   id: 'bow', name: 'BOW', sprite: 'bow', monk: { name: 'SPIRIT DARTS' }, slot: 'b', order: 3, team: true, debug: true,
   owned: (p) => !!p.items.bow,
   give(sim, p, ctx) { p.items.bow = true; p.arrows = Math.max(p.arrows, 10); ctx.banner(); },
+  // Shift + bow: a BOMB ARROW (needs the scroll, one arrow and one bomb). It bursts where it lands, like a bomb,
+  // and an eye it hits stays shut for good.
+  useAlt(sim, p, a) {
+    if (!p.items.bombarrow) return this.use(sim, p, a);
+    if (p.arrows <= 0 || p.bombs <= 0) return sim.hint(p, p.arrows <= 0 ? 'NO ARROWS.' : 'NO BOMBS FOR A BOMB ARROW.');
+    if (sim.ents.some(e => e.k === 'proj' && e.pid === p.id && (e.type === 'arrow' || e.type === 'dart'))) return;
+    p.arrows--; p.bombs--;
+    sim.fireProj(p.cls === 'monk' ? 'dart' : 'arrow', p.lvl, p.x, p.y, p.a, 'p', p.id, { dmg: 2, bomb: true, spr: 'arrow_bomb' }); sim.sfx('arrow', p.lvl);
+  },
   use(sim, p, a) {
     const loaded = !!(a && a.loaded && p.items.loaded) && p.arrows >= 2; // Loaded Shot (items/techniques.js): two arrows at once
     if (p.arrows <= 0) return sim.hint(p, 'NO ARROWS.');
     const monk = p.cls === 'monk';
     if (sim.ents.filter(e => e.k === 'proj' && e.pid === p.id && (e.type === 'arrow' || e.type === 'dart')).length >= (monk ? 3 : 1)) return;
     p.arrows -= loaded ? 2 : 1;
-    const silver = !!p.items.silver; const dmg = silver ? 4 : 2; const frost = !!p.items.frostarrows && !p.plainArrows; // frost arrows (Rimefang Hollow) freeze, unless the inventory says plain
+    const kind = arrowKind(p); const silver = kind === 'silver', frost = kind === 'frost'; const dmg = silver ? 4 : 2; // the kind picked in the inventory: plain, frost (freeze) or silver
     const extra = Object.assign(loaded ? { kbMul: 1.6, shieldBreak: true } : {}, frost ? { iceLeft: FREEZE_PATH } : {}); const mul = loaded ? 2 : 1; // frost arrows freeze water they fly over (sim.freezeAlong)
     if (monk) for (const s of [-0.12, 0, 0.12]) sim.fireProj('dart', p.lvl, p.x, p.y, p.a + s, 'p', p.id, Object.assign({ dmg: (dmg - 1) * mul, silver, life: 1.5, frost }, extra, frost ? { spr: 'icebolt' } : {}, loaded ? { sc: 0.75 } : {}));
-    else sim.fireProj('arrow', p.lvl, p.x, p.y, p.a, 'p', p.id, Object.assign({ dmg: dmg * mul, silver, frost }, extra, { spr: (loaded ? 'arrow2' : 'arrow') + (frost ? '_ice' : '') }));
+    else sim.fireProj('arrow', p.lvl, p.x, p.y, p.a, 'p', p.id, Object.assign({ dmg: dmg * mul, silver, frost }, extra, { spr: (loaded ? 'arrow2' : 'arrow') + (frost ? '_ice' : silver && !loaded ? '_silver' : '') }));
     sim.sfx('arrow', p.lvl);
   },
 });
 defineItem({ id: 'arrows', name: 'ARROWS', sprite: 'arrow', full: (p) => p.arrows >= (p.maxArrows || ARROWS_START), give(sim, p, ctx) { p.arrows = Math.min(p.maxArrows || ARROWS_START, p.arrows + 15); ctx.banner(); } }); // shop bundle
 defineItem({ id: 'arrow', name: 'ARROWS', sprite: 'arrow', give(sim, p) { p.arrows = Math.min(p.maxArrows || ARROWS_START, p.arrows + 5); sim.sfx('gem', p.lvl); } }); // enemy drop
 // dungeon 8 treasure: arrows hit harder, and only silver can finish the Hollow King
-defineItem({ id: 'silver', name: 'SILVER ARROWS', sprite: 'arrow', team: true, debug: true, give(sim, p, ctx) { p.items.silver = true; ctx.banner(); } });
+defineItem({ id: 'silver', name: 'SILVER ARROWS', sprite: 'arrow_silver', team: true, debug: true, give(sim, p, ctx) { p.items.silver = true; p.arrowType = 'silver'; ctx.banner('SILVER ARROWS: PICK THEM IN THE INVENTORY'); } });
+// which arrows fly: the inventory choice (p.arrowType), as long as you own that kind
+function arrowKind(p) { const t = p.arrowType; if (t === 'silver' && p.items.silver) return 'silver'; if (t === 'frost' && p.items.frostarrows) return 'frost'; if (t == null) return p.items.silver ? 'silver' : p.items.frostarrows ? 'frost' : 'plain'; return 'plain'; }
 
 })();
 // ---- src/content/items/candle.js ----
@@ -3785,7 +3861,7 @@ defineItem({ id: 'fists', name: 'THE OPEN HAND', sprite: 'ki', give(sim, p, ctx)
 // The Hearth (opened by the Fang + the Heart): the DAWNBLADE, from the Hearthwyrm.
 'use strict';
 defineItem({ id: 'frostarrows', name: 'FROST ARROWS', sprite: 'arrow_ice', monk: { name: 'FROST DARTS' }, team: true, debug: true,
-  give(sim, p, ctx) { p.items.frostarrows = true; p.arrows = Math.max(p.arrows, 20); ctx.banner('FROST ARROWS: THEY FREEZE WHAT THEY HIT'); } });
+  give(sim, p, ctx) { p.items.frostarrows = true; p.arrowType = 'frost'; p.arrows = Math.max(p.arrows, 20); ctx.banner('FROST ARROWS: THEY FREEZE WHAT THEY HIT'); } });
 defineItem({ id: 'magmaboots', name: 'MAGMA BOOTS', sprite: 'boots', team: true, debug: true,
   give(sim, p, ctx) { p.items.magmaboots = true; ctx.banner('MAGMA BOOTS: WALK ON LAVA AND VENTS'); } });
 // relics: shared by the party, shown under the shards, and both are needed for the Hearth gate
@@ -3913,6 +3989,17 @@ defineItem({
     sim.fireProj(monk ? 'thunder' : 'rodbolt', p.lvl, p.x, p.y, p.a, 'p', p.id, { fireTrail: !monk }); sim.sfx('magic', p.lvl);
   },
 });
+// THUNDER ROD (debug only for now): a bolt that leaps from foe to foe (up to CHAIN_JUMPS more) and jolts each one.
+// Fire and lightning are the rod's elements; frost belongs to arrows.
+defineItem({
+  id: 'thunderrod', name: 'THUNDER ROD', sprite: 'rod', monk: { name: 'STORM PALM' }, slot: 'b', order: 6, team: true, debug: true,
+  owned: (p) => !!p.items.thunderrod,
+  give(sim, p, ctx) { p.items.thunderrod = true; ctx.banner(); },
+  use(sim, p) {
+    if (sim.ents.some(e => e.k === 'proj' && e.pid === p.id && e.type === 'bolt')) return;
+    sim.fireProj('bolt', p.lvl, p.x, p.y, p.a, 'p', p.id, { chainLeft: 2 }); sim.sfx('beam', p.lvl);
+  },
+});
 
 })();
 // ---- src/content/items/swords.js ----
@@ -3937,6 +4024,10 @@ defineItem({ id: 'loadedshot', name: 'SCROLL: LOADED SHOT', sprite: 'scroll', te
 defineItem({ id: 'quiver', name: 'BIG QUIVER', sprite: 'quiver', team: true, debug: true, monk: { name: 'BIG DART POUCH' },
   debugGrant(p) { p.maxArrows = Math.max(p.maxArrows || ARROWS_START, 30); },
   give(sim, p, ctx) { p.maxArrows = Math.max(p.maxArrows || ARROWS_START, 30); p.arrows = p.maxArrows; ctx.banner(); } });
+// BOMB ARROWS: Shift + bow fires an arrow with a bomb tied on (items/bow.js useAlt). Not placed in the world yet (debug only).
+defineItem({ id: 'bombarrows', name: 'SCROLL: BOMB ARROWS', sprite: 'scroll', team: true, debug: true, monk: { name: 'SCROLL: BLAST DARTS' },
+  debugGrant(p) { p.items.bombarrow = true; },
+  give(sim, p, ctx) { p.items.bombarrow = true; ctx.banner(); sim.ev({ t: 'dialog', pid: p.id, text: 'HOLD SHIFT AS YOU SHOOT TO TIE A BOMB TO THE ARROW. IT BURSTS WHERE IT LANDS, AND AN EYE IT HITS STAYS SHUT.' }); } });
 
 })();
 // ---- src/content/items/tunics.js ----
@@ -4051,7 +4142,35 @@ function genWorld(seed, mode) {
   const rnd = mulberry32(seed);
   genOverworld(W, rnd);
   for (let d = 1; d <= NDUNGEONS(); d++) genDungeon(W, d, mulberry32(seed * 31 + d * 977));
+  genTestZone(W);
   return W;
+}
+
+// ---------- DEBUG TEST ZONE ----------
+// One open hall with a strip of every hazard, an eye-drained moat, a sealed eye, a bomb wall and vents, plus open floor
+// for the debug enemy spawner. Only dev names can warp here (pause menu > TEST ZONE). Fixed layout, no randomness.
+function genTestZone(W) {
+  const w = 36, h = 23; const L = new Level('dbg', 'cave', w, h); W.levels.dbg = L; L.theme = 'd3'; L.signText = {};
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) L.set(x, y, (x === 0 || y === 0 || x === w - 1 || y === h - 1) ? TL.BRICK : TL.DFLOOR);
+  const fill = (x0, y0, x1, y1, t) => { for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) L.set(x, y, t); };
+  const sign = (x, y, text) => { L.props[L.idx(x, y)] = PR.SIGN; L.signText[L.idx(x, y)] = text; };
+  // top row: a strip of every floor hazard, each with a sign under it
+  const strips = [[2, 7, 'WATER', 'DEEP FRESH WATER. FROST ARROWS FREEZE IT; FROGS HIDE IN IT.'], [9, 11, 'SHALLOW', 'SHALLOW WATER: 25% SLOWER.'], [13, 15, 'ICE', 'ICE: SLIPPERY, AND HITS SHOVE FOES FURTHER.'],
+    [17, 19, 'LAVA', 'LAVA: BURNS HEROES AND WALKING FOES.'], [21, 23, 'SPIKES', 'ICE SPIKES: THEY HURT.'], [25, 27, 'PIT', 'A PIT: FALL IN, LOSE A HEART.'], [29, 33, 'GLASS', 'GLASS: CRACKS IF YOU STAND STILL.']];
+  for (const [x0, x1, t, text] of strips) { fill(x0, 2, x1, 6, TL[t]); sign(Math.floor((x0 + x1) / 2), 8, text); }
+  // middle row: a moat the eye drains, a sealed eye that opens a closet, a bomb wall, vents
+  const cells = []; for (let y = 11; y <= 15; y++) for (let x = 3; x <= 9; x++) if (!(x >= 5 && x <= 7 && y >= 12 && y <= 14)) cells.push(L.idx(x, y));
+  for (const i of cells) L.tiles[i] = TL.WATER; L.set(6, 10, TL.EYE);
+  L.rigs = { tz: { cells, eyes: [L.idx(6, 10)] } }; L.eyeLinks = { [L.idx(6, 10)]: { kind: 'timed', rid: 'tz' } }; sign(11, 13, 'AN EYE: SHOOT IT TO DRAIN THE MOAT FOR A WHILE. A BOMB ARROW SEALS IT FOR GOOD.');
+  fill(14, 11, 18, 15, TL.BRICK); fill(15, 12, 17, 14, TL.DFLOOR); L.set(14, 13, TL.BRICK); L.set(13, 11, TL.EYE_SMALL);
+  L.eyeLinks[L.idx(13, 11)] = { kind: 'seal', opens: [L.idx(14, 13)], openTo: TL.DFLOOR, text: 'A HIDDEN WAY OPENS.' }; sign(12, 14, 'A SMALL EYE IN THE CORNER OPENS THE CLOSET.');
+  fill(21, 11, 21, 15, TL.BRICK); L.set(21, 13, TL.BRICK_BOMB); sign(20, 16, 'A BOMBABLE WALL (TRY A BOMB ARROW).');
+  for (let y = 11; y <= 15; y++) for (let x = 24; x <= 32; x++) if ((x + y) % 2 === 0) L.set(x, y, TL.VENT); sign(28, 16, 'VENTS BLOW ON A 3 SECOND BEAT.');
+  // the open floor below is for spawning foes (pause > debug > SPAWN)
+  sign(18, 18, 'OPEN FLOOR: SPAWN FOES HERE FROM THE PAUSE MENU (DEBUG).');
+  L.set(18, h - 1, TL.CEXIT); L.set(18, h - 2, TL.EXIT); L.spawn = { x: 18.5, y: h - 3.5, a: -Math.PI / 2 };
+  const ow = W.levels.ow; L.exit = { lvl: 'ow', x: ow.spawn.x, y: ow.spawn.y, a: ow.spawn.a };
+  L.gimmicks = ['glass', 'vents'];
 }
 
 // ---------- OVERWORLD ----------
@@ -4192,7 +4311,7 @@ function genOverworld(W, rnd) {
     for (let i = 0; i < n; i++) r.enemies.push(rnd.pick(pool));
   }
   // signs near start
-  L.signText = {};
+  L.signText = L.signText || {}; // (the lake island's sign is already in here)
   const sx = sr.rx * RSX + 5, sy = sr.ry * RSY + 7; if (!TINFO[L.get(sx, sy)].solid) { L.props[L.idx(sx, sy)] = PR.SIGN; L.signText[L.idx(sx, sy)] = 'NINE DUNGEONS. EIGHT EMBER SHARDS. ONE HOLLOW CROWN. THE NUMBERED GATES GROW DEADLIER THE FARTHER YOU ROAM.'; }
   // signposts at the passes
   for (const [biome, txt] of [['snow', 'RIMEFANG PASS. BEYOND LIES THE FROZEN REACH, WHERE THE MOTHER OF WYRMS SLEEPS. MIND THE ICE.'], ['ash', 'CINDER PASS. BEYOND LIES THE CINDER WASTES, WHERE THE FATHER OF WYRMS BROODS. THE GROUND ITSELF BURNS.']]) {
@@ -4384,7 +4503,7 @@ function genDungeon(W, d, rnd) {
   for (let i = 0; i < w * h; i++) L.tiles[i] = TL.BRICK;
   // ---- read the shape (roguelike runs may mirror it) ----
   let shape = (def.shape || ['S']).map(r => r.padEnd(DGW, '.'));
-  if (W.mode === 'rogue' && rnd() < 0.5) shape = shape.map(r => r.split('').reverse().join(''));
+  const mirrored = W.mode === 'rogue' && rnd() < 0.5; if (mirrored) shape = shape.map(r => r.split('').reverse().join(''));
   const ox = 0, oy = DGH - shape.length; // shapes sit at the bottom of the 8x8 grid
   const cellAt = (x, y) => { const r = shape[y - oy]; return r ? (r[x - ox] || '.') : '.'; };
   const rooms = {}; const key = (x, y) => y * DGW + x; const order = [];
@@ -4424,7 +4543,12 @@ function genDungeon(W, d, rnd) {
   const sorted = order.slice().sort((a, b) => b.depth - a.depth);
   const boss = sorted[0]; boss.boss = bossFor(d);
   const leaves = order.filter(r => r !== boss && r !== start && r.children.length === 0).sort((a, b) => b.depth - a.depth);
-  const itemRoom = leaves[0] || sorted[1]; if (def.item && itemRoom) itemRoom.item = def.item;
+  let itemRoom = leaves[0] || sorted[1];
+  if (def.itemSpots) { // the treasure sits at one of these shape cells (the deepest one that isn't the boss), e.g. the tip of a trident prong
+    const spots = def.itemSpots.map(([x, y]) => rooms[key(mirrored ? DGW - 1 - x : x, oy + y)]).filter(r => r && r !== boss && !r.hidden).sort((a, b) => b.depth - a.depth);
+    if (spots.length) itemRoom = spots[0];
+  }
+  if (def.item && itemRoom) itemRoom.item = def.item;
   const locked = new Set([boss.id]);
   const lockN = Math.min(1 + Math.floor(d / 2), 5);
   const lockCand = rnd.shuffle(order.filter(r => r.depth >= 2 && r !== boss && r !== itemRoom && !(intro && (r === intro.r2 || r === intro.r3))));
@@ -4546,7 +4670,9 @@ const REVIVE_TIME = 1.5, REVIVE_R2 = 2.6 * 2.6; // seconds to help a teammate up
 const RESPAWN_WAIT = 30; // seconds a downed hero waits before they may give up and respawn at the start on their own
 const BUY_COOLDOWN = 0.8; // seconds between shop purchases for one player
 const FLY_TIME = 4, FLY_COOLDOWN = 2; // Gale Cloak: seconds aloft, and the rest after landing before it works again
-const POISON_FRAC = 0.05; // poison takes 5% of max health a tick
+const POISON_FRAC = 0.05, POISON_FROG_CHANCE = 0.1; // poison frogs are 1 in 10 frogs // poison takes 5% of max health a tick
+const BOOMERANG_STUN = 3, STUN_LOCK = 6, BOOMERANG_DMG = 0.25; // boomerang: stun seconds, the longest a foe can be kept dizzy, chip damage
+const BACK_ANGLE = 2.1; // radians off a foe's facing that count as behind it (about 120 degrees)
 const SHIELD_STUN = 0.9; // seconds a knight reels after a loaded shot hits its shield
 const FREEZE_TIME = 6, FREEZE_PATH = 6; // seconds frost-arrow ice lasts; how many tiles of water one arrow freezes along its flight
 const HAZARD_TICK = 0.5, ICE_KB = 1.5, SHALLOW_SLOW = 0.75; // how often lava/spikes/vents burn a grounded enemy; how much harder hits shove enemies standing on ice
@@ -4591,7 +4717,7 @@ class Sim {
     return p;
   }
   removePlayer(id) { const p = this.players[id]; if (!p) return; this.savedPlayers = this.savedPlayers || {}; this.savedPlayers[p.color] = this.playerSaveData(p); delete this.players[id]; this.ev({ t: 'msg', text: p.name + ' LEFT.' }); }
-  playerSaveData(p) { const o = {}; for (const k of ['cls', 'lvl', 'x', 'y', 'a', 'hp', 'maxHp', 'gems', 'bombs', 'maxBombs', 'arrows', 'maxArrows', 'swordMax', 'armorMax', 'plainArrows', 'sword', 'armor', 'items', 'potions', 'sel']) o[k] = p[k]; o.alive = true; if (o.hp <= 0) o.hp = 12; return o; }
+  playerSaveData(p) { const o = {}; for (const k of ['cls', 'lvl', 'x', 'y', 'a', 'hp', 'maxHp', 'gems', 'bombs', 'maxBombs', 'arrows', 'maxArrows', 'swordMax', 'armorMax', 'arrowType', 'sword', 'armor', 'items', 'potions', 'sel']) o[k] = p[k]; o.alive = true; if (o.hp <= 0) o.hp = 12; return o; }
   ev(e) { this.events.push(e); }
   sfx(s, lvl, x, y) { this.ev({ t: 'sfx', s, lvl, x, y }); }
   msg(text, pid) { this.ev({ t: 'msg', text, pid }); }
@@ -4615,10 +4741,10 @@ class Sim {
     if (!L.rigs) return;
     for (const rid in L.rigs) {
       const k = L.id + ':' + rid; const shot = this.rigShots[k];
-      const code = tideCode(shot != null ? this.time - shot : null); const prev = (L.rigCode && L.rigCode[rid]) || 0;
+      const code = shot === Infinity ? 1 : tideCode(shot != null ? this.time - shot : null); const prev = (L.rigCode && L.rigCode[rid]) || 0; // (shot Infinity: a bomb arrow sealed its eye)
       if (code === prev) continue;
       applyRig(L, rid, code); if (code === 0) delete this.rigShots[k];
-      const r = L.rooms[rid]; this.sfx(['flood', 'drain', 'eyecreak', 'flood', 'tidewarn'][code], L.id, r.rx * DSX + 6.5, r.ry * DSY + 4.5);
+      const r = L.rooms && L.rooms[rid]; const c0 = L.rigs[rid].cells[0]; this.sfx(['flood', 'drain', 'eyecreak', 'flood', 'tidewarn'][code], L.id, r ? r.rx * DSX + 6.5 : c0 % L.w + 0.5, r ? r.ry * DSY + 4.5 : Math.floor(c0 / L.w) + 0.5);
     }
   }
   // frost arrows freeze the deep fresh water they fly over: a path of ice three tiles wide, up to FREEZE_PATH long, that melts after a while
@@ -4636,9 +4762,10 @@ class Sim {
   }
   frozenList(lvl) { const L = this.W.levels[lvl]; if (!L || !L.frozen) return undefined; const k = Object.keys(L.frozen); return k.length ? k.map(Number) : undefined; } // for snapshots
   rigCodes(lvl) { const L = this.W.levels[lvl]; if (!L || !L.rigCode) return undefined; const o = {}; let any = false; for (const rid in L.rigCode) if (L.rigCode[rid]) { o[rid] = L.rigCode[rid]; any = true; } return any ? o : undefined; } // for snapshots
-  hitEye(L, idx) {
+  projBurst(e) { if (e.bomb && !e.burst) { e.burst = true; this.spawn({ k: 'bomb', lvl: e.lvl, x: e.x - e.vx * 0.03, y: e.y - e.vy * 0.03, fuse: 0, pid: e.pid, spr: 'bomb', sc: 0.5 }); } } // a bomb arrow bursts where it stops
+  hitEye(L, idx, forGood) {
     const link = L.eyeLinks && L.eyeLinks[idx]; if (!link) return; const t = L.tiles[idx]; const x = idx % L.w + 0.5, y = Math.floor(idx / L.w) + 0.5;
-    if (link.kind === 'timed') { this.rigShots[L.id + ':' + link.rid] = this.time; this.sfx('eyeshut', L.id, x, y); return; } // shooting it again keeps it shut longer
+    if (link.kind === 'timed') { this.rigShots[L.id + ':' + link.rid] = forGood ? Infinity : this.time; if (forGood) this.msg('THE EYE IS SEALED SHUT.'); this.sfx('eyeshut', L.id, x, y); return; } // shooting it again keeps it shut longer
     if (link.kind === 'seal' && !TINFO[t].shut) {
       this.setTile(L.id, idx, TINFO[t].small ? TL.EYE_SMALL_SHUT : TL.EYE_SHUT); this.sfx('eyeshut', L.id, x, y);
       for (const o of link.opens || []) this.setTile(L.id, o, link.openTo != null ? link.openTo : TL.OPENDOOR);
@@ -4674,6 +4801,10 @@ class Sim {
         if (!isDevName(p.name)) break; p.dbg = !!a.on; p.god = !!(a.on && a.god); if (!p.dbg && p.sel === 'devwarp') p.sel = null;
         if (p.dbg && a.loadout) this.grantLoadout(p, a.loadout); // switching debug on mid-game hands over the debug loadout
         this.hint(p, 'DEBUG ' + (p.dbg ? 'ON' : 'OFF') + (p.god ? ' + GOD MODE' : '')); break;
+      case 'dbgspawn': if (p.dbg && enemyDef(a.type)) { // debug: a foe (optionally an elite) a few steps in front of you
+        const L = this.W.levels[p.lvl]; let x = p.x + Math.cos(p.a) * 2.5, y = p.y + Math.sin(p.a) * 2.5; if (L.solidAt(x, y) && !(enemyDef(a.type).swim && TINFO[L.get(Math.floor(x), Math.floor(y))].water)) { x = p.x; y = p.y; }
+        const e = this.spawnEnemy(a.type, p.lvl, x, y, { dmgMul: 1 }); if (a.elite) { const el = Content.elites.find(d => d.id === a.elite); if (el) { e.elite = el.idx; if (el.apply) el.apply(e, this); } } } break;
+      case 'dbgboss': if (p.dbg) { const D = this.W.levels['d' + (a.d | 0)]; const r = D && D.rooms[D.bossRoom]; if (r) { const at = r.rewardAt || [6.5, 6.5]; this.teleport(p, D.id, r.rx * DSX + at[0], r.ry * DSY + at[1], -Math.PI / 2); } } break; // debug: straight to a boss
       case 'dbgmap': if (p.dbg && this.W.levels[p.lvl].kind === 'dungeon') { const t = a.what === 'comp' ? 'comps' : 'maps'; this.team[t] = this.team[t] || {}; this.team[t][p.lvl] = true; this.hint(p, (a.what === 'comp' ? 'COMPASS' : 'MAP') + ' GIVEN (DEBUG)'); } break; // sanity checks for dungeon maps
       case 'god': if (p.dbg) { p.god = !!a.on; p.hp = p.maxHp; p.chill = 0; this.hint(p, 'GOD MODE ' + (p.god ? 'ON' : 'OFF')); } break;
       case 'warp': if (p.dbg) { const T = this.W.levels[a.to]; if (T) this.teleport(p, T.id, T.spawn.x, T.spawn.y, T.spawn.a); } break;
@@ -4789,6 +4920,7 @@ class Sim {
       const L = this.W.levels[p.lvl];
       // hazard tiles
       if (p.chill > 0) p.chill -= dt; this.tickPoison(p);
+      if (p.dbg) { p.arrows = Math.max(p.arrows, p.maxArrows || ARROWS_START); p.bombs = Math.max(p.bombs, p.maxBombs); p.items.bombs = true; p.potions = 2; p.items.potion = true; p.gems = Math.max(p.gems, 999); } // debug: never run out
       const t = L.get(Math.floor(p.x), Math.floor(p.y)); const ti = TINFO[t]; const boots = !!p.items.magmaboots;
       if (p.inv <= 0 && !this.flying(p) && ((ti.hurt && !(boots && ti.lava)) || (ti.vent && this.ventPhase() === 2 && !boots))) this.hurtPlayer(p, 1, null); // fliers are above it all
       p.swordMax = Math.max(p.swordMax || 0, p.sword); p.armorMax = Math.max(p.armorMax || 0, p.armor); // best gear ever owned (the inventory lets you wear less)
@@ -4847,7 +4979,13 @@ class Sim {
     const b = roomBounds(L, room);
     const rnd = mulberry32(hashStr(key) + Math.floor(this.time * 1000));
     const tierMul = L.kind === 'dungeon' ? 1 + (Math.min(10, L.dnum) - 1) * 0.25 : 1 + room.tier * 0.4;
+    let dryRoom = null; // frogs only appear where there's water to hide in
     room.enemies.forEach((type, ei) => {
+      if (enemyDef(type) && enemyDef(type).swim && !enemyDef(type).boss) {
+        if (dryRoom == null) { dryRoom = true; for (let y = b.y0; y < b.y1 && dryRoom; y++) for (let x = b.x0; x < b.x1; x++) { const ti = TINFO[L.get(x, y)]; if (ti.water && !ti.ocean) { dryRoom = false; break; } } }
+        if (dryRoom) { const alt = room.enemies.filter(t => enemyDef(t) && !enemyDef(t).swim); type = alt.length ? alt[ei % alt.length] : 'slime'; }
+        else if (type === 'frog' && rnd() < POISON_FROG_CHANCE) type = 'frog_poison';
+      }
       const def = enemyDef(type); if (!def) return;
       let x, y, tries = 0;
       const at = room.at && room.at[ei]; // a hand-built room can pin where each enemy appears
@@ -5054,7 +5192,13 @@ class Sim {
         dmg = opt.shieldBreak * (atk && atk.god ? 3 : 1); e.stun = Math.max(e.stun, SHIELD_STUN); e.reelUntil = this.time + SHIELD_STUN; // a loaded shot jars the shield: half damage, and the knight reels long enough for a sword strike
       }
     }
-    if (opt.stunOnly && !def.boss) { e.stun = 3; this.sfx('clink', e.lvl, e.x, e.y); if (!def.boomerangKills) return true; }
+    if (opt.stunOnly && !def.boss) { // a boomerang hit: stun with a little damage. Hitting a dizzy foe only renews the stun (no damage),
+      // and a foe that's been held dizzy for STUN_LOCK seconds gets a moment of immunity, so two boomerangs can't pin it forever.
+      this.sfx('clink', e.lvl, e.x, e.y);
+      if (this.time < (e.stunImmune || 0)) return false;
+      if (e.stun > 0) { if (this.time - (e.stunFrom != null ? e.stunFrom : this.time) < STUN_LOCK) e.stun = Math.max(e.stun, BOOMERANG_STUN); else { e.stunImmune = this.time + e.stun + 1.2; } return true; }
+      e.stun = BOOMERANG_STUN; e.stunFrom = this.time; if (def.boomerangKills) dmg = Math.max(dmg, e.hp); // bats and the like drop to one throw
+    }
     if (def.onDamage && def.onDamage(this, e, dmg, opt) === false) return true;
     e.hp -= dmg; e.hurt = 0.35; this.sfx('hit', e.lvl, e.x, e.y); if (opt.pid) e.lastPid = opt.pid;
     if (src && !def.boss) { const a = Math.atan2(e.y - src.y, e.x - src.x); const [v, t] = this.knockFor(e, def, 9 * (opt.kbMul || 1)); e.kb = [Math.cos(a) * v, Math.sin(a) * v]; e.kbT = t || 0.12; }
@@ -5128,7 +5272,7 @@ class Sim {
   equip(p, a) {
     if (a.slot === 'sword') { const lv = a.lv | 0; if (lv >= 1 && lv <= Math.max(p.swordMax || 0, p.sword)) p.sword = lv; }
     else if (a.slot === 'armor') { const lv = a.lv | 0; if (lv >= 0 && lv <= Math.max(p.armorMax || 0, p.armor)) p.armor = lv; }
-    else if (a.slot === 'arrows') p.plainArrows = !!a.plain;
+    else if (a.slot === 'arrows') p.arrowType = ['plain', 'frost', 'silver'].includes(a.kind) ? a.kind : (a.plain ? 'plain' : 'frost');
   }
   updateProj(e, dt) {
     const L = this.W.levels[e.lvl]; const def = Content.projectiles[e.type];
@@ -5149,11 +5293,11 @@ class Sim {
       this.burnAt(L, nx, ny);
     }
     if (e.life <= 0 || (ti.solid && !ti.low) || (pr && PROP_INFO[pr] && PROP_INFO[pr].solid && pr !== PR.PEDESTAL)) {
-      if (ti.eye && def.eyeHit && e.life > 0) this.hitEye(L, L.idx(Math.floor(nx), Math.floor(ny)));
+      if (ti.eye && def.eyeHit && e.life > 0) this.hitEye(L, L.idx(Math.floor(nx), Math.floor(ny)), e.bomb);
       else if (ti.eye && !ti.shut && def.player && e.pid && this.players[e.pid]) { const pl = this.players[e.pid]; if (this.time - (pl.eyeHintAt || -99) > 8) { pl.eyeHintAt = this.time; this.hint(pl, 'THE EYE DOESN\'T EVEN BLINK. MAYBE AN ARROW...'); } }
       if (def.fire || e.fireTrail) { this.spawn({ k: 'fire', lvl: e.lvl, x: e.x, y: e.y, life: 1.2, spr: 'flame', sc: 0.8, z: -0.05, pid: e.pid }); }
       if (def.endFx) this.spawn({ k: 'fx', lvl: e.lvl, x: e.x, y: e.y, spr: def.endFx, life: 0.25, sc: 0.8 });
-      e.dead = true; return;
+      this.projBurst(e); e.dead = true; return;
     }
     e.x = nx; e.y = ny;
     if (e.frost && e.owner !== 'e') this.freezeAlong(e, L, nx, ny);
@@ -5178,7 +5322,12 @@ class Sim {
           const landed = this.damageEnemy(en, e.dmg * (e.frost && enemyDef(en.type).hot ? 2 : 1), { x: e.x - e.vx * 0.1, y: e.y - e.vy * 0.1 }, { pid: e.pid, silver: e.silver, pierceShield: def.pierceShield, ignoreIframes: def.pierce, kbMul: e.kbMul, shieldBreak: e.shieldBreak ? e.dmg / 2 : 0 });
           if (e.frost && landed && !en.dead) { en.stun = Math.max(en.stun, enemyDef(en.type).boss ? 0.6 : 2.5); this.spawn({ k: 'fx', lvl: e.lvl, x: en.x, y: en.y, spr: 'icefx', life: 0.4, sc: 1 }); this.sfx('freeze', e.lvl, en.x, en.y); }
           if (def.fire) this.spawn({ k: 'fire', lvl: e.lvl, x: e.x, y: e.y, life: 0.8, spr: 'flame', sc: 0.8, z: -0.05, pid: e.pid });
-          if (!def.pierce) { e.dead = true; return; }
+          if (def.stun && landed && !en.dead && !enemyDef(en.type).boss) en.stun = Math.max(en.stun, def.stun);
+          if (def.chain && e.chainLeft > 0) { // leap to the nearest other foe
+            let nx2 = null, nd = 3.5 * 3.5; for (const o of this.ents) { if (o.k !== 'en' || o.dead || o.lvl !== e.lvl || e.hitSet[o.id] || o.sub || o.air) continue; const d = dist2(o.x, o.y, e.x, e.y); if (d < nd) { nd = d; nx2 = o; } }
+            if (nx2) { e.chainLeft--; const a = Math.atan2(nx2.y - e.y, nx2.x - e.x), sp = Math.hypot(e.vx, e.vy); e.vx = Math.cos(a) * sp; e.vy = Math.sin(a) * sp; e.life = Math.max(e.life, 0.8); this.sfx('beam', e.lvl, e.x, e.y); return; }
+          }
+          if (!def.pierce) { this.projBurst(e); e.dead = true; return; }
         }
       }
     }
@@ -5245,12 +5394,13 @@ class Sim {
     }
   }
   // ---- snapshot for a player ----
-  entView(e) {
+  entView(e, viewer) { // viewer: the hero this snapshot is for (a knight shows them its back when they're behind it)
     let spr = e.spr, sc = e.sc || 0.8, z = e.z || 0, fl = 0;
     if (e.k === 'en') {
       const def = enemyDef(e.type); spr = e.dormant ? 'statue' : e.type; sc = e.dormant ? 1.1 : def.sc * (e.scMul || 1); z = e.dormant ? 0 : def.z || 0;
       if (def.fly) z += Math.sin(e.t * 6) * 0.06;
-      if (def.sprFor) { const s2 = def.sprFor(e); if (s2) spr = s2; } // e.g. a frog's head poking out of the water
+      if (def.sprFor) { const s2 = def.sprFor(e); if (s2) spr = s2; }
+      if (def.backSprite && viewer && !e.dormant && Math.abs(angDiff(e.f, Math.atan2(viewer.y - e.y, viewer.x - e.x))) > BACK_ANGLE) spr = def.backSprite; // e.g. a frog's head poking out of the water
       if (e.hurt > 0) fl |= 1; if (e.stun > 0) fl |= 2; if (def.phase) fl |= 4; if (e.spawnFx > 0) { spr = 'puff'; }
       if (def.view) z += def.view(e);
     }
@@ -5265,9 +5415,9 @@ class Sim {
   }
   snapshotFor(pid) {
     const p = this.players[pid]; if (!p) return null;
-    const en = []; for (const e of this.ents) if (e.lvl === p.lvl) en.push(this.entView(e));
+    const en = []; for (const e of this.ents) if (e.lvl === p.lvl) en.push(this.entView(e, p));
     const pl = []; for (const o of Object.values(this.players)) pl.push([o.id, o.lvl, Math.round(o.x * 100) / 100, Math.round(o.y * 100) / 100, Math.round(o.a * 100) / 100, o.color, o.armor, o.cls, o.alive ? 1 : 0, o.atk, o.name, Math.round(o.revive / REVIVE_TIME * 100) / 100, o.hp, o.maxHp, o.reviver || 0]);
-    const me = {}; for (const k of ['lvl', 'hp', 'maxHp', 'gems', 'bombs', 'maxBombs', 'arrows', 'maxArrows', 'swordMax', 'armorMax', 'plainArrows', 'sword', 'armor', 'items', 'potions', 'alive', 'cls', 'sel', 'color', 'name', 'dbg', 'god']) me[k] = p[k]; me.chill = p.chill > 0 ? 1 : 0; me.poison = p.poisonTicks > 0 ? p.poisonTicks : 0; me.fly = this.flying(p) ? Math.round((p.flyUntil - this.time) * 10) / 10 : 0; me.respawnIn = p.alive ? 0 : Math.max(0, Math.ceil(RESPAWN_WAIT - (this.time - (p.downAt || 0))));
+    const me = {}; for (const k of ['lvl', 'hp', 'maxHp', 'gems', 'bombs', 'maxBombs', 'arrows', 'maxArrows', 'swordMax', 'armorMax', 'arrowType', 'sword', 'armor', 'items', 'potions', 'alive', 'cls', 'sel', 'color', 'name', 'dbg', 'god']) me[k] = p[k]; me.chill = p.chill > 0 ? 1 : 0; me.poison = p.poisonTicks > 0 ? p.poisonTicks : 0; me.fly = this.flying(p) ? Math.round((p.flyUntil - this.time) * 10) / 10 : 0; me.respawnIn = p.alive ? 0 : Math.max(0, Math.ceil(RESPAWN_WAIT - (this.time - (p.downAt || 0))));
     return { t: 's', paused: !!this.paused, pausedBy: this.pausedBy, me, pl, en, team: { keys: this.team.keys, maps: this.team.maps, comps: this.team.comps, shards: this.team.shards, done: this.team.done, relics: this.team.relics }, vp: this.ventPhase(), rg: this.rigCodes(p.lvl), fz: this.frozenList(p.lvl), mv: this.modVer, over: this.over > 0 };
   }
   // ---- save ----
@@ -5345,7 +5495,7 @@ function lightFor(kind, d) {
 // Dark levels (L.dark): a small glow around you plus light from lit braziers (FLAME props) nearby.
 let _torches = [];
 function darkLight(wx, wy, camDist) {
-  let l = clamp(1.0 - camDist / 2.8, 0.02, 1);
+  let l = clamp(1.0 - camDist / (R.heldLight ? 5.5 : 2.8), 0.02, 1); // a held candle lights much further (R.heldLight, set by ui/main.js)
   for (let i = 0; i < _torches.length; i += 2) { const dx = wx - _torches[i], dy = wy - _torches[i + 1]; const tl = 1.2 - Math.sqrt(dx * dx + dy * dy) / 4.8; if (tl > l) l = tl; }
   return l > 1 ? 1 : l;
 }
@@ -5839,11 +5989,17 @@ function drawBigMap(st) {
       const r = L.rooms[id]; const vis = st.seenRooms.has(L.id + ':' + id);
       const rx = x0 + r.rx * cw, ry = y0 + r.ry * ch;
       if (r.boss && hasComp && !vis && !hasMap) { frame(rx + 2, ry + 2, cw - 4, ch - 4, rgb(120, 30, 30)); rect(rx + cw / 2 - 2, ry + ch / 2 - 2, 5, 5, Math.floor(R.time * 3) & 1 ? rgb(255, 50, 50) : rgb(120, 20, 20)); } // the compass alone still finds the boss
-      if (!vis && (!hasMap || r.hidden)) continue;
+      if (!vis && (!hasMap || r.hidden) && !(st.me && st.me.dbg && !r.hidden)) continue;
       rect(rx + 2, ry + 2, cw - 4, ch - 4, vis ? rgb(80, 100, 190) : rgb(40, 46, 90));
       for (const oid in r.links) { const o = L.rooms[oid]; if (!o || !mapLinkShown(st, L, r, o)) continue; const t = L.get(...(r.ry === o.ry ? [Math.max(r.rx, o.rx) * DSX, r.ry * DSY + 4] : [r.rx * DSX + 6, Math.max(r.ry, o.ry) * DSY])); const c = t === TL.LOCKED ? rgb(240, 200, 60) : rgb(160, 180, 255); if (o.rx > r.rx) rect(rx + cw - 3, ry + ch / 2 - 2, 6, 4, c); if (o.ry > r.ry) rect(rx + cw / 2 - 2, ry + ch - 3, 4, 6, c); }
       if (r.boss && hasComp) rect(rx + cw / 2 - 2, ry + ch / 2 - 2, 5, 5, Math.floor(R.time * 3) & 1 ? rgb(255, 50, 50) : rgb(120, 20, 20));
       if (r.item && st.seenRooms.has(L.id + ':' + id)) blit(SPR[itemSprite(r.item)], rx + 2, ry + 1, 1);
+      // the map points to the compass, the compass to the map, and both together to the dungeon's treasure ('?').
+      // Debug mode shows them all.
+      const dbg = st.me && st.me.dbg, held = (it) => st.me && (st.me.items[it] || (it === 'plate' && st.me.armorMax >= 2) || (it === 'bombbag' && st.me.maxBombs > 8));
+      if (r.compass && !hasComp && (hasMap || dbg)) blit(SPR[itemSprite('compass')], rx + cw - 17, ry + 1, 1);
+      if (r.map && !hasMap && (hasComp || dbg)) blit(SPR[itemSprite('map')], rx + cw - 17, ry + 1, 1);
+      if (r.item && !held(r.item) && ((hasMap && hasComp) || dbg) && !st.seenRooms.has(L.id + ':' + id)) text('?', rx + cw / 2 - 2, ry + ch / 2 - 3, Math.floor(R.time * 2) & 1 ? rgb(255, 220, 120) : rgb(255, 255, 255));
     }
     for (const p of st.players) { if (p[1] !== L.id) continue; const c = p[0] === st.myId ? rgb(255, 255, 255) : c32(hexToRgb((PCOLORS.find(c => c.name === p[5]) || PCOLORS[0]).c)); rect(x0 + p[2] / DSX * cw - 2, y0 + p[3] / DSY * ch - 2, 4, 4, c); }
     text((hasMap ? 'MAP ' : '') + (hasComp ? 'COMPASS' : ''), 6, H - 10, rgb(200, 200, 200));
@@ -6449,6 +6605,7 @@ function updateLocal(dt, inp) {
   }
   // Item button. Shift (or LB) held = the item's technique. The bow draws while held and fires on release; with the
   // Loaded Shot scroll, holding past LOAD_TIME nocks a second arrow ("hold = power").
+  R.heldLight = Lc.sel === 'candle'; // holding the candle lights up dark rooms; lit braziers do it hands-free
   if (Lc.sel === 'bow') {
     const canLoad = me.items.loaded && me.arrows >= 2;
     if (inp.item) Lc.loadT = 0.001;
@@ -6645,19 +6802,29 @@ function renderBag() {
   const sec = (title) => { const l = document.createElement('label'); l.textContent = title; body.appendChild(l); const r = document.createElement('div'); r.className = 'row2'; body.appendChild(r); return r; };
   const btn = (row, spr, name, sub, on, click) => { const b = document.createElement('button'); if (on) b.classList.add('on'); if (spr) b.appendChild(spriteCanvas(spr)); const t = document.createElement('span'); t.textContent = name; if (sub) { const s = document.createElement('small'); s.textContent = sub; t.appendChild(s); } b.appendChild(t); if (click) b.onclick = () => { click(); sfx('menu'); setTimeout(renderBag, 160); }; row.appendChild(b); };
   const tag = (row, spr, name, sub) => { const d = document.createElement('div'); d.className = 'tag'; if (spr) d.appendChild(spriteCanvas(spr)); const t = document.createElement('span'); t.textContent = name; if (sub) { const s = document.createElement('small'); s.style.display = 'block'; s.style.color = 'var(--dim)'; s.textContent = sub; t.appendChild(s); } d.appendChild(t); row.appendChild(d); };
+  // pages instead of one long scrolling list: GEAR / ITEMS / UPGRADES
+  const page = G.bagPage || 'gear'; const tabs = document.createElement('div'); tabs.className = 'tabs';
+  for (const [id, label] of [['gear', 'GEAR'], ['items', 'ITEMS'], ['upgrades', 'UPGRADES']]) { const b = document.createElement('button'); b.textContent = label; if (id === page) b.classList.add('on'); b.onclick = () => { G.bagPage = id; sfx('menu'); renderBag(); }; tabs.appendChild(b); }
+  body.appendChild(tabs);
   const c = document.createElement('div'); c.className = 'counts';
   c.textContent = 'GEMS ' + me.gems + '   ARROWS ' + me.arrows + '/' + (me.maxArrows || ARROWS_START) + '   BOMBS ' + me.bombs + '/' + me.maxBombs + '   POTIONS ' + (me.potions || 0) + '   HEARTS ' + (me.maxHp / 4);
   body.appendChild(c);
   const smax = Math.max(me.swordMax || 0, me.sword), amax = Math.max(me.armorMax || 0, me.armor);
-  if (smax > 0) { const r = sec(monk ? 'FISTS - PICK ANY YOU HAVE EARNED' : 'SWORD - PICK ANY YOU HAVE EARNED'); for (let lv = 1; lv <= smax; lv++) btn(r, monk ? 'ki' : 'sword', (monk ? FIST_NAMES : SWORD_NAMES)[lv], null, me.sword === lv, () => sendAction({ t: 'equip', slot: 'sword', lv })); }
-  { const r = sec(monk ? 'AURA' : 'TUNIC'); for (let lv = 0; lv <= amax; lv++) btn(r, 'armor', (monk ? AURA_NAMES : TUNIC_NAMES)[lv], null, me.armor === lv, () => sendAction({ t: 'equip', slot: 'armor', lv })); }
-  if (me.items.frostarrows) { const r = sec(monk ? 'DARTS' : 'ARROWS'); btn(r, 'arrow', monk ? 'PLAIN DARTS' : 'PLAIN ARROWS', null, !!me.plainArrows, () => sendAction({ t: 'equip', slot: 'arrows', plain: true })); btn(r, 'arrow_ice', monk ? 'FROST DARTS' : 'FROST ARROWS', 'FREEZE FOES AND FRESH WATER', !me.plainArrows, () => sendAction({ t: 'equip', slot: 'arrows', plain: false })); }
+  if (page === 'gear' && smax > 0) { const r = sec(monk ? 'FISTS - PICK ANY YOU HAVE EARNED' : 'SWORD - PICK ANY YOU HAVE EARNED'); for (let lv = 1; lv <= smax; lv++) btn(r, monk ? 'ki' : 'sword', (monk ? FIST_NAMES : SWORD_NAMES)[lv], null, me.sword === lv, () => sendAction({ t: 'equip', slot: 'sword', lv })); }
+  if (page === 'gear') { const r = sec(monk ? 'AURA' : 'TUNIC'); for (let lv = 0; lv <= amax; lv++) btn(r, 'armor', (monk ? AURA_NAMES : TUNIC_NAMES)[lv], null, me.armor === lv, () => sendAction({ t: 'equip', slot: 'armor', lv })); }
+  if (page === 'gear' && (me.items.frostarrows || me.items.silver)) { // arrow kinds, like a sword or tunic choice
+    const cur = me.arrowType || (me.items.silver ? 'silver' : me.items.frostarrows ? 'frost' : 'plain'); const r = sec(monk ? 'DARTS' : 'ARROWS'); const D = monk ? 'DARTS' : 'ARROWS';
+    btn(r, 'arrow', 'PLAIN ' + D, null, cur === 'plain', () => sendAction({ t: 'equip', slot: 'arrows', kind: 'plain' }));
+    if (me.items.frostarrows) btn(r, 'arrow_ice', 'FROST ' + D, 'FREEZE FOES AND FRESH WATER', cur === 'frost', () => sendAction({ t: 'equip', slot: 'arrows', kind: 'frost' }));
+    if (me.items.silver) btn(r, 'arrow_silver', 'SILVER ' + D, 'DOUBLE DAMAGE. ONLY THEY END THE HOLLOW KING', cur === 'silver', () => sendAction({ t: 'equip', slot: 'arrows', kind: 'silver' }));
+  }
   const owned = ownedBItems(me);
-  if (owned.length) { const r = sec('ITEM BUTTON (RIGHT-CLICK / E) - HOLD FOR POWER, SHIFT FOR TECHNIQUE'); for (const id of owned) { const d = itemDef(id); const sub = id === 'bow' ? (me.items.loaded ? 'HOLD: LOADED SHOT' : 'FIRES WHEN YOU LET GO') : id === 'galecloak' ? 'FLY OVER ANYTHING FOR ' + FLY_TIME + 's' : d.useAlt ? 'SHIFT: TECHNIQUE' : null; btn(r, itemSprite(id, me.cls), itemName(id, me.cls), sub, Lc_sel() === id, () => { G.local.sel = id; sendAction({ t: 'sel', item: id }); }); } }
+  if (page === 'items' && owned.length) { const r = sec('ITEM BUTTON (RIGHT-CLICK / E) - HOLD FOR POWER, SHIFT FOR TECHNIQUE'); for (const id of owned) { const d = itemDef(id); const sub = id === 'bow' ? [me.items.loaded ? 'HOLD: LOADED SHOT' : 'FIRES WHEN YOU LET GO', me.items.bombarrow ? 'SHIFT: BOMB ARROW' : ''].filter(Boolean).join(' / ') : id === 'galecloak' ? 'FLY OVER ANYTHING FOR ' + FLY_TIME + 's' : d.useAlt ? 'SHIFT: TECHNIQUE' : null; btn(r, itemSprite(id, me.cls), itemName(id, me.cls), sub, Lc_sel() === id, () => { G.local.sel = id; sendAction({ t: 'sel', item: id }); }); } }
   const ups = []; if ((me.maxArrows || ARROWS_START) > ARROWS_START) ups.push(['quiver', itemName('quiver', me.cls), 'HOLDS ' + me.maxArrows]);
   if (me.items.loaded) ups.push(['scroll', itemName('loadedshot', me.cls), 'HOLD THE ITEM BUTTON WITH THE BOW']);
-  for (const k of Object.keys(me.items)) { if (!me.items[k] || owned.includes(k) || ['loaded', 'frostarrows', 'potion'].includes(k)) continue; const d = Content.items[k]; if (!d || d.slot === 'b') continue; ups.push([itemSprite(k, me.cls), itemName(k, me.cls), k === 'skeletonkey' ? 'OPENS EVERY LOCK' : k === 'silver' ? 'ONLY THEY CAN FINISH THE HOLLOW KING' : k === 'magmaboots' ? 'WALK ON LAVA AND VENTS' : k === 'raft' ? 'OPEN WATER ONLY' : null]); }
-  if (ups.length) { const r = sec('UPGRADES & TECHNIQUES'); for (const [spr, name, sub] of ups) tag(r, spr, name, sub); }
+  if (me.items.bombarrow) ups.push(['scroll', itemName('bombarrows', me.cls), 'SHIFT + BOW: COSTS AN ARROW AND A BOMB']);
+  for (const k of Object.keys(me.items)) { if (!me.items[k] || owned.includes(k) || ['loaded', 'frostarrows', 'silver', 'potion', 'bombarrow'].includes(k)) continue; const d = Content.items[k]; if (!d || d.slot === 'b') continue; ups.push([itemSprite(k, me.cls), itemName(k, me.cls), k === 'skeletonkey' ? 'OPENS EVERY LOCK' : k === 'silver' ? 'ONLY THEY CAN FINISH THE HOLLOW KING' : k === 'magmaboots' ? 'WALK ON LAVA AND VENTS' : k === 'raft' ? 'OPEN WATER ONLY' : null]); }
+  if (page === 'upgrades' && ups.length) { const r = sec('UPGRADES & TECHNIQUES'); for (const [spr, name, sub] of ups) tag(r, spr, name, sub); }
 }
 function Lc_sel() { return G.local && G.local.sel; }
 function resume() { G.state = 'play'; showScreen(null); try { const r = $('game').requestPointerLock(); if (r && r.catch) r.catch(() => { }); } catch (e) { } }
@@ -6665,6 +6832,11 @@ function updatePauseInfo() {
   const n = G.snap ? G.snap.pl.length : 1; const me = G.snap && G.snap.me;
   const dOn = !!(G.snap && G.snap.me && G.snap.me.dbg); $('pDebug').style.display = dOn ? '' : 'none';
   const dev = isDevName(G.snap && G.snap.me ? G.snap.me.name : G.profile.name); $('pDbgToggle').style.display = dev ? '' : 'none'; $('pDbgToggle').textContent = 'DEBUG: ' + (dOn ? 'ON' : 'OFF'); $('pGodToggle').textContent = 'GOD MODE: ' + (G.snap && G.snap.me && G.snap.me.god ? 'ON' : 'OFF');
+  if (dOn && !$('pDbgFoe').childElementCount) { // debug spawner lists and boss-room buttons
+    for (const id of Object.keys(Content.enemies).sort()) { const o = document.createElement('option'); o.value = id; o.textContent = (Content.enemies[id].boss ? 'BOSS: ' : '') + id.toUpperCase(); $('pDbgFoe').appendChild(o); }
+    { const o = document.createElement('option'); o.value = ''; o.textContent = 'NORMAL'; $('pDbgElite').appendChild(o); } for (const el of Content.elites) { const o = document.createElement('option'); o.value = el.id; o.textContent = el.name; $('pDbgElite').appendChild(o); }
+    for (let d = 1; d <= NDUNGEONS(); d++) { const b = document.createElement('button'); b.textContent = d <= 9 ? 'BOSS ' + d : 'BOSS ' + (Content.dungeons[d].mapLabel || d); b.onclick = () => { sendAction({ t: 'dbgboss', d }); resume(); }; $('pDbgBosses').appendChild(b); }
+  }
   if (dOn && !$('pWarps').childElementCount) { const mk = (label, to) => { const b = document.createElement('button'); b.textContent = label; b.onclick = () => { sendAction({ t: 'warp', to }); resume(); }; $('pWarps').appendChild(b); }; mk('WILDS', 'ow'); for (let d = 1; d <= NDUNGEONS(); d++) if (G.world && G.world.levels['d' + d]) mk(d <= 9 ? 'L' + d : (Content.dungeons[d].mapLabel || 'L' + d), 'd' + d); }
   const kinds = NET.role === 'host' ? Object.values(NET.conns).map(c => c.kind).filter(Boolean) : NET.kind ? [NET.kind] : [];
   $('pInfo').title = kinds.length ? 'Connection: ' + kinds.join(', ') : '';
@@ -6757,6 +6929,8 @@ function bindUI() {
     setTimeout(updatePauseInfo, 150); showToast(now ? 'DEBUG ON' : 'DEBUG OFF');
   });
   on('dbgBack', () => { readDebugUI(); showScreen('titleScreen'); refreshTitle(); });
+  on('pDbgZone', () => { sendAction({ t: 'warp', to: 'dbg' }); resume(); });
+  on('pDbgSpawn', () => { sendAction({ t: 'dbgspawn', type: $('pDbgFoe').value, elite: $('pDbgElite').value || null }); resume(); });
   on('pDbgMap', () => { sendAction({ t: 'dbgmap', what: 'map' }); resume(); }); on('pDbgComp', () => { sendAction({ t: 'dbgmap', what: 'comp' }); resume(); });
   on('pGodToggle', () => { const now = !(G.snap && G.snap.me && G.snap.me.god); G.profile.dbg = Object.assign(defaultDebug(), G.profile.dbg || {}, { god: now }); saveProfile(); sendAction({ t: 'god', on: now }); setTimeout(updatePauseInfo, 150); showToast(now ? 'GOD MODE ON' : 'GOD MODE OFF'); });
   // EVERYTHING: best sword (the Dawnblade), plate, 16 hearts, every item and relic, all shards, god mode

@@ -4,7 +4,7 @@
 // The Hearth (opened by the Fang + the Heart): the DAWNBLADE, from the Hearthwyrm.
 'use strict';
 defineItem({ id: 'frostarrows', name: 'FROST ARROWS', sprite: 'arrow_ice', monk: { name: 'FROST DARTS' }, team: true, debug: true,
-  give(sim, p, ctx) { p.items.frostarrows = true; p.arrows = Math.max(p.arrows, 20); ctx.banner('FROST ARROWS: THEY FREEZE WHAT THEY HIT'); } });
+  give(sim, p, ctx) { p.items.frostarrows = true; p.arrowType = 'frost'; p.arrows = Math.max(p.arrows, 20); ctx.banner('FROST ARROWS: THEY FREEZE WHAT THEY HIT'); } });
 defineItem({ id: 'magmaboots', name: 'MAGMA BOOTS', sprite: 'boots', team: true, debug: true,
   give(sim, p, ctx) { p.items.magmaboots = true; ctx.banner('MAGMA BOOTS: WALK ON LAVA AND VENTS'); } });
 // relics: shared by the party, shown under the shards, and both are needed for the Hearth gate

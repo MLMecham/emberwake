@@ -10,3 +10,7 @@ defineItem({ id: 'loadedshot', name: 'SCROLL: LOADED SHOT', sprite: 'scroll', te
 defineItem({ id: 'quiver', name: 'BIG QUIVER', sprite: 'quiver', team: true, debug: true, monk: { name: 'BIG DART POUCH' },
   debugGrant(p) { p.maxArrows = Math.max(p.maxArrows || ARROWS_START, 30); },
   give(sim, p, ctx) { p.maxArrows = Math.max(p.maxArrows || ARROWS_START, 30); p.arrows = p.maxArrows; ctx.banner(); } });
+// BOMB ARROWS: Shift + bow fires an arrow with a bomb tied on (items/bow.js useAlt). Not placed in the world yet (debug only).
+defineItem({ id: 'bombarrows', name: 'SCROLL: BOMB ARROWS', sprite: 'scroll', team: true, debug: true, monk: { name: 'SCROLL: BLAST DARTS' },
+  debugGrant(p) { p.items.bombarrow = true; },
+  give(sim, p, ctx) { p.items.bombarrow = true; ctx.banner(); sim.ev({ t: 'dialog', pid: p.id, text: 'HOLD SHIFT AS YOU SHOOT TO TIE A BOMB TO THE ARROW. IT BURSTS WHERE IT LANDS, AND AN EYE IT HITS STAYS SHUT.' }); } });
