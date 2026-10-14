@@ -87,5 +87,6 @@ Content.fallen = {
   text: 'HE IS COLD. BEHIND HIM THE PASSAGE IS FILLED WITH STONE. HE BROUGHT IT DOWN HIMSELF.',
   hearts: 8, // the first time anyone has this many hearts
 };
+Content.npcTalkR = { oldman_fallen: 1.1 }; // you only read him when you're right beside him
 Content.wardLine = 'THAT SHIELD... DON\'T PITY HIM. HE CHOSE THE FIRST DOOR. HE KNEW.';
 Content.oldMen = ['oldman', 'oldman_frost', 'oldman_fire', 'hermit_moss', 'hermit_ash']; // who knows him

@@ -127,6 +127,14 @@ const TRACKS = {
   // the frontier tunnels: a marching road song for each, the cold one in D minor with an icy arp, the ember one dark and driving
   tunnel_cold: { bpm: 112, lead: 'D5 . . F5 A5 . G5 F5 E5 . . . C5 . D5 E5 F5 . . A5 C6 . A#5 A5 G5 . . . . . . . A5 . . G5 F5 . E5 D5 C#5 . . . E5 . A4 . D5 . . E5 F5 . G5 A5 D5 . . . . . . .', bass: 'D2 D2 A2 D2 A#1 A#1 F2 A#1 C2 C2 G2 C2 A1 A1 E2 A1', arp: 'D4 A4 F5 A4 D4 A4 F5 A4 A#3 F4 D5 F4 A#3 F4 D5 F4 C4 G4 E5 G4 C4 G4 E5 G4 A3 E4 C#5 E4 A3 E4 C#5 E4', drums: 'k . h . s . h . k k h . s . h h' },
   tunnel_ember: { bpm: 120, lead: 'E5 . F5 . E5 . B4 . C5 . B4 . A4 . . . E5 . F5 . G5 . F5 E5 F5 . . . . . . . G5 . A5 . G5 . F5 . E5 . F5 . D5 . . . E5 . . . F5 E5 D5 C5 B4 . . . . . . .', bass: 'E2 E2 E3 E2 F2 F2 F3 F2 G2 G2 G3 G2 F2 F2 E2 E2', arp: 'E4 B4 E5 B4 E4 B4 E5 B4 F4 C5 F5 C5 F4 C5 F5 C5 G4 D5 G5 D5 G4 D5 G5 D5 F4 C5 F5 C5 E4 B4 E5 B4', drums: 'k . h k s . h . k . h k s s h .' },
+  // DREAD: for the first old man's dark cave, the Lament, and other sad moments. Slow B phrygian with a tritone bell: sine
+  // lead, held low drone, a heartbeat thud (d) through the stone, no hats.
+  dread: { bpm: 54, quiet: true, wave: 'sine', leadSus: 5, leadVol: 0.11, bassSus: 3.8, bassVol: 0.14, arpWave: 'sine', arpSus: 6, arpVol: 0.05,
+    lead: 'F#5 . . . G5 . . . . . . . F#5 . E5 . D5 . . . . . . . C#5 . . . . . . . . . . . . . . . B4 . . . C5 . . . B4 . . . . . . . . . . . . . . . . . . . D5 . . . C#5 . . . . . . . C5 . . . B4 . . . . . . . A#4 . . . . . . . . . . . . . . . B4 . . . . . . . . . . . . . . . . . . . . . . . . . . .',
+    bass: 'B1 . . . B1 . . . G1 . . . G1 . . . B1 . . . B1 . . . C2 . . . A#1 . . .',
+    arp: 'B5 . . . . . . . . . . . . . . . . . . . . . . . F6 . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .',
+    drone: 'B2 B2 G2 F#2',
+    drums: 'd . d . . . . . . . . . . . . . . . . . . . . . . . . . . . . .' },
   cave: { bpm: 90, lead: 'C5 . E5 . G5 . E5 . F5 . A5 . G5 . . . E5 . G5 . C6 . B5 . A5 . G5 . . . . .', bass: 'C3 C3 F3 F3 G3 G3 C3 C3' },
   boss: { bpm: 168, lead: 'E5 E5 . E5 F5 E5 D#5 E5 . . B4 . C5 . D#5 . E5 E5 . E5 G5 F#5 F5 E5 . . B4 . A4 . B4 .', bass: 'E2 E2 E3 E2 E2 E3 E2 E3 C2 C2 C3 C2 B1 B1 B2 B1', arp: 'E4 G4 B4 E5 E4 G4 B4 E5 E4 G4 B4 E5 E4 G4 B4 E5 C4 E4 G4 C5 C4 E4 G4 C5 B3 D#4 F#4 B4 B3 D#4 F#4 B4', drums: 'k h s h k k s h k h s h k k s s' },
   final: { bpm: 126, lead: 'D5 . F5 . A5 . G#5 . A5 . . . D6 . C6 . A5 . F5 . G5 . A5 . D5 . . . . . . .', bass: 'D2 D2 D3 D2 A#1 A#1 A#2 A#1 C2 C2 C3 C2 A1 A1 A2 A1', arp: 'D4 F4 A4 D5 D4 F4 A4 D5 A#3 D4 F4 A#4 A#3 D4 F4 A#4 C4 E4 G4 C5 C4 E4 G4 C5 A3 C#4 E4 A4 A3 C#4 E4 G4', drums: 'k . s . k k s . k . s . k k s h' },
@@ -139,17 +147,19 @@ function drum(kind, t) {
   if (kind === 'k') { tone(150, 0.14, 'sine', 0.5, 40, t, g); }
   else if (kind === 's') { noise(0.12, 0.16, 2600, t, g); tone(220, 0.06, 'triangle', 0.08, 120, t, g); }
   else if (kind === 'h') { noise(0.03, 0.05, 9000, t, g); }
+  else if (kind === 'd') { tone(62, 0.45, 'sine', 0.32, 40, t, g); noise(0.2, 0.03, 300, t, g); } // a far-off thud, like a heartbeat through stone
 }
 function musicTick() {
   if (!AU.ctx || !AU.track || !AU.on) return; const tr = AU.track; const stepDur = 60 / tr.bpm / 2;
   const lead = tr._l || (tr._l = tr.lead.split(' ')), bass = tr._b || (tr._b = tr.bass.split(' '));
   const arp = tr.arp ? (tr._a || (tr._a = tr.arp.split(' '))) : null, drums = tr.drums ? (tr._d || (tr._d = tr.drums.split(' '))) : null;
   while (AU.nextT < AU.ctx.currentTime + 0.25) {
-    const l = lead[AU.step % lead.length]; if (l && l !== '.') tone(N(l), stepDur * 1.8, 'square', 0.09, null, AU.nextT, AU.musicGain);
-    if (AU.step % 2 === 0) { const b = bass[(AU.step / 2) % bass.length]; if (b && b !== '.') tone(N(b), stepDur * 1.6, 'triangle', 0.22, null, AU.nextT, AU.musicGain); }
-    if (arp) { const a = arp[AU.step % arp.length]; if (a && a !== '.') tone(N(a), stepDur * 0.9, 'square', 0.035, null, AU.nextT, AU.musicGain); }
+    const l = lead[AU.step % lead.length]; if (l && l !== '.') tone(N(l), stepDur * (tr.leadSus || 1.8), tr.wave || 'square', tr.leadVol || 0.09, null, AU.nextT, AU.musicGain);
+    if (AU.step % 2 === 0) { const b = bass[(AU.step / 2) % bass.length]; if (b && b !== '.') tone(N(b), stepDur * (tr.bassSus || 1.6), 'triangle', tr.bassVol || 0.22, null, AU.nextT, AU.musicGain); }
+    if (arp) { const a = arp[AU.step % arp.length]; if (a && a !== '.') tone(N(a), stepDur * (tr.arpSus || 0.9), tr.arpWave || 'square', tr.arpVol || 0.035, null, AU.nextT, AU.musicGain); }
+    if (tr.drone && AU.step % 16 === 0) { const dr = tr._dr || (tr._dr = tr.drone.split(' ')); const n = dr[(AU.step / 16) % dr.length]; if (n && n !== '.') { tone(N(n), stepDur * 17, 'sine', 0.12, null, AU.nextT, AU.musicGain); tone(N(n) * 1.004, stepDur * 17, 'sine', 0.06, null, AU.nextT, AU.musicGain); } } // a slow, slightly beating pedal tone
     if (drums) { const d = drums[AU.step % drums.length]; if (d && d !== '.') drum(d, AU.nextT); }
-    else if (AU.step % 4 === 2) noise(0.05, 0.04, 6000, AU.nextT, AU.musicGain);
+    else if (!tr.quiet && AU.step % 4 === 2) noise(0.05, 0.04, 6000, AU.nextT, AU.musicGain);
     AU.step++; AU.nextT += stepDur;
   }
 }

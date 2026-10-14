@@ -208,7 +208,7 @@ function updateLocal(dt, inp) {
     if (near) { Lc.whisperAt = R.time; sfx('whisper'); if (!Lc.whisperHint) { Lc.whisperHint = true; pushMsg('...SOMETHING WHISPERS NEARBY...', 3); } }
   }
   // NPC auto-talk & sign
-  for (const e of (snap.en || [])) { if (e[9] && dist2(e[2], e[3], Lc.x, Lc.y) < 6 && !Lc.npcTalked[e[0]]) { Lc.npcTalked[e[0]] = true; showDialog(e[9]); } }
+  for (const e of (snap.en || [])) { const r = (Content.npcTalkR && Content.npcTalkR[e[1]]) || 2.45; if (e[9] && dist2(e[2], e[3], Lc.x, Lc.y) < r * r && !Lc.npcTalked[e[0]]) { Lc.npcTalked[e[0]] = true; showDialog(e[9]); } } // some only speak when you're right beside them (npcTalkR)
   // things you can press F on: the nearest sign or person you're facing gets an on-screen prompt
   Lc.prompt = null;
   { let best = 2.6;
@@ -269,7 +269,7 @@ function updateLocal(dt, inp) {
   // low hp beep
   if (me.hp <= 4 && me.hp > 0) { Lc.lowT -= dt; if (Lc.lowT <= 0) { Lc.lowT = 0.5; sfx('lowhp'); } }
   // music
-  let track = L.kind === 'ow' ? 'ow' : L.kind === 'cave' ? 'cave' : L.kind === 'tunnel' ? (((dungeonRoomAt(L, Lc.x, Lc.y) || {}).miniboss && snap.en.some(e => e[8] >= 0)) ? 'boss' : L.tunnelBiome === 'snow' ? 'tunnel_cold' : 'tunnel_ember') : L.dnum === 10 ? 'frost' : L.dnum === 11 ? 'fire' : L.dnum === 12 ? 'hearth' : (L.dnum >= 5 && L.dnum <= 8 ? 'deep' : 'dungeon');
+  let track = L.kind === 'ow' ? 'ow' : L.kind === 'cave' ? (L.fallen || L.caveKind === 'g_psalm' ? 'dread' : 'cave') : L.kind === 'tunnel' ? (((dungeonRoomAt(L, Lc.x, Lc.y) || {}).miniboss && snap.en.some(e => e[8] >= 0)) ? 'boss' : L.tunnelBiome === 'snow' ? 'tunnel_cold' : 'tunnel_ember') : L.dnum === 10 ? 'frost' : L.dnum === 11 ? 'fire' : L.dnum === 12 ? 'hearth' : (L.dnum >= 5 && L.dnum <= 8 ? 'deep' : 'dungeon');
   if (L.kind === 'ow') { const rg = owRegionAt(L, Lc.x, Lc.y); if (rg.biome === 'snow') track = 'frost'; else if (rg.biome === 'ash') track = 'fire'; }
   if (L.kind === 'dungeon') { const r = dungeonRoomAt(L, Lc.x, Lc.y); if (r && r.boss && snap.en.some(e => e[8] >= 0)) track = L.dnum === 9 ? 'final' : L.dnum >= 10 ? 'dragon' : 'boss'; }
   musicPlay(track);
