@@ -6,6 +6,7 @@ const flag = (k) => ({ has: (p) => !!p.items[k], on: (p) => { p.items[k] = true;
 Content.upgrades = [
   Object.assign({ id: 'lunge', group: 'SWORD', desc: 'SHIFT + HOLD ATTACK TO THE CHIME, LET GO: LUNGE AND SLASH' }, flag('lunge')),
   Object.assign({ id: 'heavypommel', group: 'SWORD', desc: 'POMMEL STRIKES KNOCK ARMOR OFF (ONCE PER FOE)' }, flag('heavypommel')),
+  Object.assign({ id: 'mirrorguard', group: 'SHIELD', desc: 'THE PERFECT BLOCK LASTS 2 S INSTEAD OF 1' }, flag('mirrorguard')),
   Object.assign({ id: 'loadedshot', group: 'BOW', desc: 'HOLD TO NOCK ONE MORE ARROW' }, flag('loaded')),
   Object.assign({ id: 'tripleshot', group: 'BOW', desc: 'HOLD LONGER TO NOCK ONE MORE ARROW' }, flag('loaded2')),
   Object.assign({ id: 'bombarrows', group: 'BOW', desc: 'SHIFT + BOW: AN ARROW WITH A BOMB TIED ON' }, flag('bombarrow')),

@@ -372,7 +372,7 @@ function drawViewmodel(st) {
     const shx = W * 0.27 - ready * W * 0.02 + sway + bk * 7 + (Math.random() - 0.5) * bk * 4;
     const shy = H - 12 - ready * 34 + lift + bk * 10;
     const sw = Math.round(50 * sc), sh = Math.round(58 * sc); const x0 = Math.round(shx - sw / 2), y0 = Math.round(shy - sh / 2);
-    const rim = bk > 0.3 ? rgb(255, 255, 255) : rgb(176, 178, 194), rimD = rgb(96, 98, 116), wood = rgb(116, 76, 40), woodD = rgb(78, 50, 26), woodH = rgb(140, 94, 52);
+    const rim = bk > 0.3 ? rgb(255, 255, 255) : st.mirror && ready > 0.8 ? ((Math.floor(R.time * 12) & 1) ? rgb(255, 236, 150) : rgb(255, 255, 230)) : rgb(176, 178, 194), rimD = rgb(96, 98, 116), wood = rgb(116, 76, 40), woodD = rgb(78, 50, 26), woodH = rgb(140, 94, 52); // st.mirror: the perfect-block moment, the rim shines
     const halfW = (j) => { const f = j / sh; if (j < 2) return sw / 2 - (2 - j); return f < 0.42 ? sw / 2 : (sw / 2) * (1 - Math.pow((f - 0.42) / 0.58, 1.7)); }; // round top corners, sides curving into the point
     for (let j = 0; j < sh; j++) {
       const hw = halfW(j); const xl = Math.round(shx - hw), xr = Math.round(shx + hw); if (xr <= xl) continue;

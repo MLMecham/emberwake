@@ -1,6 +1,6 @@
 // ===== content/grottos.js : grottos under hollow trees, and the land's passing talk (lore) =====
-// A few trees in each land are HOLLOW (a dark split in the trunk, if you look). Knock on one with a pommel strike, or
-// bomb it, and it splits open on a stair down into a grotto: a small rooty cave (game/world.js genGrottos picks the
+// A few trees in each land are HOLLOW (a dark split in the trunk, if you look). Set one alight (the candle from the
+// first shop does it; any fire does) and it burns open on a stair down into a grotto: a small rooty cave (game/world.js genGrottos picks the
 // trees; game/sim.js openHollowTree opens them). Each land has one of each kind below, in different places.
 //   SPRING   a warm spring: stand in it and your hearts fill back up (TL.SPRING, game/sim.js)
 //   CACHE    someone's buried stash: arrows, bombs and gems, free (once)
@@ -84,11 +84,11 @@ Content.lore = [
   'MY GRANDMOTHER SAID THE KING HAD A NAME ONCE. SHE WOULDN\'T SAY IT. SHE SAID IT STILL ANSWERS.',
   'THE STAIRS UNDER THE TREES ARE OLDER THAN THE KING. OLDER THAN THE WALLS. THE ROOTS KEEP THEM QUIET.',
   'THE BELLS IN THE SUNKEN STAIR RANG FOR THE LIVING. NOBODY RINGS THEM NOW.',
-  'COUNT THE BANNERS ON THE KNIGHTS. SAME CREST AS THE OLD WALLS. SAME CREST AS YOUR FATHER\'S.',
+  'COUNT THE BANNERS ON THE KNIGHTS. SAME CREST AS THE OLD WALLS. SAME CREST AS OUR FATHERS\'.',
 ];
 // a few of them turn up in the old men's hint caves too
 defineHints([
   'NEVER LIFT A FALLEN KNIGHT\'S VISOR. YOU WON\'T LIKE WHAT ISN\'T THERE.',
   'SHIPS USED TO SAIL SOUTH. THE TIDE STILL BRINGS IN HELMETS. NEVER ANY SHIPS.',
-  'SOME TREES ARE HOLLOW. KNOCK, AND LISTEN.',
+  'SOME TREES ARE HOLLOW. A LITTLE FIRE FINDS THE WAY IN.',
 ]);

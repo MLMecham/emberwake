@@ -779,14 +779,14 @@ attempt('grottos under hollow trees', () => {
   const sim = freshSim(); const p = sim.players.p1; p.items.pommel = true; const L = sim.W.levels.ow;
   const g = L.grottos.find(g => g.kind === 'g_spring'); const i = L.idx(g.x, g.y);
   sim.tryEnter(p, i); __ok(p.lvl === 'ow', 'a closed hollow tree is just a tree');
-  sim.teleport(p, 'ow', g.x + 0.5, g.y + 1.5, -Math.PI / 2); sim.pommelStrike(p, L); __ok(L.tiles[i] === TL.STAIRS && !L.props[i], 'a pommel strike splits it open on a stair');
+  sim.teleport(p, 'ow', g.x + 0.5, g.y + 1.5, -Math.PI / 2); sim.pommelStrike(p, L); __ok(L.props[i] === PR.HOLLOWTREE, 'knocking on it does nothing');
+  sim.spawn({ k: 'bomb', lvl: 'ow', x: g.x + 0.5, y: g.y + 1.3, fuse: 0 }); sim.tick(1 / 60); __ok(L.props[i] === PR.HOLLOWTREE, 'neither does a bomb');
+  sim.fireProj('candle', 'ow', g.x + 0.5, g.y + 2.2, -Math.PI / 2, 'p', p.id, {}); for (let k = 0; k < 40; k++) sim.tick(1 / 60); __ok(L.tiles[i] === TL.STAIRS && !L.props[i], 'the candle burns it open on a stair');
   __ok(sim.makeSave().mods.ow[i][0] === TL.STAIRS, 'and it stays open (saved)');
   sim.tryEnter(p, i); __ok(p.lvl === g.id, 'down the stair into the grotto');
   const G = sim.W.levels[g.id]; let sp = -1; for (let k = 0; k < G.tiles.length; k++) if (G.tiles[k] === TL.SPRING) { sp = k; break; } __ok(sp >= 0, 'the spring grotto has a spring');
   p.maxHp = 12; p.hp = 4; p.x = sp % G.w + 0.5; p.y = Math.floor(sp / G.w) + 0.5; for (let k = 0; k < 400; k++) sim.tick(1 / 60); __ok(p.hp >= p.maxHp, 'standing in it heals you');
   p.x = 6.5; p.y = G.h - 1.5; sim.tryExit(p); __ok(p.lvl === 'ow' && Math.abs(p.y - (g.y + 1.5)) < 0.01, 'out in front of the tree');
-  // a bomb works too
-  const h = L.grottos.find(g => g.kind === 'g_cache'); sim.spawn({ k: 'bomb', lvl: 'ow', x: h.x + 0.5, y: h.y + 1.3, fuse: 0 }); sim.tick(1 / 60); __ok(L.tiles[L.idx(h.x, h.y)] === TL.STAIRS, 'a bomb splits one open too');
   __ok(sim.W.levels[L.grottos.find(g => g.kind === 'g_hermit').id].npcs[0].text && Content.lore.includes(sim.W.levels[L.grottos.find(g => g.kind === 'g_hermit').id].npcs[0].text), 'the hermit mutters a line of lore');
 });
 attempt('steps, ledges and the cloak lift', () => {
@@ -813,6 +813,18 @@ attempt('thorn-folk and homing seeds', () => {
   const b = sim.spawn({ k: 'en', type: 'thornling_briar', lvl: 'dbg', x: 12.5, y: 18.5, hp: 4, maxHp: 4, f: 0, st: 1, tm: 0, stun: 0, hurt: 0, spawnFx: 0, dmgMul: 1 });
   const before = sim.ents.filter(e => e.k === 'proj' && e.type === 'spear').length; sim.updateEnemy(b, 1 / 60); __ok(sim.ents.filter(e => e.k === 'proj' && e.type === 'spear').length - before === 2, 'a briarback throws two spears');
   __ok(['thornling_briar', 'thornling_seer', 'thornling_nettle'].every(id => enemyDef(id).title && !enemyDef(id).boss), 'the kin have their own names');
+});
+attempt('perfect block', () => {
+  const sim = freshSim(); const p = sim.players.p1; p.god = false; p.hp = p.maxHp = 40; sim.teleport(p, 'dbg', 22.5, 19.5, -Math.PI / 2); sim.tick(1 / 60);
+  const shoot = () => sim.fireProj('spear', 'dbg', 22.5, 16.5, Math.PI / 2, 'e', null, { dmg: 1 });
+  sim.onPlayerState('p1', { lvl: 'dbg', x: 22.5, y: 19.5, a: -Math.PI / 2, sh: 1 }); const s1 = shoot(); for (let k = 0; k < 40 && s1.owner === 'e' && !s1.dead; k++) sim.tick(1 / 60);
+  __ok(!s1.dead && s1.owner === 'p' && s1.vy < 0 && p.hp === 40, 'just after the shield comes up, a spear flies back');
+  sim.time += 1.2; const s2 = shoot(); for (let k = 0; k < 40 && !s2.dead; k++) sim.tick(1 / 60); __ok(s2.dead && s2.owner === 'e' && p.hp === 40, 'later it is only blocked');
+  p.items.mirrorguard = true; sim.onPlayerState('p1', { lvl: 'dbg', x: 22.5, y: 19.5, a: -Math.PI / 2, sh: 0 }); sim.onPlayerState('p1', { lvl: 'dbg', x: 22.5, y: 19.5, a: -Math.PI / 2, sh: 1 }); sim.time += 1.5;
+  const s3 = shoot(); for (let k = 0; k < 40 && s3.owner === 'e' && !s3.dead; k++) sim.tick(1 / 60); __ok(s3.owner === 'p', 'Mirror Guard: still reflecting 1.5 s in');
+  const e = sim.spawn({ k: 'en', type: 'thornling', lvl: 'dbg', x: 22.5, y: 15.5, hp: 2, maxHp: 2, f: 0, st: 0, tm: 99, stun: 99, hurt: 0, spawnFx: 0, dmgMul: 1 });
+  sim.onPlayerState('p1', { lvl: 'dbg', x: 22.5, y: 19.5, a: -Math.PI / 2, sh: 0 }); sim.onPlayerState('p1', { lvl: 'dbg', x: 22.5, y: 19.5, a: -Math.PI / 2, sh: 1 });
+  sim.fireProj('spear', 'dbg', 22.5, 16.5, Math.PI / 2, 'e', null, { dmg: 1 }); for (let k = 0; k < 90; k++) sim.tick(1 / 60); __ok(e.dead || e.hp < 2, 'a reflected spear hits its thrower');
 });
 attempt('favorites per save', () => {
   const sim = freshSim(); const p = sim.players.p1; p.items.bow = true; p.items.bombs = true;

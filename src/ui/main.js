@@ -74,7 +74,7 @@ function handleEvent(e) {
     case 'poison': if (e.pid === me) { Lc.flash = 0.3; Lc.flashC = rgb(150, 60, 210); pushMsg('POISONED!', 1.5); } break;
     case 'poisontick': if (e.pid === me) { Lc.flash = 0.18; Lc.flashC = rgb(120, 220, 60); } break;
     case 'hurt': if (e.pid === me) { Lc.kx = e.kx; Lc.ky = e.ky; Lc.flash = 0.25; Lc.flashC = rgb(255, 40, 40); Lc.shake = 0.2; sfx('hurt'); if (navigator.vibrate) try { navigator.vibrate(60); } catch (er) { } } break;
-    case 'block': if (e.pid === me) { Lc.blockT = 0.32; } break;
+    case 'block': if (e.pid === me) { Lc.blockT = 0.32; if (e.reflect) { Lc.flash = 0.12; Lc.flashC = rgb(255, 240, 180); } } break;
     case 'tp': if (e.pid === me) { Lc.lvl = e.lvl; Lc.x = e.x; Lc.y = e.y; Lc.a = e.a; Lc.fade = 0; Lc.pitch = 0; G.smooth = {}; Lc.npcTalked = {}; Lc.z = heightAt(G.world.levels[e.lvl], e.x, e.y); Lc.vz = 0; Lc.lift = 0; } break;
     case 'title': if (e.pid === me) Lc.title = { text: e.text, sub: e.sub, t: 3 }; break;
     case 'dialog': if (e.pid === me) showDialog(e.text); break;
@@ -95,6 +95,9 @@ function showDialog(text) { if (!G.local) return; G.local.dialog = { text, shown
 // ---------- local player update ----------
 // favorite items live in this browser only (a per-player convenience); every read and write is guarded
 // favorites are kept on your hero in the save (game/sim.js 'fav' action), so a new game starts with none
+// the shield is up once you've stood still a moment and aren't swinging (it's drawn coming up then too); the host times the
+// perfect block from the moment it rises (game/sim.js reflectWindow)
+function shieldUp(Lc) { return Lc.stillT > 0.3 && Lc.swing == null ? 1 : 0; }
 function myFavs() { const me = G.snap && G.snap.me; return new Set((me && me.favs) || []); }
 function toggleFav(id) { const on = !myFavs().has(id); sendAction({ t: 'fav', item: id, on }); if (G.snap && G.snap.me) { const f = (G.snap.me.favs || []).filter(x => x !== id); if (on) f.push(id); G.snap.me.favs = f; } }
 function favList(owned) { const fs = myFavs(); const f = owned.filter(id => fs.has(id)); return f.length ? f : owned; }
@@ -300,7 +303,7 @@ function loop(now) {
   else if (G.state === 'pause' && (inp.pause || inp.inv) && performance.now() - (G.pauseAt || 0) > 250 && $('bagScreen').classList.contains('on')) resume();
   if (NET.role === 'host' && G.sim) hostStep(rdt, now);
   else if (NET.role === 'client' && NET.hostConn && now - G.lastSend > 50) {
-    G.lastSend = now; const Lc = G.local; NET.hostConn.send({ t: 'ps', lvl: Lc.lvl, x: Math.round(Lc.x * 100) / 100, y: Math.round(Lc.y * 100) / 100, z: Math.round(((Lc.z || 0) + (Lc.lift || 0)) * 100) / 100, a: Math.round(Lc.a * 100) / 100, atk: Lc.atkVis > 0 ? 1 : 0, sel: Lc.sel });
+    G.lastSend = now; const Lc = G.local; NET.hostConn.send({ t: 'ps', lvl: Lc.lvl, x: Math.round(Lc.x * 100) / 100, y: Math.round(Lc.y * 100) / 100, z: Math.round(((Lc.z || 0) + (Lc.lift || 0)) * 100) / 100, sh: shieldUp(Lc), a: Math.round(Lc.a * 100) / 100, atk: Lc.atkVis > 0 ? 1 : 0, sel: Lc.sel });
   }
   const hostPaused = NET.role === 'client' && G.snap && G.snap.paused;
   if (G.state === 'play' && !hostPaused) updateLocal(dt, inp);
@@ -316,7 +319,7 @@ function hostStep(rdt, now) {
   const paused = hostPausedNow(); G.sim.paused = paused && G.state === 'pause'; G.sim.pausedBy = G.profile.name;
   if (!paused && G.state !== 'title') {
     const Lc = G.local; const mp = G.sim.players[G.myId];
-    if (mp && G.state === 'play') G.sim.onPlayerState(G.myId, { lvl: Lc.lvl, x: Lc.x, y: Lc.y, z: (Lc.z || 0) + (Lc.lift || 0), a: Lc.a, atk: Lc.atkVis > 0 ? 1 : 0, sel: Lc.sel });
+    if (mp && G.state === 'play') G.sim.onPlayerState(G.myId, { lvl: Lc.lvl, x: Lc.x, y: Lc.y, z: (Lc.z || 0) + (Lc.lift || 0), sh: shieldUp(Lc), a: Lc.a, atk: Lc.atkVis > 0 ? 1 : 0, sel: Lc.sel });
     // fixed steps that catch up after slow frames, so game time keeps pace with real time
     G.simAcc = Math.min(0.25, (G.simAcc || 0) + rdt);
     while (G.simAcc >= 1 / 60) { G.sim.tick(1 / 60); G.simAcc -= 1 / 60; }
@@ -355,7 +358,7 @@ function draw(dt) {
   // pow words
   for (const p of Lc.pow) { const sc = projectPt(cam, p.x, p.y); if (sc) { const c = p.big ? rgb(255, 230, 60) : rgb(255, 255, 255); text(p.word, sc.x - p.word.length * 3, sc.y - 30 - p.t * (p.num ? 45 : 30), p.num ? rgb(255, 236, 120) : Math.floor(p.t * 20) & 1 ? c : rgb(255, 80, 40)); } }
   const bossE = ents.find(e => e[8] >= 0);
-  const st = { me, bob: Lc.bob, moveK: Lc.moveK || 0, readyK: Lc.readyK || 0, blockT: Lc.blockT || 0, swing: Lc.swing, swingDir: Lc.swingDir || 1, grip: Lc.gripT || 0, pommelT: Lc.pommelT, lungeReady: !!(Lc.gripT >= LUNGE_HOLD && me && me.items.lunge), punch: Lc.punch, charge: Lc.charge, useFlash: Lc.useFlash, useSpr: Lc.useSpr, level: L, cam, players: snap ? snap.pl : [], myId: G.myId, team: snap ? snap.team : { keys: {}, maps: {}, comps: {}, shards: [], done: [] }, seen: G.seen[L.id] || new Uint8Array(L.w * L.h), seenOW: G.seen.ow || new Uint8Array(1), seenRooms: G.seenRooms, selItem: Lc.sel, pitch: Lc.pitch, lvlKind: L.kind, bossHp: bossE ? bossE[8] : -1, bossName: bossE ? ((bossDefFor(bossE[1]) || {}).title || null) : null, world: G.world };
+  const st = { me, bob: Lc.bob, moveK: Lc.moveK || 0, readyK: Lc.readyK || 0, blockT: Lc.blockT || 0, mirror: !!(me && me.mirror), swing: Lc.swing, swingDir: Lc.swingDir || 1, grip: Lc.gripT || 0, pommelT: Lc.pommelT, lungeReady: !!(Lc.gripT >= LUNGE_HOLD && me && me.items.lunge), punch: Lc.punch, charge: Lc.charge, useFlash: Lc.useFlash, useSpr: Lc.useSpr, level: L, cam, players: snap ? snap.pl : [], myId: G.myId, team: snap ? snap.team : { keys: {}, maps: {}, comps: {}, shards: [], done: [] }, seen: G.seen[L.id] || new Uint8Array(L.w * L.h), seenOW: G.seen.ow || new Uint8Array(1), seenRooms: G.seenRooms, selItem: Lc.sel, pitch: Lc.pitch, lvlKind: L.kind, bossHp: bossE ? bossE[8] : -1, bossName: bossE ? ((bossDefFor(bossE[1]) || {}).title || null) : null, world: G.world };
   if (me && !down) drawViewmodel(st);
   if (me && me.cls === 'monk' && me.armor > 0 && !down) { const ac = me.armor === 2 ? rgb(255, 248, 200) : rgb(100, 190, 255); for (let i = 0; i < 18; i++) { const side = Math.random() < 0.5; const x = side ? (Math.random() < 0.5 ? Math.random() * 10 : R.W - Math.random() * 10) : Math.random() * R.W; const y = side ? Math.random() * R.H : R.H - Math.random() * 8; px(x, y, ac); } }
   if (Lc.dashT > 0) rectA(0, 0, R.W, R.H, rgb(200, 240, 255), 0.15);
@@ -479,12 +482,13 @@ function renderBag() {
   if (me.items.loaded2) ups.push(['scroll', itemName('tripleshot', me.cls), 'ONE MORE ARROW ON THE STRING']);
   if (me.items.lunge) ups.push(['scroll', itemName('lunge', me.cls), 'SHIFT + HOLD ATTACK UNTIL IT CHIMES, THEN LET GO']);
   if (me.items.heavypommel) ups.push(['scroll', itemName('heavypommel', me.cls), 'POMMEL STRIKES CRACK ARMOR']);
+  if (me.cls !== 'monk') ups.push(['scroll', 'PERFECT BLOCK', me.items.mirrorguard ? 'MIRROR GUARD: FOR 2 S AFTER THE SHIELD COMES UP, SHOTS BOUNCE BACK' : 'FOR 1 S AFTER THE SHIELD COMES UP, SHOTS BOUNCE BACK']);
   if (me.items.wandfire) ups.push(['orb_fire', itemName('flameorb', me.cls), 'THE WAND CAN HURL FIRE']);
   if (me.items.wandthunder) ups.push(['orb_thunder', itemName('stormorb', me.cls), 'THE WAND CAN CALL LIGHTNING']);
   if (me.items.cloakslam) ups.push(['scroll', itemName('galeslam', me.cls), 'END A FLIGHT EARLY TO SLAM DOWN']);
   if (me.items.bombbag2) ups.push(['bomb', itemName('bombbag2', me.cls), 'CARRY 16 BOMBS']); else if (me.items.bombbag) ups.push(['bomb', itemName('bombbag', me.cls), 'CARRY 8 BOMBS']);
   if (me.items.bombarrow) ups.push(['scroll', itemName('bombarrows', me.cls), 'SHIFT + BOW: COSTS AN ARROW AND A BOMB']);
-  for (const k of Object.keys(me.items)) { if (!me.items[k] || owned.includes(k) || ['loaded', 'loaded2', 'lunge', 'heavypommel', 'cloakslam', 'bombbag', 'bombbag2', 'frostarrows', 'silver', 'potion', 'bombarrow'].includes(k)) continue; const d = Content.items[k]; if (!d || d.slot === 'b') continue; ups.push([itemSprite(k, me.cls), itemName(k, me.cls), k === 'skeletonkey' ? 'OPENS EVERY LOCK' : k === 'silver' ? 'ONLY THEY CAN FINISH THE HOLLOW KING' : k === 'magmaboots' ? 'WALK ON LAVA AND VENTS' : k === 'raft' ? 'OPEN WATER ONLY' : null]); }
+  for (const k of Object.keys(me.items)) { if (!me.items[k] || owned.includes(k) || ['loaded', 'loaded2', 'lunge', 'heavypommel', 'mirrorguard', 'cloakslam', 'bombbag', 'bombbag2', 'frostarrows', 'silver', 'potion', 'bombarrow'].includes(k)) continue; const d = Content.items[k]; if (!d || d.slot === 'b') continue; ups.push([itemSprite(k, me.cls), itemName(k, me.cls), k === 'skeletonkey' ? 'OPENS EVERY LOCK' : k === 'silver' ? 'ONLY THEY CAN FINISH THE HOLLOW KING' : k === 'magmaboots' ? 'WALK ON LAVA AND VENTS' : k === 'raft' ? 'OPEN WATER ONLY' : null]); }
   if (page === 'upgrades' && me.dbg) { // debug: every upgrade and scroll, switched on and off with a click
     const all = sec('DEBUG: CLICK TO SWITCH ON OR OFF'); btn(all, 'scroll', 'ALL ON', 'AND THE BOW, BOOMERANG, CLOAK AND BOMBS', false, () => sendAction({ t: 'dbgup', all: true })); btn(all, 'scroll', 'ALL OFF', null, false, () => sendAction({ t: 'dbgup', all: false }));
     // one compact grid (no scrolling): name and ON/OFF on each button, the description on hover

@@ -49,6 +49,7 @@ const DUMMY_RESET = 3; // a training dummy heals (and gets its armor back) after
 const fmtDmg = (n) => String(Math.round(n * 100) / 100);
 const DISARM_STAGGER = 1.2;
 const KNIGHT_WINDUP = 0.45; // seconds a sword knight raises its blade before the counter lands (your cue to back off) // seconds a disarmed foe reels
+const REFLECT_TIME = 1, REFLECT_TIME_SCROLL = 2; // perfect block: seconds after the shield comes up that it sends shots back (items/techniques.js Mirror Guard)
 const TWIN_EYE_TIME = 0.55; // seconds a twin-eye gate's eye stays shut (content/gimmicks/twingate.js)
 const GOURD_REGROW = 40; // seconds before a split gourd can grow back (and only with nobody within 6 tiles)
 // how many bombs you can carry: 1 without a bag, 8 with the Bramble Keep bag, 16 with the second one (sold in a grotto)
@@ -162,6 +163,7 @@ class Sim {
   onPlayerState(id, s) {
     const p = this.players[id]; if (!p) return;
     if (s.lvl !== p.lvl) return; // ignore stale states after teleport
+    if (s.sh && !p.shUp) p.shieldAt = this.time; p.shUp = !!s.sh; // the shield just came up: the perfect-block window starts
     p.x = s.x; p.y = s.y; p.z = +s.z || 0; p.a = s.a; p.atk = s.atk || 0; p.lastSeen = this.time; p.sel = s.sel || p.sel;
   }
   onAction(id, a) {
@@ -735,7 +737,6 @@ class Sim {
       if (this.damageEnemy(e, POMMEL_DMG, p, { pid: p.id, kbMul: 0.6 }) && !def.boss && !e.dead) { e.stun = Math.max(e.stun || 0, POMMEL_STUN); e.stunFrom = this.time; }
     }
     for (const d of [0.6, 1.1]) this.breakGourd(L, p.x + Math.cos(p.a) * d, p.y + Math.sin(p.a) * d);
-    for (const d of [0.7, 1.2]) if (this.openHollowTree(L, p.x + Math.cos(p.a) * d, p.y + Math.sin(p.a) * d)) hit = true; // knock on a hollow tree
     this.sfx(hit ? 'pommel' : 'swing', p.lvl, p.x, p.y);
   }
   // Every third sword hit in a chain (hits less than CHAIN_GAP apart) readies a backswing. It fires on the first hit that
@@ -781,6 +782,14 @@ class Sim {
     if (!best) return; const sp = Math.hypot(e.vx, e.vy); const cur = Math.atan2(e.vy, e.vx);
     const na = cur + clamp(angDiff(cur, Math.atan2(best.y - e.y, best.x - e.x)), -def.homing * dt, def.homing * dt); e.vx = Math.cos(na) * sp; e.vy = Math.sin(na) * sp;
   }
+  // PERFECT BLOCK: for the first REFLECT_TIME seconds after your shield comes up (the Mirror Guard scroll makes it longer),
+  // a blockable shot that hits it flies straight back the way it came, now yours: it hurts foes, and a homing seed chases them.
+  reflectWindow(p) { return p.items.mirrorguard ? REFLECT_TIME_SCROLL : REFLECT_TIME; }
+  reflectOpen(p) { return !!p.shUp && this.time - (p.shieldAt || -99) <= this.reflectWindow(p); }
+  reflectProj(e, p) {
+    e.owner = 'p'; e.pid = p.id; e.vx = -e.vx * 1.3; e.vy = -e.vy * 1.3; e.dmg = 2; e.hitSet = {}; e.life = Math.max(e.life, 2); e.reflected = true;
+    this.sfx('reflect', e.lvl, p.x, p.y); this.ev({ t: 'block', pid: p.id, reflect: true });
+  }
   updateProj(e, dt) {
     const L = this.W.levels[e.lvl]; const def = Content.projectiles[e.type];
     if (def.homing && e.t >= (def.homeDelay || 0)) this.steerProj(e, def, dt);
@@ -816,6 +825,7 @@ class Sim {
           // sword-class shield blocks weak front projectiles when not attacking
           const toP = Math.atan2(e.y - p.y, e.x - p.x);
           if (def.poison) this.poisonPlayer(p); // poison gets through a shield
+          if (p.cls !== 'monk' && def.blockable && Math.abs(angDiff(p.a, toP)) < 0.7 && this.reflectOpen(p)) { this.reflectProj(e, p); return; }
           if (p.cls !== 'monk' && def.blockable && Math.abs(angDiff(p.a, toP)) < 0.7) { e.dead = true; this.sfx('clink', e.lvl); this.ev({ t: 'block', pid: p.id }); return; }
           if (def.chill && p.inv <= 0 && !p.god) p.chill = Math.max(p.chill || 0, def.chill);
           this.hurtPlayer(p, e.dmg, e); e.dead = true; return;
@@ -845,11 +855,11 @@ class Sim {
     const i = L.idx(Math.floor(x), Math.floor(y)); const ti = TINFO[L.tiles[i]];
     if (ti && ti.cuttable) { this.setTile(L.id, i, TL[ti.opensTo] != null ? TL[ti.opensTo] : TL.DFLOOR); this.spawn({ k: 'fx', lvl: L.id, x: Math.floor(x) + 0.5, y: Math.floor(y) + 0.5, spr: 'puff', life: 0.3, sc: 0.9 }); this.sfx('hit', L.id); }
   }
-  // A HOLLOW TREE (content/grottos.js) splits open on the stair down to its grotto: a pommel strike or a bomb does it.
+  // A HOLLOW TREE (content/grottos.js) burns open on the stair down to its grotto: fire does it (the candle, from the start).
   openHollowTree(L, x, y) {
     const i = L.idx(Math.floor(x), Math.floor(y)); if (PR.HOLLOWTREE == null || L.props[i] !== PR.HOLLOWTREE) return false;
     const rev = L.secretReveal[i]; this.setTile(L.id, i, rev ? rev.tile : null, 0);
-    this.spawn({ k: 'fx', lvl: L.id, x: Math.floor(x) + 0.5, y: Math.floor(y) + 0.5, spr: 'boom', life: 0.4, sc: 1.2, z: 0.3 }); this.sfx('secret', L.id);
+    for (const [dx, dz] of [[0, 0.2], [-0.25, 0.6], [0.25, 0.6], [0, 1]]) this.spawn({ k: 'fx', lvl: L.id, x: Math.floor(x) + 0.5 + dx, y: Math.floor(y) + 0.5, spr: 'flame', life: 0.9, sc: 1.1, z: dz }); this.sfx('fire', L.id); this.sfx('secret', L.id);
     return true;
   }
   burnAt(L, x, y) {
@@ -859,6 +869,7 @@ class Sim {
       if (bx < 0 || by < 0 || bx >= L.w || by >= L.h) continue;
       const ti = TINFO[L.tiles[i]];
       if (ti && ti.burnable && dist2(bx + 0.5, by + 0.5, x, y) < 1.2) { this.setTile(L.id, i, TL[ti.opensTo] != null ? TL[ti.opensTo] : TL.DFLOOR); this.spawn({ k: 'fx', lvl: L.id, x: bx + 0.5, y: by + 0.5, spr: 'flame', life: 0.6, sc: 0.9 }); }
+      if (L.props[i] === PR.HOLLOWTREE && dist2(bx + 0.5, by + 0.5, x, y) < 1.2) this.openHollowTree(L, bx + 0.5, by + 0.5);
       if (PR.TORCH != null && L.props[i] === PR.TORCH && dist2(bx + 0.5, by + 0.5, x, y) < 1.2) { this.setTile(L.id, i, null, PR.FLAME); this.sfx('fire', L.id); }
       if (L.props[i] === PR.BUSH && dist2(bx + 0.5, by + 0.5, x, y) < 0.7) {
         const rev = L.secretReveal[i];
@@ -947,7 +958,7 @@ class Sim {
     const p = this.players[pid]; if (!p) return null;
     const en = []; for (const e of this.ents) if (e.lvl === p.lvl) en.push(this.entView(e, p));
     const pl = []; for (const o of Object.values(this.players)) pl.push([o.id, o.lvl, Math.round(o.x * 100) / 100, Math.round(o.y * 100) / 100, Math.round(o.a * 100) / 100, o.color, o.armor, o.cls, o.alive ? 1 : 0, o.atk, o.name, Math.round(o.revive / REVIVE_TIME * 100) / 100, o.hp, o.maxHp, o.reviver || 0, o.z || 0]); // [15] z: feet height (ledges, the cloak's lift)
-    const me = {}; for (const k of ['lvl', 'hp', 'maxHp', 'gems', 'bombs', 'maxBombs', 'arrows', 'maxArrows', 'swordMax', 'armorMax', 'arrowType', 'wandEl', 'sword', 'armor', 'items', 'favs', 'potions', 'alive', 'cls', 'sel', 'color', 'name', 'dbg', 'god']) me[k] = p[k]; me.spellCd = Math.max(0, Math.round(((p.spellReady || 0) - this.time) * 10) / 10); me.chill = p.chill > 0 ? 1 : 0; me.poison = p.poisonTicks > 0 ? p.poisonTicks : 0; me.fly = this.flying(p) ? Math.round((p.flyUntil - this.time) * 10) / 10 : 0; me.respawnIn = p.alive ? 0 : Math.max(0, Math.ceil(RESPAWN_WAIT - (this.time - (p.downAt || 0))));
+    const me = {}; for (const k of ['lvl', 'hp', 'maxHp', 'gems', 'bombs', 'maxBombs', 'arrows', 'maxArrows', 'swordMax', 'armorMax', 'arrowType', 'wandEl', 'sword', 'armor', 'items', 'favs', 'potions', 'alive', 'cls', 'sel', 'color', 'name', 'dbg', 'god']) me[k] = p[k]; me.spellCd = Math.max(0, Math.round(((p.spellReady || 0) - this.time) * 10) / 10); me.chill = p.chill > 0 ? 1 : 0; me.mirror = p.cls !== 'monk' && this.reflectOpen(p) ? 1 : 0; me.poison = p.poisonTicks > 0 ? p.poisonTicks : 0; me.fly = this.flying(p) ? Math.round((p.flyUntil - this.time) * 10) / 10 : 0; me.respawnIn = p.alive ? 0 : Math.max(0, Math.ceil(RESPAWN_WAIT - (this.time - (p.downAt || 0))));
     return { t: 's', paused: !!this.paused, pausedBy: this.pausedBy, me, pl, en, team: { keys: this.team.keys, maps: this.team.maps, comps: this.team.comps, shards: this.team.shards, done: this.team.done, relics: this.team.relics }, vp: this.ventPhase(), rg: this.rigCodes(p.lvl), fz: this.frozenList(p.lvl), mv: this.modVer, over: this.over > 0 };
   }
   // ---- save ----

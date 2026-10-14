@@ -35,7 +35,7 @@ Up here, a dead king rules through dead knights. The dragons hate him more than 
 ### 4. The hollowing
 - At some point the Marshal died too. Nobody can say when. He never stopped.
 - He crowned himself. To a king of the dead, the living are a burden: they need bread, they argue, and they hide embers. So he started "recruiting".
-- **The knights are his.** They look like people. Under the armor there's nothing but a cold ember and his will. They march in step, all of them, even miles apart. Their banners still carry the old crest of the Wardholds, the same crest the hero's father wore.
+- **The knights are his.** They look like people. Under the armor there's nothing but a cold ember and his will. They march in step, all of them, even miles apart. Their banners still carry the old crest of the Wardholds, the crest our fathers wore: the knights are the fathers and grandfathers of the people hiding below.
 - The living went underground, down **the Long Stair**: old cellars, mine roads and root-stairs older than the Wardholds.
   - The **grottos under hollow trees** are its upper mouths.
   - The root cache is the underground leaving supplies for whoever comes up next ("FOR WHOEVER COMES UP NEXT").
@@ -61,7 +61,7 @@ Up here, a dead king rules through dead knights. The dragons hate him more than 
 - **Everything else** (slimes, bats, frogs, wolves) is neutral to kings and dragons alike. They remember who hunted them, and that was people.
 
 ## Threads to pull later (don't resolve them in a line of dialog)
-- **The hero's father.**
+- **Our fathers.** (Said as "our", never "your": everyone below lost someone to the knights.)
   - He was a knight. One knight, somewhere late, carries a different crest or a dented shield. An old man says he "had kind hands. He still walks the north road. I don't wave anymore."
   - Maybe that knight doesn't attack first, or salutes.
 - **The deal** (from IDEAS): the Hollow King offers one player "never be cold again." Accept, and that player turns on the others for an alternate ending.
