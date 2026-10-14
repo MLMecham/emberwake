@@ -47,6 +47,9 @@ for (const [id, bossOf, proj, pal] of [['wyrm_frost', [1], 'icebolt', { r: '#86c
 //   GRIEF      when one falls, the other roars: faster breath, five shots instead of three, and it charges more often
 //   FROST LANCE (frost pair) a line of ice that turns the floor to slippery ice for a few seconds
 //   EMBER RAIN  (magma pair) three blobs lobbed at you; each shows a shadow first, then lands as a burning splash
+//   ENRAGED     rob BOTH ends of their arena (the corner gems and hearts, game/sim.js baitTaken) and they turn red: half again
+//               the health, breath every 0.9 s in fans of 5 (7 when grieving), lance/rain every other breath, and charges
+//               twice as often
 const ELDER_WINDUP = 0.55, ELDER_DASH = 9;
 function elderAi(el) {
   const proj = el === 'frost' ? 'icebolt' : 'fire';
@@ -58,15 +61,15 @@ function elderAi(el) {
     else if (e.hadPartner && !e.grief) { e.grief = true; e.tm = 0.6; e.chargeIn = 1.5; sim.sfx('roar', e.lvl, e.x, e.y); sim.msg('THE WYRM ROARS FOR ITS SIBLING!'); }
     if (e.chargeT > 0) { e.chargeT -= dt; if (e.chargeT <= 0) { e.dashT = 1.1; e.dashA = p ? Math.atan2(p.y - e.y, p.x - e.x) : e.f; sim.sfx('roar', e.lvl, e.x, e.y); } return; }
     if (e.dashT > 0) { e.dashT -= dt; if (sim.moveEnt(e, Math.cos(e.dashA) * ELDER_DASH * dt, Math.sin(e.dashA) * ELDER_DASH * dt, def)) { e.dashT = 0; sim.ev({ t: 'shake', lvl: e.lvl, x: e.x, y: e.y }); } return; }
-    e.chargeIn -= dt; if (e.chargeIn <= 0 && p) { e.chargeIn = (e.grief ? 3.5 : 6.5) + Math.random() * 2; e.chargeT = ELDER_WINDUP; sim.sfx('windup', e.lvl, e.x, e.y); return; }
+    e.chargeIn -= dt; if (e.chargeIn <= 0 && p) { e.chargeIn = ((e.grief ? 3.5 : 6.5) + Math.random() * 2) * (e.enraged ? 0.5 : 1); e.chargeT = ELDER_WINDUP; sim.sfx('windup', e.lvl, e.x, e.y); return; }
     // hold your end of the room (crossfire), swaying up and down
-    const side = partner ? (e.id < partner.id ? -1 : 1) : 0; const cx = (b.x0 + b.x1) / 2 + side * 3.2;
+    const side = partner ? (e.id < partner.id ? -1 : 1) : 0; const cx = (b.x0 + b.x1) / 2 + side * Math.max(3.2, (b.x1 - b.x0) / 2 - 3.5); // in a wide arena they hold the far ends
     sim.moveEnt(e, clamp(cx - e.x, -1, 1) * spd * dt, Math.sin(e.t * 1.3 + side) * spd * 0.8 * dt, def);
     if (e.tm > 0 || !p) return;
-    e.tm = e.grief ? 1.1 : e.hp < e.maxHp / 2 ? 1.5 : 2.2; e.n = (e.n || 0) + 1;
+    e.tm = e.enraged ? (e.grief ? 0.7 : 0.9) : e.grief ? 1.1 : e.hp < e.maxHp / 2 ? 1.5 : 2.2; e.n = (e.n || 0) + 1;
     const a = Math.atan2(p.y - e.y, p.x - e.x);
-    if (e.n % 3 === 0) { if (el === 'frost') frostLance(sim, L, e, a); else emberRain(sim, e, p); return; }
-    AI.fan(sim, e, proj, a, e.grief ? 5 : 3, e.grief ? 1.1 : 0.7, { dmg: 2 }); sim.sfx('roar', e.lvl, e.x, e.y);
+    if (e.n % (e.enraged ? 2 : 3) === 0) { if (el === 'frost') frostLance(sim, L, e, a); else emberRain(sim, e, p); return; }
+    const n = (e.grief ? 5 : 3) + (e.enraged ? 2 : 0); AI.fan(sim, e, proj, a, n, e.grief || e.enraged ? 1.1 + (n - 5) * 0.15 : 0.7, { dmg: 2 }); sim.sfx('roar', e.lvl, e.x, e.y);
   };
 }
 // FROST LANCE: a fast ice bolt, and the floor along its line turns to ice for a few seconds
@@ -100,6 +103,7 @@ defineSprite('shadowring', [ // where something is about to land
 for (const [id, base, el, title, pal, glow] of [
   ['wyrm_elder_frost', 'wyrm_frost', 'frost', 'ELDER FROST WYRM', { r: '#5aa8e0', R: '#1a3c78', o: '#ffffff', y: '#40ffff' }, { r: '#ffffff', R: '#a8e8ff' }],
   ['wyrm_elder', 'wyrm', 'fire', 'ELDER MAGMA WYRM', { r: '#c02818', R: '#500a08', o: '#ffd060', y: '#ffff60' }, { r: '#ffd040', R: '#ff7020' }]]) {
-  defineEnemy(Object.assign({}, enemyDef(base), { id, title, bossOf: [], spawns: {}, hp: 12, sc: 2.0, pal, ai: elderAi(el), sprFor: (e) => e.chargeT > 0 ? id + '_glow' : null, anim: { fps: 3, frames: (s, kit) => [s, kit.bob(s, 1), kit.step(s, 12, -1, 0)] } }));
+  defineEnemy(Object.assign({}, enemyDef(base), { id, title, bossOf: [], spawns: {}, hp: 12, sc: 2.0, pal, ai: elderAi(el), sprFor: (e) => e.chargeT > 0 ? id + '_glow' : e.enraged ? id + '_rage' : null, anim: { fps: 3, frames: (s, kit) => [s, kit.bob(s, 1), kit.step(s, 12, -1, 0)] } }));
   defineSpriteVariant(id + '_glow', id, glow); // winding up a charge
+  defineSpriteVariant(id + '_rage', id, el === 'frost' ? { r: '#8a5ad8', R: '#2a1050', y: '#ff3030', o: '#ffd0d0' } : { r: '#ff2a10', R: '#300404', y: '#ffffff', o: '#ffff80' }); // enraged (robbed)
 }

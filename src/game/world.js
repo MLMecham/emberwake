@@ -26,7 +26,11 @@ class Level {
       const rid = this.sealRoom && this.sealRoom[y * this.w + x];
       if (rid != null) { const r = this.rooms[rid]; const x0 = r.rx * DSX, y0 = r.ry * DSY; const m = 0.23; /* just over the player's 0.22 radius: you're 'inside' only once fully clear of the doorway */ const inside = opts.mx > x0 + 1 + m && opts.mx < x0 + DSX - m && opts.my > y0 + 1 + m && opts.my < y0 + DSY - m; if (!inside) return false; }
     }
+    // high in the air on the Gale Cloak (opts.high): over everything a tile tall (hedges, rocks, trees); the tall walls still stop you
+    if (opts && opts.high && ((ti.wall && !ti.tall && this.kind === 'ow') || ti.raised || ti.low)) return false; // (indoors the walls reach the ceiling)
     if (ti.solid) return true;
+    if (ti.raised && ti.raised > ((opts && opts.z) || 0) + STEP_UP) return true; // a step or ledge too high to step up onto
+    if (opts && opts.high) return false;
     // solid props (trees, boulders, cacti, graves, statues...) block a diamond, not the whole tile: two of them touching only at
     // a corner leave a gap you can walk through, the way it looks. Side by side they still make a solid wall.
     const p = this.props[y * this.w + x]; if (p && PROP_INFO[p].solid) { const dx = fx - x - 0.5, dy = fy - y - 0.5; return PROP_INFO[p].round ? dx * dx + dy * dy < PROP_ROUND_R * PROP_ROUND_R : Math.abs(dx) + Math.abs(dy) < PROP_K; } // small props: a circle; trees and boulders: a diamond
@@ -87,8 +91,33 @@ function genWorld(seed, mode) {
   genOverworld(W, rnd);
   for (const biome of ['snow', 'ash']) genTunnel(W, biome, mulberry32(seed * 53 + (biome === 'snow' ? 11 : 29))); // the caves into the frontier lands
   for (let d = 1; d <= NDUNGEONS(); d++) genDungeon(W, d, mulberry32(seed * 31 + d * 977));
+  genGrottos(W, mulberry32(seed * 17 + 5));
   genTestZone(W);
   return W;
+}
+// ---------- GROTTOS ----------
+// One grotto of each kind (content/grottos.js) under a hollow tree: a tree already standing in a forest or plains region
+// becomes HOLLOWTREE, with a portal on its tile and a stair revealed when it's split open (game/sim.js openHollowTree).
+// Only trees with open, reachable ground in front of them. Its own random stream, so the rest of the land doesn't move.
+function genGrottos(W, rnd) {
+  const L = W.levels.ow; const kinds = (Content.grottoKinds || []).filter(k => Content.caves[k]); if (!kinds.length) return;
+  const seen = new Uint8Array(L.w * L.h); { const sx = Math.floor(L.spawn.x), sy = Math.floor(L.spawn.y); const q = [sx + sy * L.w]; seen[q[0]] = 1; while (q.length) { const i = q.pop(); const x = i % L.w, y = (i / L.w) | 0; for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { const nx = x + dx, ny = y + dy; if (nx < 1 || ny < 1 || nx >= L.w - 1 || ny >= L.h - 1) continue; const j = nx + ny * L.w; if (seen[j] || L.solidAt(nx + 0.5, ny + 0.5)) continue; seen[j] = 1; q.push(j); } } }
+  const sr = owRegionAt(L, L.spawn.x, L.spawn.y);
+  const regions = rnd.shuffle(L.regions.filter(r => r !== sr && (r.biome === 'forest' || r.biome === 'plains') && !r.island));
+  const used = new Set(); L.grottos = [];
+  for (const kind of kinds) {
+    let placed = false;
+    for (const r of regions) {
+      if (used.has(r)) continue; const { x0, y0, x1, y1 } = regionInterior(r); const trees = [];
+      for (let y = y0 + 1; y < y1 - 2; y++) for (let x = x0 + 1; x < x1 - 1; x++) { const i = L.idx(x, y), f = L.idx(x, y + 1); const pr = L.props[i]; if ((pr === PR.TREE || pr === PR.PINE) && !L.portals[i] && !L.secretReveal[i] && !TINFO[L.tiles[i]].solid && seen[f] && !L.props[f] && !TINFO[L.tiles[f]].portal) trees.push(i); }
+      if (!trees.length) continue;
+      const i = rnd.pick(trees); const x = i % L.w, y = (i / L.w) | 0; const id = 'g' + L.grottos.length;
+      L.props[i] = PR.HOLLOWTREE; L.portals[i] = { to: id, stairs: true }; L.secretReveal[i] = { tile: TL.STAIRS };
+      genCave(W, id, kind, { lvl: 'ow', x: x + 0.5, y: y + 1.5, a: Math.PI / 2 }, rnd);
+      L.grottos.push({ id, kind, x, y }); used.add(r); placed = true; break;
+    }
+    if (!placed) break;
+  }
 }
 
 // ---------- FRONTIER TUNNELS ----------
@@ -118,7 +147,11 @@ function genTunnel(W, biome, rnd) {
   // doors: along the run (a little up or down so it isn't a perfect straight line), and up or down into the side rooms
   for (let i = 0; i < gw - 1; i++) { const a = main[i], b = main[i + 1]; const x = Math.max(a.rx, b.rx) * DSX, c = DSY + 4 + rnd.range(-1, 1); for (let y = c - 1; y <= c + 1; y++) L.set(x, y, TL.CFLOOR); a.links[b.id] = b.links[a.id] = 1; a.children.push(b); }
   for (const r of sides) { const y = r.ry === 0 ? DSY : 2 * DSY; for (let x = r.rx * DSX + 5; x <= r.rx * DSX + 7; x++) L.set(x, y, TL.CFLOOR); r.links[r.from.id] = r.from.links[r.id] = 1; }
-  { const x = Math.max(fight.rx, loot.rx) * DSX; for (let y = 3; y <= 5; y++) L.set(x, y, TL.CFLOOR); fight.links[loot.id] = loot.links[fight.id] = 1; fight.links[wingFrom.id] = wingFrom.links[fight.id] = 1; }
+  // the two wing cells are ONE big arena: the wall between them is gone (the wyrms used to get stuck in a doorway there).
+  // The loot cell folds into the fight room (room.mergeInto; dungeonRoomAt follows it), and the fight room spans both cells
+  // (room.cx0 = its left column, room.cw = 2 cells wide; roomBounds uses them).
+  { const x = Math.max(fight.rx, loot.rx) * DSX; for (let y = 1; y < DSY; y++) L.set(x, y, TL.CFLOOR); fight.links[loot.id] = loot.links[fight.id] = 1; fight.links[wingFrom.id] = wingFrom.links[fight.id] = 1;
+    loot.mergeInto = fight.id; fight.cx0 = Math.min(fight.rx, loot.rx); fight.cw = 2; }
   // the look, room by room
   for (const r of Object.values(rooms)) {
     const t = heat(r), x0 = r.rx * DSX, y0 = r.ry * DSY;
@@ -142,9 +175,17 @@ function genTunnel(W, biome, rnd) {
   main.forEach((r, i) => { const t = heat(r); r.tier = 2 + Math.round(t); if (i === 0 || i === gw - 1) return; const n = 2 + rnd.int(2); for (let k = 0; k < n; k++) r.enemies.push(rnd.pick(rnd() < t ? late : early)); });
   // the miniboss: two wyrmlings at once (Mossy Hollow's frost pair on the cold road, Emberforge's magma pair on the ember road),
   // two rooms before the far end. Beat them for a heart piece.
-  const mb = fight; mb.enemies = snow ? ['wyrm_elder_frost', 'wyrm_elder_frost'] : ['wyrm_elder', 'wyrm_elder']; mb.reward = 'hpiece'; mb.miniboss = true; mb.at = [[3.5, 4.5], [9.5, 4.5]]; // elder wyrmlings (enemies/wyrm.js), one at each end of the room
-  // the loot beyond them: a scroll worth the trouble, and a fat purse
-  loot.stash = [{ item: snow ? 'tripleshot' : 'quiver50', x: 5.5, y: 4.5 }, { item: 'gems100', x: 7.5, y: 4.5 }]; loot.tier = 3;
+  // Positions below are from the fight cell's corner (room.rx * DSX), so `ax` turns arena coordinates (0 = the arena's left wall) into those.
+  const ax = (x) => (fight.cx0 - fight.rx) * DSX + x; // the arena is 25 tiles across (floor 1-23), 9 tall (floor 1-7)
+  const mb = fight; mb.enemies = snow ? ['wyrm_elder_frost', 'wyrm_elder_frost'] : ['wyrm_elder', 'wyrm_elder']; mb.miniboss = true; mb.at = [[ax(4.5), 4.5], [ax(20.5), 4.5]]; // elder wyrmlings (enemies/wyrm.js), one at each end of the arena
+  // the real prize only shows up once BOTH are dead (so nobody can grab it, die, and walk off): a heart piece, a scroll worth
+  // the trouble (Loaded Shot 2 on the cold road, the Great Quiver on the ember road) and a fat purse, in the middle
+  mb.rewardAt = [ax(12.5), 4.5]; mb.rewards = [['hpiece', 0], [snow ? 'tripleshot' : 'quiver50', -1.5], ['gems100', 1.5]];
+  // THE BAIT: gems in all four corners and a heart behind each wyrm. Take some from BOTH ends while they live and they
+  // both fly into a rage (game/sim.js baitTaken, enemies/wyrm.js 'enraged'): a much harder fight. One end is safe.
+  mb.stash = [[1.5, 1.5, 'a', 'gems50'], [1.5, 7.5, 'a', 'gems50'], [1.5, 4.5, 'a', 'heart'], [23.5, 1.5, 'b', 'gems50'], [23.5, 7.5, 'b', 'gems50'], [23.5, 4.5, 'b', 'heart']].map(([x, y, bait, item]) => ({ item, x: ax(x), y, bait }));
+  mb.legacyTk = [[loot.id + ':stash0', fight.id + ':' + (snow ? 'tripleshot' : 'quiver50')], [loot.id + ':stash1', fight.id + ':gems100']]; // saves from before the arena was merged
+  loot.tier = 3;
   for (const r of sides) { if (r.wing) continue; const t = heat(r); r.tier = 2 + Math.round(t); r.reward = rnd.pick(['gems30', 'heart', 'bomb', 'gems50', 'arrows']); for (let k = 0; k < 2; k++) r.enemies.push(rnd.pick(rnd() < t ? late : early)); }
   L.rooms = rooms; L.startRoom = main[0];
   // the twin-eye gate into the secret wing: the gate in the middle of the wall, an eye three steps to each side (gimmicks/twingate.js)
@@ -157,6 +198,8 @@ function genTunnel(W, biome, rnd) {
   const inEnd = endAt(main[0], false), outEnd = endAt(main[gw - 1], true);
   L.spawn = { x: inEnd.inX, y: inEnd.y + 0.5, a: inEnd.a };
   L.sign = null; const signAt = (r, text) => { const si = L.idx(r.rx * DSX + 6, DSY + 2); L.props[si] = PR.SIGN; L.signText[si] = text; };
+  // the old wall the road runs under (content/grottos.js has the talk about it)
+  { const r = main[1]; const si = L.idx(r.rx * DSX + 6, DSY + 1); if (!TINFO[L.tiles[si]].solid) { L.props[si] = PR.SIGN; L.signText[si] = 'A CARVED STONE: WARDHOLD OF THE ' + (snow ? 'WEST' : 'EAST') + ' GATE. NO FIRE SHALL CROSS. UNDER IT, SCRATCHED BY ANOTHER HAND: IT WASN\'T THE FIRE WE SHOULD HAVE WATCHED.'; } }
   signAt(main[0], snow ? 'THE COLD ROAD. RIMEFANG HOLLOW AND THE FROZEN REACH LIE AT ITS FAR END. THE DEEPER YOU GO, THE COLDER IT GETS.' : 'THE EMBER ROAD. THE CINDER WASTES LIE AT ITS FAR END. THE DEEPER YOU GO, THE HOTTER IT GETS.');
   // close the old open pass and put a cave mouth on each side of it
   const bx = Math.max(ps.fx, ps.inner) * RSX; const wallT = snow ? TL.PEAKS : TL.FIREPEAKS; const dirIn = ps.inner > ps.fx ? 1 : -1;
@@ -174,6 +217,13 @@ function genTunnel(W, biome, rnd) {
   L.exits = [{ x: inEnd.x, y: inEnd.y, to: { lvl: 'ow', x: mIn.x, y: mIn.y, a: mIn.a } }, { x: outEnd.x, y: outEnd.y, to: { lvl: 'ow', x: mOut.x, y: mOut.y, a: mOut.a } }];
   L.exit = L.exits[0].to;
   ps.tunnel = L.id; ps.mouths = [mIn, mOut];
+  // make sure you can walk from each mouth into its land: if rocks or trees box the front in, carve a way to the region's first door
+  for (const [m, rx] of [[mIn, ps.inner], [mOut, ps.fx]]) {
+    const r = OW.regions[ps.ry * RW + rx]; if (!r || !r.doors.length) continue; const { x0, y0, x1, y1 } = regionInterior(r); const [sx, sy] = r.doors[0], tx = Math.floor(m.x), ty = Math.floor(m.y);
+    const seen = new Set([sx + ',' + sy]); const q = [[sx, sy]]; let ok = false;
+    while (q.length && !ok) { const [x, y] = q.shift(); if (x === tx && y === ty) { ok = true; break; } for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { const nx = x + dx, ny = y + dy; if (nx < x0 || ny < y0 || nx >= x1 || ny >= y1) continue; const k = nx + ',' + ny; if (seen.has(k) || OW.solidAt(nx + 0.5, ny + 0.5)) continue; seen.add(k); q.push([nx, ny]); } }
+    if (!ok) carve(OW, tx, ty, sx, sy, x0, y0, x1, y1);
+  }
 }
 
 // ---------- DEBUG TEST ZONE ----------
@@ -202,6 +252,11 @@ function genTestZone(W) {
   L.gourds = {}; [['GOURD', 3], ['CORAL', 5], ['SLAG', 7], ['BONEPILE', 9], ['CRYSTAL', 11]].forEach(([n, x]) => { if (PR[n] == null) return; const i = L.idx(x, 19); L.props[i] = PR[n]; L.gourds[i] = PR[n]; });
   L.dummies = [['dummy', 13.5, 17.5], ['dummy_armored', 15.5, 17.5]]; sign(14, 19, 'TRAINING DUMMIES: EVERY HIT SHOWS ITS DAMAGE AND THE RUNNING TOTAL. THEY HEAL AFTER 3 SECONDS. THE RIGHT ONE WEARS FULL ARMOR.');
   sign(7, 21, 'GOURDS AND THE LIKE: ONLY A POMMEL STRIKE (SHIFT + HOLD ATTACK, THEN LET GO) SPLITS THEM.');
+  // bottom right: a flight of steps up onto a ledge a full tile high (content/elevation.js). The room is two tiles tall,
+  // so the Gale Cloak lifts you a level in here too.
+  L.ceilH = 2;
+  fill(25, 18, 25, 21, TL.STEP1); fill(26, 18, 26, 21, TL.STEP2); fill(27, 18, 27, 21, TL.STEP3); fill(28, 17, 33, 21, TL.LEDGE);
+  sign(24, 17, 'STEPS AND A LEDGE: CLIMB UP, LOOK DOWN, STEP OFF. THIS ROOM IS TWO TALL, SO THE GALE CLOAK CARRIES YOU UP A LEVEL HERE.');
   L.set(18, h - 1, TL.CEXIT); L.set(18, h - 2, TL.EXIT); L.spawn = { x: 18.5, y: h - 3.5, a: -Math.PI / 2 };
   const ow = W.levels.ow; L.exit = { lvl: 'ow', x: ow.spawn.x, y: ow.spawn.y, a: ow.spawn.a };
   L.gimmicks = ['glass', 'vents'];
@@ -500,6 +555,7 @@ function placeCave(W, L, r, rnd, kind, secret) {
   const p = placeStructure(L, r, rnd, TL.ROCK, secret === 'bush' ? TL.ROCK : portalT, false);
   if (!p) return;
   let [px, py] = p; const id = 'c' + (W.caveCount++);
+  if (secret === 'open' && kind !== 'sword0') { const q = caveIntoWall(W, L, r, id, px, py); if (q) [px, py] = q; }
   if (secret === 'bush') {
     // hidden stairs under a bush in front
     const bx = px, by = py + 1; L.props[L.idx(bx, by)] = PR.BUSH;
@@ -515,6 +571,31 @@ function placeCave(W, L, r, rnd, kind, secret) {
   r.features.push({ type: 'cave', kind, id, x: px, y: py, secret });
 }
 
+// Some open caves are dug into the region's north wall (a cliff face) instead of standing alone in the field: about half,
+// picked with their own random stream so the rest of the land doesn't move. The cave already placed (placeStructure) is
+// taken down and rebuilt against the wall: a five-wide rock face with the cave in the middle, and the wall behind it made
+// solid so it never opens through into the next region. Returns the new portal spot, or null to leave it where it was.
+function caveIntoWall(W, L, r, id, px, py) {
+  const alt = mulberry32(W.seed * 7 + hashStr(id) * 13); if (alt() < 0.5) return null;
+  const { x0, y0, x1 } = regionInterior(r); const ny = y0; const nx = clamp(px, x0 + 3, x1 - 4);
+  if (Math.abs(ny - py) < 2) return null; // already up against it
+  if (r.doors.some(([dx, dy]) => Math.abs(dx - nx) <= 4 && dy <= ny + 1)) return null; // keep clear of a way in from the north
+  for (let y = ny; y <= ny + 2; y++) for (let x = nx - 2; x <= nx + 2; x++) { const i = L.idx(x, y); const t = TINFO[L.tiles[i]]; if (t.portal || t.bomb || L.props[i] === PR.SIGN || L.secretReveal[i] || (L.noCarve && L.noCarve.has(i))) return null; }
+  if (r.taken) for (let y = ny; y <= ny + 2; y++) for (let x = nx - 2; x <= nx + 2; x++) if (r.taken.has(x + ',' + y) && !(Math.abs(x - px) <= 2 && y >= py - 1 && y <= py + 2)) return null; // something else stands there
+  // take the free-standing one down (its path can stay: a trail to nowhere is fine)
+  const base = baseTile(r.biome); for (let x = px - 1; x <= px + 1; x++) { L.set(x, py, base); L.props[L.idx(x, py)] = 0; }
+  delete L.portals[L.idx(px, py)];
+  // the wall behind: solid, so the cave can't open into the region to the north
+  for (let x = nx - 2; x <= nx + 2; x++) if (!TINFO[L.get(x, ny - 1)].solid) L.set(x, ny - 1, TL.ROCK);
+  for (let x = nx - 2; x <= nx + 2; x++) { L.set(x, ny, TL.ROCK); L.props[L.idx(x, ny)] = 0; }
+  L.set(nx, ny, TL.CAVE);
+  for (let x = nx - 1; x <= nx + 1; x++) { const i = L.idx(x, ny + 1); if (TINFO[L.tiles[i]].solid) L.tiles[i] = TL.PATH; L.props[i] = 0; }
+  { const i = L.idx(nx, ny + 2); if (TINFO[L.tiles[i]].solid) L.tiles[i] = TL.PATH; L.props[i] = 0; }
+  r.taken = r.taken || new Set(); for (let y = ny; y <= ny + 2; y++) for (let x = nx - 2; x <= nx + 2; x++) r.taken.add(x + ',' + y);
+  if (r.entryPoints && r.entryPoints.length) r.entryPoints[r.entryPoints.length - 1] = [nx, ny + 1];
+  return [nx, ny];
+}
+
 // ---------- CAVES ----------
 function genCave(W, id, kind, exit, rnd) {
   const w = 13, h = 9; const L = new Level(id, 'cave', w, h); W.levels[id] = L; L.caveKind = kind;
@@ -523,11 +604,19 @@ function genCave(W, id, kind, exit, rnd) {
   L.exit = exit; L.spawn = { x: 6.5, y: h - 2.6, a: -Math.PI / 2 };
   L.props[L.idx(3, 2)] = PR.FLAME; L.props[L.idx(9, 2)] = PR.FLAME;
   const c = Content.caves[kind]; if (!c) return;
+  if (c.grotto) { // under a hollow tree (content/grottos.js): roots and moss, a rounder room, glowing caps instead of torches
+    L.signText = {};
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) { const edge = x === 0 || y === 0 || x === w - 1 || y === h - 1; const corner = (x <= 1 || x >= w - 2) && (y <= 1 || y >= h - 2); L.set(x, y, edge || corner ? TL.ROOTWALL : TL.MOSS); }
+    L.set(6, h - 1, TL.ROOTEXIT); L.props[L.idx(3, 2)] = 0; L.props[L.idx(9, 2)] = 0;
+    for (const [x, y] of [[2, 2], [10, 2], [2, 6], [10, 6], [4, 1]]) L.props[L.idx(x, y)] = PR.GLOWCAP;
+    if (c.spring) for (let y = 3; y <= 5; y++) for (let x = 4; x <= 8; x++) if (!((x === 4 || x === 8) && (y === 3 || y === 5))) L.set(x, y, TL.SPRING);
+    if (c.sign) { const si = L.idx(6, 1); L.props[si] = PR.SIGN; L.signText[si] = c.sign; }
+  }
   for (const s of c.stock) {
     const item = Array.isArray(s.item) ? rnd.pick(s.item) : s.item; // a list means "one of these, chosen per world"
     L.shop.push({ x: s.x + 0.5, y: 4.5, item, price: s.price, gift: s.gift, needHearts: s.needHearts, unique: s.unique, choose: s.choose ? 'h' + id : undefined });
   }
-  if (c.npc) L.npcs.push({ x: 6.5, y: 2.5, spr: c.npc, text: c.text || rnd.pick(Content.hints) });
+  if (c.npc) L.npcs.push({ x: 6.5, y: 2.5, spr: c.npc, text: c.text || rnd.pick(c.lore && Content.lore ? Content.lore : Content.hints) }); // lore: a line of the land's passing talk (content/grottos.js)
 }
 
 // ---------- DUNGEONS ----------
@@ -685,10 +774,18 @@ function bossEyeAlcove(L, r, items) {
   L.eyeLinks = L.eyeLinks || {}; L.eyeLinks[at(9, 2)] = { kind: 'seal', opens: [at(10, 3)], openTo: TL.DFLOOR, text: 'THE GREAT EYE BLINKS... A NICHE OPENS IN THE WALL.' };
   r.stash = items.map((item, i) => ({ item, x: 10.5 + (i % 2), y: 1.5 + Math.floor(i / 2) }));
 }
-function dungeonRoomAt(L, x, y) { const rx = Math.floor(x / DSX), ry = Math.floor(y / DSY); return L.rooms[ry * (L.gw || DGW) + rx]; } // L.gw: a wider room grid (the frontier tunnels)
+// ---------- ELEVATION ----------
+// A tile can stand up from the floor: TINFO[t].raised = its height in tiles (steps 0.25-0.75, a ledge 1). You walk up anything
+// at most STEP_UP above your feet; higher is a wall to you. Walk off an edge and you drop. The renderer draws the faces and
+// tops (engine/render.js). Rooms can be built taller than one tile (L.ceilH): there the Gale Cloak lifts you a level.
+const STEP_UP = 0.3;
+function heightAt(L, x, y) { const ti = TINFO[L.get(Math.floor(x), Math.floor(y))]; return ti.wall ? 0 : (ti.raised || 0); }
+// can the Gale Cloak lift you a whole level here? Outdoors (open sky), or in a room at least two tiles tall
+function skyRoom(L) { return L.kind === 'ow' || (L.ceilH || 1) >= 2; }
+function dungeonRoomAt(L, x, y) { const rx = Math.floor(x / DSX), ry = Math.floor(y / DSY); const r = L.rooms[ry * (L.gw || DGW) + rx]; return r && r.mergeInto != null ? L.rooms[r.mergeInto] : r; } // mergeInto: a cell that is part of a bigger room // L.gw: a wider room grid (the frontier tunnels)
 function owRegionAt(L, x, y) { const rx = clamp(Math.floor(x / RSX), 0, RW - 1), ry = clamp(Math.floor(y / RSY), 0, RH - 1); return L.regions[ry * RW + rx]; }
 function roomBounds(L, room) {
-  if (L.kind === 'dungeon' || L.kind === 'tunnel') return { x0: room.rx * DSX + 1, y0: room.ry * DSY + 1, x1: room.rx * DSX + DSX, y1: room.ry * DSY + DSY };
+  if (L.kind === 'dungeon' || L.kind === 'tunnel') { const c0 = room.cx0 != null ? room.cx0 : room.rx; return { x0: c0 * DSX + 1, y0: room.ry * DSY + 1, x1: (c0 + (room.cw || 1)) * DSX, y1: room.ry * DSY + DSY }; } // cx0/cw: a room more than one cell wide
   if (L.kind === 'ow') return { x0: room.rx * RSX + 1, y0: room.ry * RSY + 1, x1: room.rx * RSX + RSX, y1: room.ry * RSY + RSY };
   return { x0: 1, y0: 1, x1: L.w - 1, y1: L.h - 1 };
 }

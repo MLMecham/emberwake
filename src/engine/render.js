@@ -102,7 +102,7 @@ function renderWorld(cam, L, ents, players, myId) {
   const ceilTex = kind === 'dungeon' ? texFor('brick', L) : TEX.cwall;
   for (let y = 0; y < H; y++) {
     const floorRow = y >= hz; if (!floorRow && outdoor) continue;
-    const p = floorRow ? Math.max(0.5, y - hz) : hz - y; const posZ = (floorRow ? eye : 1 - eye) * H;
+    const p = floorRow ? Math.max(0.5, y - hz) : hz - y; const posZ = (floorRow ? eye : (L.ceilH || 1) - eye) * H;
     const rowD = posZ / p;
     const stepX = rowD * (rdx1 - rdx0) / W, stepY = rowD * (rdy1 - rdy0) / W;
     let fx = cam.x + rowD * rdx0, fy = cam.y + rowD * rdy0;
@@ -124,36 +124,64 @@ function renderWorld(cam, L, ents, players, myId) {
       buf[row + x] = c; fx += stepX; fy += stepY;
     }
   }
-  // --- walls ---
-  // Each column finds the nearest wall; outdoors it keeps looking past short walls for a tall one (peaks, the great wood,
-  // gate towers) and draws that one's top above the near wall, so landmarks show over trees.
+  // --- walls, ledges and steps ---
+  // Each column marches outward cell by cell, FRONT TO BACK. `clip` is the lowest screen row not yet painted in this column
+  // (everything from clip down is final): the floor pass painted the ground plane everywhere, and here every cell that
+  // stands up from it paints its face (from the height of the cell before it up to its own height) and, when the eye is
+  // above it, its top (cap) - but only above `clip`. So a raised ledge shows its top when you stand higher, a short wall
+  // hides what's behind it only up to its own top, and tall walls (peaks, the great wood, gate towers) show over everything.
+  // Walls indoors reach the ceiling (L.ceilH, 1 unless a room is built taller) and end the march.
+  // Per column, up to OCC occluders (distance, rows they cover) are kept for the sprite pass.
   const maxSteps = outdoor ? 150 : 64; const triW = (v) => 1 - 2 * Math.abs(v - Math.floor(v) - 0.5);
-  const drawCol = (x, tile, side, pd, rdx, rdy, mx, my, yLimit) => {
-    const ti = TINFO[tile]; const dist = Math.max(0.05, pd);
-    const lh = H / dist; const bot = hz + eye * lh;
-    let wx = side === 0 ? cam.y + pd * rdy : cam.x + pd * rdx; const along = wx; wx -= Math.floor(wx);
-    let tx = (wx * TS) | 0; if ((side === 0 && rdx > 0) || (side === 1 && rdy < 0)) tx = TS - 1 - tx;
-    let hcol = 1;
-    if (ti.tall) {
-      hcol = ti.tall;
-      if (ti.jag === 'peak') hcol *= 0.55 + 0.3 * triW(along * 0.23) + 0.15 * triW(along * 0.71 + 0.4);
-      else if (ti.jag === 'trees') hcol *= 0.8 + 0.2 * Math.sqrt(Math.abs(Math.sin(along * 1.7)));
-      else if (ti.jag === 'battlement' && ((tx >> 3) & 1)) hcol += 0.18;
-    }
-    const top = bot - hcol * lh;
-    const th = L.towerTheme && L.towerTheme[my * L.w + mx]; const tex = (th && TEX[TINFO[tile].wall + '@' + th]) || texFor(ti.wall, L) || TEX.brick;
+  const ceilH = outdoor ? 1 : (L.ceilH || 1);
+  const wallH = (ti, along, tx) => {
+    if (!ti.tall) return outdoor ? 1 : ceilH;
+    let h = ti.tall;
+    if (ti.jag === 'peak') h *= 0.55 + 0.3 * triW(along * 0.23) + 0.15 * triW(along * 0.71 + 0.4);
+    else if (ti.jag === 'trees') h *= 0.8 + 0.2 * Math.sqrt(Math.abs(Math.sin(along * 1.7)));
+    else if (ti.jag === 'battlement' && ((tx >> 3) & 1)) h += 0.18;
+    return h;
+  };
+  // a face: the side of a cell, from height h0 up to h1, at distance pd. Returns the top row it reaches.
+  const drawFace = (x, ti, tile, side, pd, rdx, rdy, mx, my, h0, h1, along, tx, clip) => {
+    const dist = Math.max(0.05, pd); const lh = H / dist;
+    const th = L.towerTheme && L.towerTheme[my * L.w + mx]; const tname = ti.wall || ti.side || 'brick'; const tex = (th && TEX[tname + '@' + th]) || texFor(tname, L) || TEX.brick;
     const lf = (dark ? darkLight(cam.x + rdx * pd, cam.y + rdy * pd, dist) : lightFor(kind, dist)) * (side ? 0.78 : 1);
     const fogF = outdoor ? (ti.tall ? clamp((dist - 14) / 40, 0, 0.6) : clamp((dist - 9) / 9, 0, 0.85)) : 0;
-    const y0 = Math.max(0, Math.round(top)), y1 = Math.min(H, Math.round(bot), yLimit);
-    const snowLine = hcol - 0.5 - 0.3 * triW(along * 1.3);
+    const top = hz + (eye - h1) * lh, bot = hz + (eye - h0) * lh;
+    const y0 = Math.max(0, Math.round(top)), y1 = Math.min(H, Math.round(bot), clip);
+    const snowLine = h1 - 0.5 - 0.3 * triW(along * 1.3);
     for (let y = y0; y < y1; y++) {
-      const z = (bot - y) / lh; const ty = ((1 - (z - Math.floor(z))) * TS) | 0; let c = tex[(ty & 31) * TS + tx];
+      const z = eye - (y - hz) / lh; const ty = ((1 - (z - Math.floor(z))) * TS) | 0; let c = tex[(ty & 31) * TS + tx];
       if (ti.snow && z > snowLine) c = ((tx + ty) & 7) ? rgb(236, 242, 252) : rgb(200, 210, 230);
+      if (ti.raised) c = h1 - z < 0.06 ? fogC(c, 0.4, 235, 225, 200) : shadeC(c, 0.8); // a step's edge catches the light; its riser is darker
       c = shadeC(c, lf); if (fogF > 0) c = fogC(c, fogF, fogR, fogG, fogB);
       buf[y * W + x] = c;
     }
     return Math.max(0, Math.round(top));
   };
+  // a cap: the top of a cell at height h, seen from above, between distances d0 (near edge) and d1 (far edge)
+  const drawCap = (x, ti, h, d0, d1, rdx, rdy, clip) => {
+    const k = (eye - h) * H; if (k <= 0) return clip;
+    const yN = d0 > 0.001 ? hz + k / d0 : H, yF = hz + k / d1;
+    const y0 = Math.max(0, Math.ceil(yF)), y1 = Math.min(H, Math.round(yN), clip);
+    const capName = ti.cap || (ti.wall && (ti.portal || ti.exitWall || ti.locked || ti.eye) ? TINFO[outdoor ? TL.ROCK : TL.BRICK].wall : ti.wall); // a doorway's top is plain stone
+    let tex = ti.wall ? (texFor(capName, L) || TEX.brick) : (texFor(ti.floor || 'grass', L) || TEX.grass); if (Array.isArray(tex)) tex = tex[wf];
+    const capShade = ti.wall ? 0.82 : 1;
+    for (let y = y0; y < y1; y++) {
+      const d = k / Math.max(0.5, y - hz); const fx = cam.x + rdx * d, fy = cam.y + rdy * d;
+      let c = tex[(((fy - Math.floor(fy)) * TS) & 31) * TS + (((fx - Math.floor(fx)) * TS) & 31)];
+      const lf = (dark ? darkLight(fx, fy, d) : lightFor(kind, d)) * capShade; c = shadeC(c, lf);
+      if (outdoor) { const fogF = clamp((d - 9) / 9, 0, 0.85); if (fogF > 0) c = fogC(c, fogF, fogR, fogG, fogB); }
+      buf[y * W + x] = c;
+    }
+    return Math.min(clip, Math.max(0, Math.ceil(yF)));
+  };
+  const OCC = 6; if (!R.occD || R.occD.length !== W * OCC) { R.occD = new Float32Array(W * OCC); R.occY = new Int16Array(W * OCC); R.occN = new Uint8Array(W); }
+  const cellH = (ti) => ti.wall ? 1 : (ti.raised || 0); // (walls get their real height in the march)
+  const camTi = TINFO[L.get(Math.floor(cam.x), Math.floor(cam.y))];
+  let clip = H, first = 1e9, occ = 0, ob = 0; // per column (reset at the start of each)
+  const occlude = (d, y) => { if (y >= clip) return; clip = y; if (first === 1e9) first = Math.max(0.05, d); if (occ < OCC) { R.occD[ob + occ] = Math.max(0.05, d); R.occY[ob + occ] = y; occ++; } else R.occY[ob + OCC - 1] = y; };
   for (let x = 0; x < W; x++) {
     const camX = 2 * x / W - 1; const rdx = dirX + plX * camX, rdy = dirY + plY * camX;
     let mx = Math.floor(cam.x), my = Math.floor(cam.y);
@@ -161,28 +189,35 @@ function renderWorld(cam, L, ents, players, myId) {
     let stepX, stepY, sdx, sdy;
     if (rdx < 0) { stepX = -1; sdx = (cam.x - mx) * ddx; } else { stepX = 1; sdx = (mx + 1 - cam.x) * ddx; }
     if (rdy < 0) { stepY = -1; sdy = (cam.y - my) * ddy; } else { stepY = 1; sdy = (my + 1 - cam.y) * ddy; }
-    let side = 0, n = 0; let near = null, far = null;
-    while (n++ < maxSteps) {
+    clip = H; first = 1e9; occ = 0; ob = x * OCC;
+    // the cell you're standing in: if it's raised (a step, a ledge), its top is under your feet
+    let prevH = camTi.wall ? 0 : (camTi.raised || 0);
+    if (prevH > 0) occlude(0, drawCap(x, camTi, prevH, 0, Math.min(sdx, sdy), rdx, rdy, clip));
+    let side = 0, n = 0;
+    while (n++ < maxSteps && clip > 0) {
       if (sdx < sdy) { sdx += ddx; mx += stepX; side = 0; } else { sdy += ddy; my += stepY; side = 1; }
-      if (mx < 0 || my < 0 || mx >= L.w || my >= L.h) { if (!near && !outdoor) near = { tile: TL.BRICK, side, pd: side === 0 ? sdx - ddx : sdy - ddy, mx, my }; break; }
+      const pd = side === 0 ? sdx - ddx : sdy - ddy;
+      if (mx < 0 || my < 0 || mx >= L.w || my >= L.h) { if (!outdoor) { drawFace(x, TINFO[TL.BRICK], TL.BRICK, side, pd, rdx, rdy, mx, my, prevH, ceilH, 0, 0, clip); occlude(pd, 0); } break; }
       const tile = L.tiles[my * L.w + mx]; const ti = TINFO[tile];
-      if (!ti.wall) continue;
-      const hit = { tile, side, pd: side === 0 ? sdx - ddx : sdy - ddy, mx, my };
-      if (!near) { near = hit; if (ti.tall || !outdoor) break; }
-      else if (ti.tall) { far = hit; break; }
+      const hc0 = cellH(ti); if (hc0 <= 0 && prevH <= 0) continue; // plain ground: the floor pass already has it
+      let wx = side === 0 ? cam.y + pd * rdy : cam.x + pd * rdx; const along = wx; wx -= Math.floor(wx);
+      let tx = (wx * TS) | 0; if ((side === 0 && rdx > 0) || (side === 1 && rdy < 0)) tx = TS - 1 - tx;
+      const hc = ti.wall ? wallH(ti, along, tx) : hc0;
+      if (hc > prevH + 1e-4) { const top = drawFace(x, ti, tile, side, pd, rdx, rdy, mx, my, prevH, hc, along, tx, clip); if (eye <= hc) occlude(pd, top); }
+      if (hc > 0 && eye > hc) occlude(pd, drawCap(x, ti, hc, pd, Math.min(sdx, sdy), rdx, rdy, clip)); // seen from above
+      prevH = hc;
+      if (ti.wall && !outdoor) { occlude(pd, 0); break; } // indoors, a wall meets the ceiling: nothing behind it shows
+      if (outdoor && clip <= hz - (3.5 - eye) * H / Math.max(0.05, pd)) break; // nothing farther can reach above what's painted
     }
-    R.zbuf[x] = near ? Math.max(0.05, near.pd) : 1e9;
-    if (!near) continue;
-    const nearTop = drawCol(x, near.tile, near.side, near.pd, rdx, rdy, near.mx, near.my, H);
-    if (far) drawCol(x, far.tile, far.side, far.pd, rdx, rdy, far.mx, far.my, nearTop);
+    R.zbuf[x] = first; R.occN[x] = occ;
   }
   // --- sprites ---
   const sprites = [];
   const rad = 16; const cx0 = Math.max(0, Math.floor(cam.x) - rad), cx1 = Math.min(L.w - 1, Math.floor(cam.x) + rad), cy0 = Math.max(0, Math.floor(cam.y) - rad), cy1 = Math.min(L.h - 1, Math.floor(cam.y) + rad);
-  for (let y = cy0; y <= cy1; y++) for (let x = cx0; x <= cx1; x++) { const pr = L.props[y * L.w + x]; if (pr) sprites.push({ x: x + 0.5, y: y + 0.5, spr: SPR[PROPS[pr]], sc: PROP_INFO[pr].scale, z: 0, fl: pr === PR.FLAME ? 8 : 0 }); }
+  for (let y = cy0; y <= cy1; y++) for (let x = cx0; x <= cx1; x++) { const pr = L.props[y * L.w + x]; if (pr) sprites.push({ x: x + 0.5, y: y + 0.5, spr: SPR[PROPS[pr]], sc: PROP_INFO[pr].scale, z: heightAt(L, x + 0.5, y + 0.5), fl: pr === PR.FLAME ? 8 : 0 }); }
   for (const e of ents) {
     const s = animFrame(e[1], R.time, e[0], e[6] & 2); if (!s) continue; // stunned enemies freeze
-    sprites.push({ x: e[2], y: e[3], spr: s, sc: e[4], z: e[5], fl: e[6], price: e[7], id: e[0], elite: e[10] || 0 });
+    sprites.push({ x: e[2], y: e[3], spr: s, sc: e[4], z: e[5] + heightAt(L, e[2], e[3]), fl: e[6], price: e[7], id: e[0], elite: e[10] || 0 });
   }
   for (const p of players) {
     if (p[0] === myId || p[1] !== L.id) continue;
@@ -196,7 +231,7 @@ function renderWorld(cam, L, ents, players, myId) {
     let fr = -1, rsc = 1, flip = false;
     if (p[8] && an.spd > 0.8) { an.ph += ddt * 9; const step = Math.floor(an.ph); fr = RUN_SEQ[step % 4]; rsc = RUN_SCALE[step % 4]; flip = (dir === 'front' || dir === 'back') && (Math.floor(step / 4) & 1); } else an.ph = 0;
     const s = heroSpriteRun(p[7], col, p[6], dir, fr, flip);
-    sprites.push({ x: p[2], y: p[3], spr: s, sc: 0.78 * rsc, z: p[8] ? 0 : -0.45, fl: p[8] ? (p[9] > 0 ? 16 : 0) : 32, name: p[10], col, aura: p[7] === 'monk' ? p[6] : 0 });
+    sprites.push({ x: p[2], y: p[3], spr: s, sc: 0.78 * rsc, z: (p[8] ? 0 : -0.45) + (p[15] || 0), fl: p[8] ? (p[9] > 0 ? 16 : 0) : 32, name: p[10], col, aura: p[7] === 'monk' ? p[6] : 0 });
   }
   for (const s of sprites) { const dx = s.x - cam.x, dy = s.y - cam.y; s.d = dx * dx + dy * dy; }
   sprites.sort((a, b) => b.d - a.d);
@@ -214,9 +249,10 @@ function renderWorld(cam, L, ents, players, myId) {
     const fogF = outdoor ? clamp((dist - 9) / 9, 0, 0.85) : 0;
     const hurt = (s.fl & 1) && (Math.floor(t * 20) & 1); const stun = s.fl & 2; const ghost = s.fl & 4; const down = s.fl & 32;
     for (let x = Math.max(0, x0); x < Math.min(W, x1); x++) {
-      if (tY >= R.zbuf[x]) continue;
+      let lim = H; for (let k = 0, ob = x * OCC; k < R.occN[x]; k++) { if (R.occD[ob + k] < tY) lim = R.occY[ob + k]; else break; } // rows from lim down are behind a wall or ledge
+      if (lim <= 0) continue;
       const tx = Math.floor((x - x0) / (x1 - x0) * s.spr.w); if (tx < 0 || tx >= s.spr.w) continue;
-      for (let y = Math.max(0, y0); y < Math.min(H, y1); y++) {
+      for (let y = Math.max(0, y0); y < Math.min(H, y1, lim); y++) {
         const ty = Math.floor((y - y0) / (y1 - y0) * s.spr.h); let c = s.spr.px[ty * s.spr.w + tx]; if (!c) continue;
         if (ghost && ((x + y + (t * 30 | 0)) & 1)) continue;
         if (hurt) c = (ty + tx) & 1 ? rgb(255, 255, 255) : rgb(255, 60, 40); else if (stun) c = fogC(c, 0.45, 120, 180, 255);
@@ -438,12 +474,13 @@ function drawViewmodel(st) {
 function c32ToHex(c) { return '#' + c.map(v => v.toString(16).padStart(2, '0')).join(''); }
 
 // ---- HUD ----
-function drawHearts(x, y, hp, maxHp) {
-  const n = Math.ceil(maxHp / 4);
+// poisoned: the hearts turn purple (and pulse) until the poison runs out
+function drawHearts(x, y, hp, maxHp, poison) {
+  const n = Math.ceil(maxHp / 4); const full = poison ? rgb(150 + Math.round(30 * Math.sin(R.time * 6)), 60, 220) : rgb(230, 40, 40), empty = poison ? rgb(40, 18, 56) : rgb(60, 20, 30);
   for (let i = 0; i < n; i++) {
     const hx = x + (i % 10) * 8, hy = y + Math.floor(i / 10) * 8; const q = clamp(hp - i * 4, 0, 4);
     const pat = ['.##.##.', '#######', '#######', '.#####.', '..###..', '...#...'];
-    for (let j = 0; j < pat.length; j++) for (let k = 0; k < 7; k++) if (pat[j][k] === '#') { const fill = k < q * 7 / 4; px(hx + k, hy + j, fill ? rgb(230, 40, 40) : rgb(60, 20, 30)); }
+    for (let j = 0; j < pat.length; j++) for (let k = 0; k < 7; k++) if (pat[j][k] === '#') { const fill = k < q * 7 / 4; px(hx + k, hy + j, fill ? full : empty); }
   }
 }
 function drawHUD(st) {
@@ -451,7 +488,7 @@ function drawHUD(st) {
   // minimap
   drawMinimap(st, 4, 4, 72, 44);
   // hearts
-  const hx = W - 86; drawHearts(hx, 5, me.hp, me.maxHp);
+  const hx = W - 86; drawHearts(hx, 5, me.hp, me.maxHp, me.poison > 0);
   if (me.hp <= 4 && me.alive && Math.floor(R.time * 4) & 1) frame(hx - 2, 3, 84, 10, rgb(255, 60, 60));
   // counters
   let cy = 5 + Math.ceil(Math.ceil(me.maxHp / 4) / 10) * 8 + 2;

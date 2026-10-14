@@ -39,7 +39,7 @@ function startGame(mode, cont) {
   G.sim.time = 0;
 }
 function enterPlay(lvl, x, y, a) {
-  G.local = { lvl, x, y, a, pitch: 0, kx: 0, ky: 0, atkCd: 0, swing: null, punch: null, combo: 0, comboT: 0, charge: 0, held: 0, bob: 0, useFlash: 0, useSpr: null, bumpT: 0, dashT: 0, dashCd: 0, dialog: null, title: null, flash: 0, flashC: 0, shake: 0, get: null, pow: [], fade: 1, reviveT: 0, npcTalked: {}, downT: 0, sel: null, lowT: 0, atkVis: 0 };
+  G.local = { lvl, x, y, a, pitch: 0, kx: 0, ky: 0, atkCd: 0, swing: null, punch: null, combo: 0, comboT: 0, charge: 0, held: 0, bob: 0, useFlash: 0, useSpr: null, bumpT: 0, dashT: 0, dashCd: 0, dialog: null, title: null, flash: 0, flashC: 0, shake: 0, get: null, pow: [], fade: 1, reviveT: 0, npcTalked: {}, downT: 0, sel: null, lowT: 0, atkVis: 0, z: 0, vz: 0, lift: 0 }; // z: your feet's height (steps, ledges); lift: 0-1, how far the Gale Cloak has carried you up a level
   G.state = 'play'; G.msgs = []; showScreen(null); $('hudbtns').classList.add('on');
 }
 function clientOnMsg(m) {
@@ -75,7 +75,7 @@ function handleEvent(e) {
     case 'poisontick': if (e.pid === me) { Lc.flash = 0.18; Lc.flashC = rgb(120, 220, 60); } break;
     case 'hurt': if (e.pid === me) { Lc.kx = e.kx; Lc.ky = e.ky; Lc.flash = 0.25; Lc.flashC = rgb(255, 40, 40); Lc.shake = 0.2; sfx('hurt'); if (navigator.vibrate) try { navigator.vibrate(60); } catch (er) { } } break;
     case 'block': if (e.pid === me) { Lc.blockT = 0.32; } break;
-    case 'tp': if (e.pid === me) { Lc.lvl = e.lvl; Lc.x = e.x; Lc.y = e.y; Lc.a = e.a; Lc.fade = 0; Lc.pitch = 0; G.smooth = {}; Lc.npcTalked = {}; } break;
+    case 'tp': if (e.pid === me) { Lc.lvl = e.lvl; Lc.x = e.x; Lc.y = e.y; Lc.a = e.a; Lc.fade = 0; Lc.pitch = 0; G.smooth = {}; Lc.npcTalked = {}; Lc.z = heightAt(G.world.levels[e.lvl], e.x, e.y); Lc.vz = 0; Lc.lift = 0; } break;
     case 'title': if (e.pid === me) Lc.title = { text: e.text, sub: e.sub, t: 3 }; break;
     case 'dialog': if (e.pid === me) showDialog(e.text); break;
     case 'get': if (e.pid === me || e.all) { Lc.get = { item: e.item, text: (e.pid === me ? '' : '') + e.text, t: 2.2 }; sfx(e.item === 'shard' ? 'fanfare' : 'get'); if (e.item === 'fists' && e.pid === me) unlockMonk(); } break;
@@ -94,9 +94,10 @@ function showDialog(text) { if (!G.local) return; G.local.dialog = { text, shown
 
 // ---------- local player update ----------
 // favorite items live in this browser only (a per-player convenience); every read and write is guarded
-function loadFavs() { try { const a = JSON.parse(localStorage.getItem('emberwake_favs') || '[]'); return new Set(Array.isArray(a) ? a : []); } catch (e) { return new Set(); } }
-function toggleFav(id) { if (!G.favs) G.favs = loadFavs(); if (G.favs.has(id)) G.favs.delete(id); else G.favs.add(id); try { localStorage.setItem('emberwake_favs', JSON.stringify([...G.favs])); } catch (e) { } }
-function favList(owned) { if (!G.favs) G.favs = loadFavs(); const f = owned.filter(id => G.favs.has(id)); return f.length ? f : owned; }
+// favorites are kept on your hero in the save (game/sim.js 'fav' action), so a new game starts with none
+function myFavs() { const me = G.snap && G.snap.me; return new Set((me && me.favs) || []); }
+function toggleFav(id) { const on = !myFavs().has(id); sendAction({ t: 'fav', item: id, on }); if (G.snap && G.snap.me) { const f = (G.snap.me.favs || []).filter(x => x !== id); if (on) f.push(id); G.snap.me.favs = f; } }
+function favList(owned) { const fs = myFavs(); const f = owned.filter(id => fs.has(id)); return f.length ? f : owned; }
 const BODY_PTS = [-0.22, 0, 0.22].flatMap(ox => [-0.22, 0, 0.22].map(oy => [ox, oy])); // the hero's collision box, sampled 3x3 (corners, edge middles, center) so small round props can't hide between the corners
 const POMMEL_MIN = 0.2, LUNGE_HOLD = 1.5, LUNGE_DUR = 0.22, LUNGE_SPD = 11; // reverse grip timings (seconds) and lunge speed (tiles/s)
 function raftOK(me, L, ti) { return !!me.items.raft && L.kind !== 'dungeon' && !ti.ocean; }
@@ -158,13 +159,20 @@ function updateLocal(dt, inp) {
   const moving = Math.abs(inp.fwd) + Math.abs(inp.str) > 0.1; if (moving) Lc.bob += dt * spd * 2.6;
   Lc.moveK = lerp(Lc.moveK || 0, moving ? 1 : 0, Math.min(1, dt * 8)); if (Lc.blockT > 0) Lc.blockT -= dt;
   Lc.stillT = moving || Lc.swing != null ? 0 : (Lc.stillT || 0) + dt; Lc.readyK = lerp(Lc.readyK || 0, Lc.stillT > 0.3 ? 1 : 0, Math.min(1, dt * (Lc.stillT > 0.3 ? 5 : 10))); // shield comes up after standing still
-  const raft = !!me.items.raft && L.kind !== 'dungeon'; const rad = 0.22; const sop = { raft, fly: flying, mx: Lc.x, my: Lc.y }; // the raft only works on open water
+  // ELEVATION (game/world.js): your feet follow the floor up steps and onto ledges; walk off an edge and you drop. Where
+  // there's room overhead (outdoors, or a tall room) the Gale Cloak lifts you a whole level: up there you sail over hedges,
+  // rocks and trees (the tall walls still stop you). If the wind gives out over something solid, it holds you up until you're clear.
+  const sky = skyRoom(L); const lowSolid = (x, y) => { for (const [ox, oy] of BODY_PTS) if (L.solidAt(x + ox, y + oy, { z: Lc.z || 0, mx: x, my: y })) return true; return false; };
+  { const want = flying && sky ? 1 : 0; if (want < Lc.lift && Lc.lift > 0.5 && lowSolid(Lc.x, Lc.y)) { if (!Lc.hoverMsg || R.time - Lc.hoverMsg > 4) { Lc.hoverMsg = R.time; pushMsg('THE WIND HOLDS YOU UP UNTIL THERE IS GROUND BELOW.', 2); } } else Lc.lift = want > Lc.lift ? Math.min(want, Lc.lift + dt * 2.2) : Math.max(want, Lc.lift - dt * 2.6); }
+  const high = Lc.lift > 0.75;
+  const raft = !!me.items.raft && L.kind !== 'dungeon'; const rad = 0.22; const sop = { raft, fly: flying || Lc.lift > 0.3, mx: Lc.x, my: Lc.y, z: (Lc.z || 0) + Lc.lift, high }; // the raft only works on open water
   // tide water that rose under the edge of you doesn't pin you in place: you can step off it (into it, you sink)
   const wetEdge = new Set(); for (const [ox, oy] of [[-rad, -rad], [rad, -rad], [-rad, rad], [rad, rad]]) { const tx = Math.floor(Lc.x + ox), ty = Math.floor(Lc.y + oy); if (TINFO[L.get(tx, ty)].water && L.solidAt(tx, ty, sop)) wetEdge.add(ty * L.w + tx); }
   const solid = (x, y) => { for (const [ox, oy] of BODY_PTS) { const tx = Math.floor(x + ox), ty = Math.floor(y + oy); if (wetEdge.has(ty * L.w + tx)) continue; if (L.solidAt(x + ox, y + oy, sop)) return true; } return false; };
   const nx = Lc.x + mvx * dt, ny = Lc.y + mvy * dt; let blockedX = false, blockedY = false;
   if (!solid(nx, Lc.y)) Lc.x = nx; else { blockedX = true; Lc.svx = 0; }
   if (!solid(Lc.x, ny)) Lc.y = ny; else { blockedY = true; Lc.svy = 0; }
+  { const gh = heightAt(L, Lc.x, Lc.y); if (gh >= Lc.z) { Lc.z = Math.min(gh, Lc.z + dt * 3.5); Lc.vz = 0; } else { Lc.vz = (Lc.vz || 0) - 14 * dt; Lc.z = Math.max(gh, Lc.z + Lc.vz * dt); if (Lc.z <= gh) { if (Lc.vz < -3) sfx('land'); Lc.vz = 0; } } } // up steps, down drops
   // the southern sea is too rough to sail
   if ((blockedX || blockedY) && moving && L.kind === 'ow' && R.time - (Lc.seaMsgAt || -99) > 6) { const ax = Math.floor(Lc.x + Math.cos(Lc.a) * 0.7), ay = Math.floor(Lc.y + Math.sin(Lc.a) * 0.7); if (TINFO[L.get(ax, ay)].ocean) { Lc.seaMsgAt = R.time; pushMsg(raft ? 'THE SEA IS FAR TOO ROUGH FOR A RAFT.' : 'ROUGH WATER. NOTHING COULD SAIL THIS.', 3); } }
   if ((blockedX || blockedY) && moving && L.kind === 'dungeon' && me.items.raft && R.time - (Lc.seaMsgAt || -99) > 6) { const ax = Math.floor(Lc.x + Math.cos(Lc.a) * 0.7), ay = Math.floor(Lc.y + Math.sin(Lc.a) * 0.7); if (TINFO[L.get(ax, ay)].water) { Lc.seaMsgAt = R.time; pushMsg('NO ROOM FOR THE RAFT IN HERE.', 3); } }
@@ -292,7 +300,7 @@ function loop(now) {
   else if (G.state === 'pause' && (inp.pause || inp.inv) && performance.now() - (G.pauseAt || 0) > 250 && $('bagScreen').classList.contains('on')) resume();
   if (NET.role === 'host' && G.sim) hostStep(rdt, now);
   else if (NET.role === 'client' && NET.hostConn && now - G.lastSend > 50) {
-    G.lastSend = now; const Lc = G.local; NET.hostConn.send({ t: 'ps', lvl: Lc.lvl, x: Math.round(Lc.x * 100) / 100, y: Math.round(Lc.y * 100) / 100, a: Math.round(Lc.a * 100) / 100, atk: Lc.atkVis > 0 ? 1 : 0, sel: Lc.sel });
+    G.lastSend = now; const Lc = G.local; NET.hostConn.send({ t: 'ps', lvl: Lc.lvl, x: Math.round(Lc.x * 100) / 100, y: Math.round(Lc.y * 100) / 100, z: Math.round(((Lc.z || 0) + (Lc.lift || 0)) * 100) / 100, a: Math.round(Lc.a * 100) / 100, atk: Lc.atkVis > 0 ? 1 : 0, sel: Lc.sel });
   }
   const hostPaused = NET.role === 'client' && G.snap && G.snap.paused;
   if (G.state === 'play' && !hostPaused) updateLocal(dt, inp);
@@ -308,7 +316,7 @@ function hostStep(rdt, now) {
   const paused = hostPausedNow(); G.sim.paused = paused && G.state === 'pause'; G.sim.pausedBy = G.profile.name;
   if (!paused && G.state !== 'title') {
     const Lc = G.local; const mp = G.sim.players[G.myId];
-    if (mp && G.state === 'play') G.sim.onPlayerState(G.myId, { lvl: Lc.lvl, x: Lc.x, y: Lc.y, a: Lc.a, atk: Lc.atkVis > 0 ? 1 : 0, sel: Lc.sel });
+    if (mp && G.state === 'play') G.sim.onPlayerState(G.myId, { lvl: Lc.lvl, x: Lc.x, y: Lc.y, z: (Lc.z || 0) + (Lc.lift || 0), a: Lc.a, atk: Lc.atkVis > 0 ? 1 : 0, sel: Lc.sel });
     // fixed steps that catch up after slow frames, so game time keeps pace with real time
     G.simAcc = Math.min(0.25, (G.simAcc || 0) + rdt);
     while (G.simAcc >= 1 / 60) { G.sim.tick(1 / 60); G.simAcc -= 1 / 60; }
@@ -341,7 +349,7 @@ function draw(dt) {
   }
   const down = me && !me.alive;
   const shake = Lc.shake > 0 ? (Math.random() - 0.5) * 6 * Lc.shake : 0;
-  const cam = { x: Lc.x, y: Lc.y, a: Lc.a + shake * 0.01, pitch: Lc.pitch + shake * 4, eye: down ? 0.12 : (me && me.fly > 0 ? 0.68 + Math.sin(R.time * 5) * 0.02 : 0.5) + Math.sin(Lc.bob * 2) * 0.012 };
+  const cam = { x: Lc.x, y: Lc.y, a: Lc.a + shake * 0.01, pitch: Lc.pitch + shake * 4, eye: (Lc.z || 0) + (down ? 0.12 : (me && me.fly > 0 ? 0.68 + Math.sin(R.time * 5) * 0.02 : 0.5) + (skyRoom(L) ? (Lc.lift || 0) * 0.82 : 0) + Math.sin(Lc.bob * 2) * 0.012) }; // the cloak lifts the eye to about 1.5 where there's sky
   R.ventPhase = snap ? snap.vp || 0 : 0;
   renderWorld(cam, L, ents, snap ? snap.pl : [], G.myId);
   // pow words
@@ -464,7 +472,7 @@ function renderBag() {
   }
   const owned = ownedBItems(me);
   if (page === 'items' && owned.length) { const r = sec('ITEM BUTTON (RIGHT-CLICK / E) - HOLD FOR POWER, SHIFT FOR TECHNIQUE'); for (const id of owned) { const d = itemDef(id); const sub = id === 'bow' ? [me.items.loaded || me.items.loaded2 ? 'HOLD: LOADED SHOT' : 'FIRES WHEN YOU LET GO', me.items.bombarrow ? 'SHIFT: BOMB ARROW' : ''].filter(Boolean).join(' / ') : id === 'rod' && me.cls !== 'monk' ? ({ plain: 'FORCE', fire: 'FIRE', thunder: 'STORM' }[me.wandEl || 'plain'] || 'FORCE') + ' MAGIC. SHIFT: ITS SPELL' : id === 'galecloak' ? 'FLY OVER ANYTHING FOR ' + FLY_TIME + 's. PRESS AGAIN TO DROP' + (me.items.cloakslam ? ' AND SLAM' : '') : d.useAlt ? 'SHIFT: TECHNIQUE' : null; btn(r, itemSprite(id, me.cls), itemName(id, me.cls), sub, Lc_sel() === id, () => { G.local.sel = id; sendAction({ t: 'sel', item: id }); });
-      if (!G.favs) G.favs = loadFavs(); const star = document.createElement('span'); star.className = 'fav' + (G.favs.has(id) ? ' on' : ''); star.textContent = G.favs.has(id) ? '\u2605' : '\u2606'; star.title = 'FAVORITE: THE SCROLL WHEEL ONLY STEPS THROUGH FAVORITES'; star.onclick = (ev) => { ev.stopPropagation(); toggleFav(id); sfx('menu'); renderBag(); }; r.lastChild.appendChild(star); }
+      const favs = myFavs(); const star = document.createElement('span'); star.className = 'fav' + (favs.has(id) ? ' on' : ''); star.textContent = favs.has(id) ? '\u2605' : '\u2606'; star.title = 'FAVORITE: THE SCROLL WHEEL ONLY STEPS THROUGH FAVORITES'; star.onclick = (ev) => { ev.stopPropagation(); toggleFav(id); sfx('menu'); renderBag(); }; r.lastChild.appendChild(star); }
     const n = document.createElement('small'); n.className = 'favnote'; n.textContent = 'STAR YOUR FAVORITES: THE WHEEL STEPS THROUGH THEM, KEYS 1-4 PICK THEM, Q + WHEEL STEPS THROUGH EVERYTHING'; body.appendChild(n); }
   const ups = []; if ((me.maxArrows || ARROWS_START) > ARROWS_START) ups.push(['quiver', itemName('quiver', me.cls), 'HOLDS ' + me.maxArrows]);
   if (me.items.loaded) ups.push(['scroll', itemName('loadedshot', me.cls), 'HOLD THE ITEM BUTTON WITH THE BOW']);

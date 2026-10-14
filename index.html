@@ -2046,15 +2046,21 @@ const AI = {
     if (e.tm <= 0) { e.tm = 0.8 + Math.random() * 0.6; e.f = p && Math.random() < 0.7 ? Math.atan2(p.y - e.y, p.x - e.x) + (Math.random() - 0.5) : Math.random() * TAU; e.hop = 0.4; }
     if (e.hop > 0) { e.hop -= dt; sim.moveEnt(e, Math.cos(e.f) * spd * 2 * dt, Math.sin(e.f) * spd * 2 * dt, def); }
   },
-  // walks in straight lines, stops and fires `proj` at nearby heroes
-  shooter(proj) {
+  // walks in straight lines, stops and fires `proj` at nearby heroes. opt.pair: two side by side (the Briarback's double spear)
+  shooter(proj, opt) {
+    const pair = opt && opt.pair;
     return function (sim, e, dt, { p, spd, def }) {
       if (e.st === 0) {
         if (sim.moveEnt(e, Math.cos(e.f) * spd * dt, Math.sin(e.f) * spd * dt, def) || e.tm <= 0) {
           e.tm = 1 + Math.random() * 1.5; e.f = (Math.floor(Math.random() * 4)) * Math.PI / 2;
           if (p && dist2(p.x, p.y, e.x, e.y) < 64 && Math.random() < 0.55) { e.st = 1; e.tm = 0.5; e.f = Math.atan2(p.y - e.y, p.x - e.x); }
         }
-      } else if (e.tm <= 0) { sim.fireProj(proj, e.lvl, e.x, e.y, e.f, 'e', null, { dmg: Content.projectiles[proj].dmg * e.dmgMul }); e.st = 0; e.tm = 0.6; sim.sfx('shoot', e.lvl, e.x, e.y); }
+      } else if (e.tm <= 0) {
+        const ex = { dmg: Content.projectiles[proj].dmg * e.dmgMul };
+        if (pair) for (const s of [-1, 1]) sim.fireProj(proj, e.lvl, e.x + Math.cos(e.f + Math.PI / 2) * pair * s, e.y + Math.sin(e.f + Math.PI / 2) * pair * s, e.f, 'e', null, ex); // two, a hand's width apart: sidestep both
+        else sim.fireProj(proj, e.lvl, e.x, e.y, e.f, 'e', null, ex);
+        e.st = 0; e.tm = 0.6; sim.sfx('shoot', e.lvl, e.x, e.y);
+      }
     };
   },
   // erratic flight, sometimes darting at heroes
@@ -2345,6 +2351,21 @@ defineDungeon(12, {
 });
 
 })();
+// ---- src/content/elevation.js ----
+(function () {
+// ===== content/elevation.js : steps and ledges (the first pieces of climbing) =====
+// A tile with `raised` stands that many tiles up from the floor: its top is floor you can stand on, its sides are walls.
+// You can step up STEP_UP (0.3) at a time, so a flight of quarter-steps climbs onto a ledge a full tile up; from there
+// you can see over things, and walking off the edge drops you back down. Enemies only manage the lowest step.
+// The rules live in game/world.js (heightAt, solidAt) and ui/main.js (your feet's height); the drawing in engine/render.js.
+// Floors and sides use the level's theme ('dfloor', 'brick'), so steps match the dungeon they're built in.
+'use strict';
+defineTile('STEP1', { floor: 'dfloor', side: 'brick', raised: 0.25 });
+defineTile('STEP2', { floor: 'dfloor', side: 'brick', raised: 0.5 });
+defineTile('STEP3', { floor: 'dfloor', side: 'brick', raised: 0.75 });
+defineTile('LEDGE', { floor: 'dfloor', side: 'brick', raised: 1 });
+
+})();
 // ---- src/content/elites.js ----
 (function () {
 // ===== content/elites.js : rare enemy variants =====
@@ -2474,6 +2495,104 @@ for (const name in BREAKABLES) { const [spr, drop] = BREAKABLES[name]; const id 
 Content.breakableFor = { 2: 'GOURD', 3: 'CORAL', 6: 'CORAL', 4: 'SLAG', 11: 'SLAG', 12: 'SLAG', 10: 'CRYSTAL' };
 
 })();
+// ---- src/content/grottos.js ----
+(function () {
+// ===== content/grottos.js : grottos under hollow trees, and the land's passing talk (lore) =====
+// A few trees in each land are HOLLOW (a dark split in the trunk, if you look). Knock on one with a pommel strike, or
+// bomb it, and it splits open on a stair down into a grotto: a small rooty cave (game/world.js genGrottos picks the
+// trees; game/sim.js openHollowTree opens them). Each land has one of each kind below, in different places.
+//   SPRING   a warm spring: stand in it and your hearts fill back up (TL.SPRING, game/sim.js)
+//   CACHE    someone's buried stash: arrows, bombs and gems, free (once)
+//   HERMIT   a moss hermit who mutters about the way things are (a random line from Content.lore)
+//   ROOTS    a root merchant: odd hours, cheap prices
+// The interior is built by genCave (world.js) when the cave def has grotto: true.
+'use strict';
+defineProp('HOLLOWTREE', 'hollowtree', { solid: true, scale: 1.5 });
+defineProp('GLOWCAP', 'glowcap', { solid: false, scale: 0.6 });
+defineTexture('rootwall', (x, y, r, ctx) => {
+  // packed earth, a few thick roots hanging down and wandering, little pale rootlets, moss clumps
+  const rootAt = (cx, ph, amp) => Math.abs(x - (cx + Math.sin(y * 0.22 + ph) * amp + Math.sin(y * 0.61 + ph * 2) * 1.2));
+  const d = Math.min(rootAt(5, 0, 2.5), rootAt(17, 2.1, 3), rootAt(27, 4.2, 2));
+  const w = 1.1 + Math.sin(y * 0.3) * 0.5;
+  if (d < w) return ctx.vary(d < w * 0.45 ? [150, 114, 72] : [112, 80, 48], x, y, 0.12);
+  if (d < w + 0.8) return [44, 30, 20]; // shadow beside the root
+  if (ctx.n4(x, y) > 0.965) return [170, 150, 110]; // rootlets
+  if (y < 9 && ctx.n8(x >> 1, y >> 1) > 0.6) return ctx.vary([64, 104, 44], x, y, 0.25); // moss along the top
+  return ctx.vary(ctx.n8(x >> 2, y >> 2) > 0.5 ? [62, 44, 30] : [78, 56, 38], x, y, 0.3);
+}, { seed: 21 });
+defineTexture('moss', (x, y, r, ctx) => { const n = ctx.n8(x >> 1, y >> 1); return ctx.vary(n > 0.82 ? [96, 140, 64] : n < 0.2 ? [54, 44, 30] : [66, 92, 44], x, y, 0.2); }, { seed: 22 });
+defineTexture('rootexit', (x, y, r, ctx) => { const dx = (x - 15.5) / 10, dy = (y - 31) / 26; const d = dx * dx + dy * dy; if (d < 1) return d > 0.8 ? [110, 84, 52] : ctx.shade([236, 250, 200], 0.85 + 0.15 * (y / 31)); return ctx.texPx('rootwall', x, y); });
+defineTexture('spring', (x, y, r, f, ctx) => { const w = Math.sin((x + f * 3) * 0.45 + Math.sin(y * 0.35 + f * 0.8) * 1.6); let c = [60, 170, 170]; if (w > 0.85) c = [220, 255, 240]; else if (w > 0.35) c = [100, 210, 200]; return c; }, { frames: 4 });
+defineTile('ROOTWALL', { solid: true, wall: 'rootwall' });
+defineTile('MOSS', { floor: 'moss' });
+defineTile('ROOTEXIT', { solid: true, wall: 'rootexit', exitWall: true });
+defineTile('SPRING', { floor: 'spring', heal: true }); // shallow and warm: walk in, heal up (game/sim.js)
+
+defineSprite('hollowtree', [
+  '.....kkkkkk.....',
+  '...kkeelleekk...',
+  '..keellleeleek..',
+  '.keleeeelleeeek.',
+  '.keeleeeeeeleek.',
+  'keeeeeeleeeeeEEk',
+  'keleeEeeeeeEeeEk',
+  'keeeeeeeeeeeEEEk',
+  '.kEeeeEeeEeeEEk.',
+  '.kEEeEEEEEEEEEk.',
+  '..kkEEkEEkEEkk..',
+  '....kkNnnNkk....',
+  '.....NnkkNk.....',
+  '.....NkkkkN.....',
+  '....kNnkknNk....',
+  '...kkkkkkkkkk...',
+]);
+defineSprite('glowcap', [
+  '................', '................', '................', '................', '................', '................',
+  '................', '................', '.........kkk....', '..kkk...kcccK...', '.kcwck..kcccck..', '.kccck...kzk....',
+  '..kzk....kzk....', '..kzk....kzk....', '.kkzkk..kkzkk...', '................'], { K: '#14121c' });
+defineSpriteVariant('hermit_moss', 'oldman', { R: '#4f7a34', w: '#d8e0c0' });
+
+defineCave('g_spring', { name: 'WARM SPRING', grotto: true, npc: null, spring: true, sign: 'WARM WATER, DEEP UNDER THE ROOTS. REST A WHILE. NOBODY WILL LOOK FOR YOU HERE.', stock: [] });
+defineCave('g_cache', { name: 'ROOT CACHE', grotto: true, npc: null, sign: 'SCRATCHED INTO A ROOT: FOR WHOEVER COMES UP NEXT. TAKE IT. WE HAVE ENOUGH DOWN THERE.', stock: [{ x: 4, item: 'arrows', price: 0, gift: true }, { x: 6, item: 'gems50', price: 0, gift: true }, { x: 8, item: 'bombs', price: 0, gift: true }] });
+defineCave('g_hermit', { name: 'MOSS HERMIT', grotto: true, npc: 'hermit_moss', lore: true, stock: [] });
+defineCave('g_roots', { name: 'ROOT MERCHANT', grotto: true, npc: 'hermit_moss', text: 'CUSTOMERS! UNDER A TREE! WHAT A WORLD. EVERYTHING CHEAP. COIN IS NO USE TO ME, BUT I LIKE THE SOUND.', stock: [{ x: 3, item: 'arrows', price: 18 }, { x: 6, item: 'heart', price: 5 }, { x: 9, item: 'potion', price: 32 }] });
+Content.grottoKinds = ['g_spring', 'g_cache', 'g_hermit', 'g_roots'];
+
+// ---- passing talk: hermits, hint caves and old signs say these. Nobody explains; you put it together. ----
+Content.lore = [
+  'YOU CAME UP THE LONG STAIR? THEN DON\'T SAY WHERE FROM. NOT HERE. NOT ALOUD.',
+  'IF ANYONE ASKS, YOU\'RE A HERMIT. EVERYONE UP HERE IS A HERMIT.',
+  'THE KING\'S MEN DON\'T BOTHER WITH THE OLD. WE\'RE HALF THEIRS ALREADY, THEY SAY.',
+  'I KNEW A KNIGHT ONCE. KIND HANDS. HE STILL WALKS THE NORTH ROAD. I DON\'T WAVE ANYMORE.',
+  'NEVER LIFT A FALLEN KNIGHT\'S VISOR. YOU WON\'T LIKE WHAT ISN\'T THERE.',
+  'THE KNIGHTS DON\'T EAT. DON\'T SLEEP. DON\'T BLEED. THEY STILL SALUTE, THOUGH.',
+  'LISTEN AT NIGHT. THE KNIGHTS MARCH IN STEP. ALL OF THEM. EVEN THE ONES MILES APART.',
+  'SKELETONS ARE ONLY DEAD. KNIGHTS ARE DEAD AND OBEDIENT. LEARN THE DIFFERENCE.',
+  'THE THORN-FOLK NEVER FORGAVE US THE FIRES. THE DEAD BURN NO WOOD. SO THE THORN-FOLK KNEEL.',
+  'A THORNLING WILL SHOW A KNIGHT THE WAY IN. IT WON\'T SHOW HIM THE WAY OUT.',
+  'THE BEASTS DON\'T CARE FOR KINGS OR DRAGONS. THEY REMEMBER WHO HUNTED THEM. THAT WAS US.',
+  'THE WALLS AT THE PASSES WERE BUILT TO KEEP THE WYRMS OUT. NOW THEY KEEP NOTHING IN.',
+  'WARDHOLD HAD NINE THOUSAND SPEARS AND ONE PROMISE: NO FIRE CROSSES.',
+  'WHEN THE WALLS FELL, A MAN IN BRIGHT ARMOR SAID THE DEAD COULD STILL HOLD A LINE. WE CHEERED HIM.',
+  'THE DRAGONS WERE NEVER OUR FRIENDS. BUT THEY HATE HIM WORSE THAN THEY EVER HATED US.',
+  'WHY WOULD HE WANT EMBERS? WHAT IS COLD WANTS TO BE WARM. WHAT IS EMPTY WANTS TO BE FULL.',
+  'THE HEARTH WAS LIT BY WYRMS AND GUARDED BY MEN. THAT WAS THE BARGAIN. ASK WHO BROKE IT.',
+  'SHIPS USED TO SAIL SOUTH. THE TIDE STILL BRINGS IN HELMETS. NEVER ANY SHIPS.',
+  'THE SOUTH WIND SMELLS LIKE A CELLAR.',
+  'HE KEEPS A CROWN UNDER THE NORTH PEAKS. HE KEEPS ANOTHER ACROSS THE WATER. A KING WITH NO HEAD CAN WEAR AS MANY AS HE LIKES.',
+  'MY GRANDMOTHER SAID THE KING HAD A NAME ONCE. SHE WOULDN\'T SAY IT. SHE SAID IT STILL ANSWERS.',
+  'THE STAIRS UNDER THE TREES ARE OLDER THAN THE KING. OLDER THAN THE WALLS. THE ROOTS KEEP THEM QUIET.',
+  'THE BELLS IN THE SUNKEN STAIR RANG FOR THE LIVING. NOBODY RINGS THEM NOW.',
+  'COUNT THE BANNERS ON THE KNIGHTS. SAME CREST AS THE OLD WALLS. SAME CREST AS YOUR FATHER\'S.',
+];
+// a few of them turn up in the old men's hint caves too
+defineHints([
+  'NEVER LIFT A FALLEN KNIGHT\'S VISOR. YOU WON\'T LIKE WHAT ISN\'T THERE.',
+  'SHIPS USED TO SAIL SOUTH. THE TIDE STILL BRINGS IN HELMETS. NEVER ANY SHIPS.',
+  'SOME TREES ARE HOLLOW. KNOCK, AND LISTEN.',
+]);
+
+})();
 // ---- src/content/projectiles.js ----
 (function () {
 // ===== content/projectiles.js : everything that flies =====
@@ -2507,6 +2626,9 @@ defineProjectile({ id: 'forcebolt', spr: 'forcebolt', spd: 9, dmg: 0.5, sc: 0.7,
 defineProjectile({ id: 'lance', spr: 'beam', spd: 22, dmg: 3, sc: 1.1, player: true, pierce: true, pierceShield: true, stun: 2, range: 10 }); // Lightning Lance: through everything in a line
 defineProjectile({ id: 'rodbolt', spr: 'magic', spd: 8, dmg: 3, player: true });
 defineProjectile({ id: 'thunder', spr: 'beam', spd: 14, dmg: 3, sc: 0.9, player: true, pierce: true, pierceShield: true, endFx: 'boom' });
+// the Thornseer's seed (enemies/thornling.js): slow, and it HOMES: it turns toward the nearest hero (homing: radians a second)
+// after a short delay. Outrun it around a corner, let it hit a wall, or block it with your shield.
+defineProjectile({ id: 'seed', spr: 'seedwisp', spd: 3.3, dmg: 1, sc: 0.55, blockable: true, range: 15, homing: 1.9, homeDelay: 0.25 });
 
 })();
 // ---- src/content/gimmicks/brambles.js ----
@@ -3731,15 +3853,21 @@ defineEnemy({
 })();
 // ---- src/content/enemies/thornling.js ----
 (function () {
-// ===== content/enemies/thornling.js =====
-// Spear thrower.
+// ===== content/enemies/thornling.js : the thorn-folk =====
+// Thornlings are only the commonest of the thorn-folk. Their kin:
+//   THORNLING   spear thrower (the one everyone knows)
+//   BRIARBACK   big, thorny, slow; throws TWO spears side by side (a hand's width apart: sidestep, don't duck)
+//   THORNSEER   keeps its distance, then lobs a SEED that homes in on you (projectiles.js 'seed'); block it or lose it on a wall
+//   NETTLING    small and quick, comes in close and jabs in short lunges
+// They don't like people. (content/grottos.js has what the old folk say about why.)
 'use strict';
+const thornAnim = { fps: 6, frames: (s, kit) => [s, kit.step(s, 13, -1, 0), s, kit.step(s, 13, 0, -1)] };
 defineEnemy({
   id: 'thornling',
   hp: 2, spd: 1.6, dmg: 1, r: 0.32, sc: 0.85,
   spawns: { biomes: ['plains', 'forest', 'mountain', 'desert'], dungeons: [2, 4, 9] },
   ai: AI.shooter('spear'),
-  anim: { fps: 6, frames: (s, kit) => [s, kit.step(s, 13, -1, 0), s, kit.step(s, 13, 0, -1)] },
+  anim: thornAnim,
   sprite: [
     '..........u.....',
     '.........uuu....',
@@ -3759,6 +3887,81 @@ defineEnemy({
     '................',
   ],
 });
+defineEnemy({
+  id: 'thornling_briar', title: 'BRIARBACK',
+  hp: 4, spd: 1.1, dmg: 1, r: 0.38, sc: 1.0,
+  spawns: { biomes: ['forest', 'mountain'], dungeons: [4, 9] },
+  ai: AI.shooter('spear', { pair: 0.2 }),
+  anim: thornAnim, pal: { p: '#8a3a5a', P: '#4a1830' },
+  sprite: [
+    '.u........u.....',
+    'uuu......uuu....',
+    '.n..kkkk..n.....',
+    '.n.kppppk.n.....',
+    '.nkpwkpwkpn.....',
+    '.nkpppppkpn.....',
+    '.nkpRRRpk.n.....',
+    'kppNNNNNNkpp....',
+    'PkpNnnnnNkn.....',
+    '.PpNnnnnNkn.....',
+    'P.pNNNNNN.n.....',
+    '.P.NnnnnN.n.....',
+    '...NNNNNN.n.....',
+    '...ppk.ppk......',
+    '..kppk.kppk.....',
+    '................',
+  ],
+});
+// THORNSEER: backs off if you get close, stops, holds its seed up (a short glow), then lets it go
+function seerAi(sim, e, dt, { p, spd, def }) {
+  if (e.st === 1) { if (e.tm <= 0) { if (p) sim.fireProj('seed', e.lvl, e.x, e.y, Math.atan2(p.y - e.y, p.x - e.x), 'e', null, { dmg: Content.projectiles.seed.dmg * e.dmgMul }); sim.sfx('magic', e.lvl, e.x, e.y); e.st = 0; e.tm = 2.2 + Math.random(); } return; }
+  if (p) {
+    const d2 = dist2(p.x, p.y, e.x, e.y); const away = Math.atan2(e.y - p.y, e.x - p.x);
+    if (d2 < 12) { if (sim.moveEnt(e, Math.cos(away) * spd * dt, Math.sin(away) * spd * dt, def)) e.f = away + Math.PI / 2; } // too close: back away
+    else if (e.tm <= 0 && d2 < 100) { e.st = 1; e.tm = 0.6; e.f = away + Math.PI; return; } // wind up
+  }
+  if (e.tm <= 0 && !p) { e.tm = 1.5; e.f = Math.random() * TAU; }
+  if (!p || dist2(p.x, p.y, e.x, e.y) >= 12) { if (sim.moveEnt(e, Math.cos(e.f) * spd * 0.5 * dt, Math.sin(e.f) * spd * 0.5 * dt, def)) e.f += Math.PI / 2; }
+}
+defineEnemy({
+  id: 'thornling_seer', title: 'THORNSEER',
+  hp: 3, spd: 1.4, dmg: 1, r: 0.32, sc: 0.9,
+  spawns: { biomes: ['forest', 'plains'], dungeons: [2, 9] },
+  ai: seerAi, sprFor: (e) => e.st === 1 ? 'thornling_seer_cast' : null,
+  anim: thornAnim,
+  sprite: [
+    '................',
+    '.....kkkkk......',
+    '....keeeeek.....',
+    '...keekkkeek....',
+    '...kepwkpwek....',
+    '...kepppppek....',
+    '....kpRRpk..l...',
+    '...keeeeeek.lh..',
+    '..keeEeeEeek.l..',
+    '..keEeeeeEek....',
+    '..keeeeeeeek....',
+    '..kEeeeeeeEk....',
+    '..keeeeeeeek....',
+    '...kkpk.pkk.....',
+    '....kpk.kpk.....',
+    '................',
+  ],
+});
+defineSpriteVariant('thornling_seer_cast', 'thornling_seer', { l: '#f8ff90', h: '#ffffff', e: '#58c858' }); // the seed glows before it flies
+defineEnemy({
+  id: 'thornling_nettle', title: 'NETTLING',
+  hp: 2, spd: 5.2, dmg: 1, r: 0.26, sc: 0.62,
+  spawns: { biomes: ['plains', 'desert'], dungeons: [2] },
+  ai: AI.lunge(0.32, 0.7, 1.4),
+  anim: thornAnim, pal: { p: '#d0a828', R: '#702010', N: '#3a5a20', n: '#6a8a30' },
+  sprite: enemyDef('thornling').sprite,
+});
+defineSprite('seedwisp', [
+  '................', '................', '................', '................', '................',
+  '.......kk.......', '......klhk......', '.....klhhlk.....', '.....kllllk.....', '......klek......', '.......kk.......',
+  '................', '................', '................', '................', '................']);
+defineHints(['THE THORN-FOLK ARE MORE THAN THORNLINGS. THE BIG ONES THROW TWO SPEARS AT ONCE: SIDESTEP, DON\'T STAND STILL.', 'A THORNSEER\'S SEED FOLLOWS YOU. RAISE YOUR SHIELD, OR LEAD IT INTO A WALL.']);
 
 })();
 // ---- src/content/enemies/wizard.js ----
@@ -3858,6 +4061,9 @@ for (const [id, bossOf, proj, pal] of [['wyrm_frost', [1], 'icebolt', { r: '#86c
 //   GRIEF      when one falls, the other roars: faster breath, five shots instead of three, and it charges more often
 //   FROST LANCE (frost pair) a line of ice that turns the floor to slippery ice for a few seconds
 //   EMBER RAIN  (magma pair) three blobs lobbed at you; each shows a shadow first, then lands as a burning splash
+//   ENRAGED     rob BOTH ends of their arena (the corner gems and hearts, game/sim.js baitTaken) and they turn red: half again
+//               the health, breath every 0.9 s in fans of 5 (7 when grieving), lance/rain every other breath, and charges
+//               twice as often
 const ELDER_WINDUP = 0.55, ELDER_DASH = 9;
 function elderAi(el) {
   const proj = el === 'frost' ? 'icebolt' : 'fire';
@@ -3869,15 +4075,15 @@ function elderAi(el) {
     else if (e.hadPartner && !e.grief) { e.grief = true; e.tm = 0.6; e.chargeIn = 1.5; sim.sfx('roar', e.lvl, e.x, e.y); sim.msg('THE WYRM ROARS FOR ITS SIBLING!'); }
     if (e.chargeT > 0) { e.chargeT -= dt; if (e.chargeT <= 0) { e.dashT = 1.1; e.dashA = p ? Math.atan2(p.y - e.y, p.x - e.x) : e.f; sim.sfx('roar', e.lvl, e.x, e.y); } return; }
     if (e.dashT > 0) { e.dashT -= dt; if (sim.moveEnt(e, Math.cos(e.dashA) * ELDER_DASH * dt, Math.sin(e.dashA) * ELDER_DASH * dt, def)) { e.dashT = 0; sim.ev({ t: 'shake', lvl: e.lvl, x: e.x, y: e.y }); } return; }
-    e.chargeIn -= dt; if (e.chargeIn <= 0 && p) { e.chargeIn = (e.grief ? 3.5 : 6.5) + Math.random() * 2; e.chargeT = ELDER_WINDUP; sim.sfx('windup', e.lvl, e.x, e.y); return; }
+    e.chargeIn -= dt; if (e.chargeIn <= 0 && p) { e.chargeIn = ((e.grief ? 3.5 : 6.5) + Math.random() * 2) * (e.enraged ? 0.5 : 1); e.chargeT = ELDER_WINDUP; sim.sfx('windup', e.lvl, e.x, e.y); return; }
     // hold your end of the room (crossfire), swaying up and down
-    const side = partner ? (e.id < partner.id ? -1 : 1) : 0; const cx = (b.x0 + b.x1) / 2 + side * 3.2;
+    const side = partner ? (e.id < partner.id ? -1 : 1) : 0; const cx = (b.x0 + b.x1) / 2 + side * Math.max(3.2, (b.x1 - b.x0) / 2 - 3.5); // in a wide arena they hold the far ends
     sim.moveEnt(e, clamp(cx - e.x, -1, 1) * spd * dt, Math.sin(e.t * 1.3 + side) * spd * 0.8 * dt, def);
     if (e.tm > 0 || !p) return;
-    e.tm = e.grief ? 1.1 : e.hp < e.maxHp / 2 ? 1.5 : 2.2; e.n = (e.n || 0) + 1;
+    e.tm = e.enraged ? (e.grief ? 0.7 : 0.9) : e.grief ? 1.1 : e.hp < e.maxHp / 2 ? 1.5 : 2.2; e.n = (e.n || 0) + 1;
     const a = Math.atan2(p.y - e.y, p.x - e.x);
-    if (e.n % 3 === 0) { if (el === 'frost') frostLance(sim, L, e, a); else emberRain(sim, e, p); return; }
-    AI.fan(sim, e, proj, a, e.grief ? 5 : 3, e.grief ? 1.1 : 0.7, { dmg: 2 }); sim.sfx('roar', e.lvl, e.x, e.y);
+    if (e.n % (e.enraged ? 2 : 3) === 0) { if (el === 'frost') frostLance(sim, L, e, a); else emberRain(sim, e, p); return; }
+    const n = (e.grief ? 5 : 3) + (e.enraged ? 2 : 0); AI.fan(sim, e, proj, a, n, e.grief || e.enraged ? 1.1 + (n - 5) * 0.15 : 0.7, { dmg: 2 }); sim.sfx('roar', e.lvl, e.x, e.y);
   };
 }
 // FROST LANCE: a fast ice bolt, and the floor along its line turns to ice for a few seconds
@@ -3911,8 +4117,9 @@ defineSprite('shadowring', [ // where something is about to land
 for (const [id, base, el, title, pal, glow] of [
   ['wyrm_elder_frost', 'wyrm_frost', 'frost', 'ELDER FROST WYRM', { r: '#5aa8e0', R: '#1a3c78', o: '#ffffff', y: '#40ffff' }, { r: '#ffffff', R: '#a8e8ff' }],
   ['wyrm_elder', 'wyrm', 'fire', 'ELDER MAGMA WYRM', { r: '#c02818', R: '#500a08', o: '#ffd060', y: '#ffff60' }, { r: '#ffd040', R: '#ff7020' }]]) {
-  defineEnemy(Object.assign({}, enemyDef(base), { id, title, bossOf: [], spawns: {}, hp: 12, sc: 2.0, pal, ai: elderAi(el), sprFor: (e) => e.chargeT > 0 ? id + '_glow' : null, anim: { fps: 3, frames: (s, kit) => [s, kit.bob(s, 1), kit.step(s, 12, -1, 0)] } }));
+  defineEnemy(Object.assign({}, enemyDef(base), { id, title, bossOf: [], spawns: {}, hp: 12, sc: 2.0, pal, ai: elderAi(el), sprFor: (e) => e.chargeT > 0 ? id + '_glow' : e.enraged ? id + '_rage' : null, anim: { fps: 3, frames: (s, kit) => [s, kit.bob(s, 1), kit.step(s, 12, -1, 0)] } }));
   defineSpriteVariant(id + '_glow', id, glow); // winding up a charge
+  defineSpriteVariant(id + '_rage', id, el === 'frost' ? { r: '#8a5ad8', R: '#2a1050', y: '#ff3030', o: '#ffd0d0' } : { r: '#ff2a10', R: '#300404', y: '#ffffff', o: '#ffff80' }); // enraged (robbed)
 }
 
 })();
@@ -3964,6 +4171,7 @@ defineEntity('bomb', {
       const bx = tx + dx, by = ty + dy; if (bx < 0 || by < 0 || bx >= L.w || by >= L.h) continue;
       if (dist2(bx + 0.5, by + 0.5, e.x, e.y) > (R * 0.9) ** 2) continue;
       const i = L.idx(bx, by); const t = L.tiles[i];
+      sim.openHollowTree(L, bx + 0.5, by + 0.5); // a hollow tree splits open (content/grottos.js)
       if (TINFO[t].bomb) { let nt = TINFO[t].opensTo ? TL[TINFO[t].opensTo] : TL.OPENDOOR; if (t === TL.ROCK_BOMB) nt = (L.secretReveal[i] && L.secretReveal[i].tile) || TL.CAVE; if (t === TL.CWALL_BOMB) nt = TL.CFLOOR; sim.setTile(L.id, i, nt); found = true; }
     }
     if (found) sim.sfx('secret', L.id);
@@ -4552,7 +4760,11 @@ class Level {
       const rid = this.sealRoom && this.sealRoom[y * this.w + x];
       if (rid != null) { const r = this.rooms[rid]; const x0 = r.rx * DSX, y0 = r.ry * DSY; const m = 0.23; /* just over the player's 0.22 radius: you're 'inside' only once fully clear of the doorway */ const inside = opts.mx > x0 + 1 + m && opts.mx < x0 + DSX - m && opts.my > y0 + 1 + m && opts.my < y0 + DSY - m; if (!inside) return false; }
     }
+    // high in the air on the Gale Cloak (opts.high): over everything a tile tall (hedges, rocks, trees); the tall walls still stop you
+    if (opts && opts.high && ((ti.wall && !ti.tall && this.kind === 'ow') || ti.raised || ti.low)) return false; // (indoors the walls reach the ceiling)
     if (ti.solid) return true;
+    if (ti.raised && ti.raised > ((opts && opts.z) || 0) + STEP_UP) return true; // a step or ledge too high to step up onto
+    if (opts && opts.high) return false;
     // solid props (trees, boulders, cacti, graves, statues...) block a diamond, not the whole tile: two of them touching only at
     // a corner leave a gap you can walk through, the way it looks. Side by side they still make a solid wall.
     const p = this.props[y * this.w + x]; if (p && PROP_INFO[p].solid) { const dx = fx - x - 0.5, dy = fy - y - 0.5; return PROP_INFO[p].round ? dx * dx + dy * dy < PROP_ROUND_R * PROP_ROUND_R : Math.abs(dx) + Math.abs(dy) < PROP_K; } // small props: a circle; trees and boulders: a diamond
@@ -4613,8 +4825,33 @@ function genWorld(seed, mode) {
   genOverworld(W, rnd);
   for (const biome of ['snow', 'ash']) genTunnel(W, biome, mulberry32(seed * 53 + (biome === 'snow' ? 11 : 29))); // the caves into the frontier lands
   for (let d = 1; d <= NDUNGEONS(); d++) genDungeon(W, d, mulberry32(seed * 31 + d * 977));
+  genGrottos(W, mulberry32(seed * 17 + 5));
   genTestZone(W);
   return W;
+}
+// ---------- GROTTOS ----------
+// One grotto of each kind (content/grottos.js) under a hollow tree: a tree already standing in a forest or plains region
+// becomes HOLLOWTREE, with a portal on its tile and a stair revealed when it's split open (game/sim.js openHollowTree).
+// Only trees with open, reachable ground in front of them. Its own random stream, so the rest of the land doesn't move.
+function genGrottos(W, rnd) {
+  const L = W.levels.ow; const kinds = (Content.grottoKinds || []).filter(k => Content.caves[k]); if (!kinds.length) return;
+  const seen = new Uint8Array(L.w * L.h); { const sx = Math.floor(L.spawn.x), sy = Math.floor(L.spawn.y); const q = [sx + sy * L.w]; seen[q[0]] = 1; while (q.length) { const i = q.pop(); const x = i % L.w, y = (i / L.w) | 0; for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { const nx = x + dx, ny = y + dy; if (nx < 1 || ny < 1 || nx >= L.w - 1 || ny >= L.h - 1) continue; const j = nx + ny * L.w; if (seen[j] || L.solidAt(nx + 0.5, ny + 0.5)) continue; seen[j] = 1; q.push(j); } } }
+  const sr = owRegionAt(L, L.spawn.x, L.spawn.y);
+  const regions = rnd.shuffle(L.regions.filter(r => r !== sr && (r.biome === 'forest' || r.biome === 'plains') && !r.island));
+  const used = new Set(); L.grottos = [];
+  for (const kind of kinds) {
+    let placed = false;
+    for (const r of regions) {
+      if (used.has(r)) continue; const { x0, y0, x1, y1 } = regionInterior(r); const trees = [];
+      for (let y = y0 + 1; y < y1 - 2; y++) for (let x = x0 + 1; x < x1 - 1; x++) { const i = L.idx(x, y), f = L.idx(x, y + 1); const pr = L.props[i]; if ((pr === PR.TREE || pr === PR.PINE) && !L.portals[i] && !L.secretReveal[i] && !TINFO[L.tiles[i]].solid && seen[f] && !L.props[f] && !TINFO[L.tiles[f]].portal) trees.push(i); }
+      if (!trees.length) continue;
+      const i = rnd.pick(trees); const x = i % L.w, y = (i / L.w) | 0; const id = 'g' + L.grottos.length;
+      L.props[i] = PR.HOLLOWTREE; L.portals[i] = { to: id, stairs: true }; L.secretReveal[i] = { tile: TL.STAIRS };
+      genCave(W, id, kind, { lvl: 'ow', x: x + 0.5, y: y + 1.5, a: Math.PI / 2 }, rnd);
+      L.grottos.push({ id, kind, x, y }); used.add(r); placed = true; break;
+    }
+    if (!placed) break;
+  }
 }
 
 // ---------- FRONTIER TUNNELS ----------
@@ -4644,7 +4881,11 @@ function genTunnel(W, biome, rnd) {
   // doors: along the run (a little up or down so it isn't a perfect straight line), and up or down into the side rooms
   for (let i = 0; i < gw - 1; i++) { const a = main[i], b = main[i + 1]; const x = Math.max(a.rx, b.rx) * DSX, c = DSY + 4 + rnd.range(-1, 1); for (let y = c - 1; y <= c + 1; y++) L.set(x, y, TL.CFLOOR); a.links[b.id] = b.links[a.id] = 1; a.children.push(b); }
   for (const r of sides) { const y = r.ry === 0 ? DSY : 2 * DSY; for (let x = r.rx * DSX + 5; x <= r.rx * DSX + 7; x++) L.set(x, y, TL.CFLOOR); r.links[r.from.id] = r.from.links[r.id] = 1; }
-  { const x = Math.max(fight.rx, loot.rx) * DSX; for (let y = 3; y <= 5; y++) L.set(x, y, TL.CFLOOR); fight.links[loot.id] = loot.links[fight.id] = 1; fight.links[wingFrom.id] = wingFrom.links[fight.id] = 1; }
+  // the two wing cells are ONE big arena: the wall between them is gone (the wyrms used to get stuck in a doorway there).
+  // The loot cell folds into the fight room (room.mergeInto; dungeonRoomAt follows it), and the fight room spans both cells
+  // (room.cx0 = its left column, room.cw = 2 cells wide; roomBounds uses them).
+  { const x = Math.max(fight.rx, loot.rx) * DSX; for (let y = 1; y < DSY; y++) L.set(x, y, TL.CFLOOR); fight.links[loot.id] = loot.links[fight.id] = 1; fight.links[wingFrom.id] = wingFrom.links[fight.id] = 1;
+    loot.mergeInto = fight.id; fight.cx0 = Math.min(fight.rx, loot.rx); fight.cw = 2; }
   // the look, room by room
   for (const r of Object.values(rooms)) {
     const t = heat(r), x0 = r.rx * DSX, y0 = r.ry * DSY;
@@ -4668,9 +4909,17 @@ function genTunnel(W, biome, rnd) {
   main.forEach((r, i) => { const t = heat(r); r.tier = 2 + Math.round(t); if (i === 0 || i === gw - 1) return; const n = 2 + rnd.int(2); for (let k = 0; k < n; k++) r.enemies.push(rnd.pick(rnd() < t ? late : early)); });
   // the miniboss: two wyrmlings at once (Mossy Hollow's frost pair on the cold road, Emberforge's magma pair on the ember road),
   // two rooms before the far end. Beat them for a heart piece.
-  const mb = fight; mb.enemies = snow ? ['wyrm_elder_frost', 'wyrm_elder_frost'] : ['wyrm_elder', 'wyrm_elder']; mb.reward = 'hpiece'; mb.miniboss = true; mb.at = [[3.5, 4.5], [9.5, 4.5]]; // elder wyrmlings (enemies/wyrm.js), one at each end of the room
-  // the loot beyond them: a scroll worth the trouble, and a fat purse
-  loot.stash = [{ item: snow ? 'tripleshot' : 'quiver50', x: 5.5, y: 4.5 }, { item: 'gems100', x: 7.5, y: 4.5 }]; loot.tier = 3;
+  // Positions below are from the fight cell's corner (room.rx * DSX), so `ax` turns arena coordinates (0 = the arena's left wall) into those.
+  const ax = (x) => (fight.cx0 - fight.rx) * DSX + x; // the arena is 25 tiles across (floor 1-23), 9 tall (floor 1-7)
+  const mb = fight; mb.enemies = snow ? ['wyrm_elder_frost', 'wyrm_elder_frost'] : ['wyrm_elder', 'wyrm_elder']; mb.miniboss = true; mb.at = [[ax(4.5), 4.5], [ax(20.5), 4.5]]; // elder wyrmlings (enemies/wyrm.js), one at each end of the arena
+  // the real prize only shows up once BOTH are dead (so nobody can grab it, die, and walk off): a heart piece, a scroll worth
+  // the trouble (Loaded Shot 2 on the cold road, the Great Quiver on the ember road) and a fat purse, in the middle
+  mb.rewardAt = [ax(12.5), 4.5]; mb.rewards = [['hpiece', 0], [snow ? 'tripleshot' : 'quiver50', -1.5], ['gems100', 1.5]];
+  // THE BAIT: gems in all four corners and a heart behind each wyrm. Take some from BOTH ends while they live and they
+  // both fly into a rage (game/sim.js baitTaken, enemies/wyrm.js 'enraged'): a much harder fight. One end is safe.
+  mb.stash = [[1.5, 1.5, 'a', 'gems50'], [1.5, 7.5, 'a', 'gems50'], [1.5, 4.5, 'a', 'heart'], [23.5, 1.5, 'b', 'gems50'], [23.5, 7.5, 'b', 'gems50'], [23.5, 4.5, 'b', 'heart']].map(([x, y, bait, item]) => ({ item, x: ax(x), y, bait }));
+  mb.legacyTk = [[loot.id + ':stash0', fight.id + ':' + (snow ? 'tripleshot' : 'quiver50')], [loot.id + ':stash1', fight.id + ':gems100']]; // saves from before the arena was merged
+  loot.tier = 3;
   for (const r of sides) { if (r.wing) continue; const t = heat(r); r.tier = 2 + Math.round(t); r.reward = rnd.pick(['gems30', 'heart', 'bomb', 'gems50', 'arrows']); for (let k = 0; k < 2; k++) r.enemies.push(rnd.pick(rnd() < t ? late : early)); }
   L.rooms = rooms; L.startRoom = main[0];
   // the twin-eye gate into the secret wing: the gate in the middle of the wall, an eye three steps to each side (gimmicks/twingate.js)
@@ -4683,6 +4932,8 @@ function genTunnel(W, biome, rnd) {
   const inEnd = endAt(main[0], false), outEnd = endAt(main[gw - 1], true);
   L.spawn = { x: inEnd.inX, y: inEnd.y + 0.5, a: inEnd.a };
   L.sign = null; const signAt = (r, text) => { const si = L.idx(r.rx * DSX + 6, DSY + 2); L.props[si] = PR.SIGN; L.signText[si] = text; };
+  // the old wall the road runs under (content/grottos.js has the talk about it)
+  { const r = main[1]; const si = L.idx(r.rx * DSX + 6, DSY + 1); if (!TINFO[L.tiles[si]].solid) { L.props[si] = PR.SIGN; L.signText[si] = 'A CARVED STONE: WARDHOLD OF THE ' + (snow ? 'WEST' : 'EAST') + ' GATE. NO FIRE SHALL CROSS. UNDER IT, SCRATCHED BY ANOTHER HAND: IT WASN\'T THE FIRE WE SHOULD HAVE WATCHED.'; } }
   signAt(main[0], snow ? 'THE COLD ROAD. RIMEFANG HOLLOW AND THE FROZEN REACH LIE AT ITS FAR END. THE DEEPER YOU GO, THE COLDER IT GETS.' : 'THE EMBER ROAD. THE CINDER WASTES LIE AT ITS FAR END. THE DEEPER YOU GO, THE HOTTER IT GETS.');
   // close the old open pass and put a cave mouth on each side of it
   const bx = Math.max(ps.fx, ps.inner) * RSX; const wallT = snow ? TL.PEAKS : TL.FIREPEAKS; const dirIn = ps.inner > ps.fx ? 1 : -1;
@@ -4700,6 +4951,13 @@ function genTunnel(W, biome, rnd) {
   L.exits = [{ x: inEnd.x, y: inEnd.y, to: { lvl: 'ow', x: mIn.x, y: mIn.y, a: mIn.a } }, { x: outEnd.x, y: outEnd.y, to: { lvl: 'ow', x: mOut.x, y: mOut.y, a: mOut.a } }];
   L.exit = L.exits[0].to;
   ps.tunnel = L.id; ps.mouths = [mIn, mOut];
+  // make sure you can walk from each mouth into its land: if rocks or trees box the front in, carve a way to the region's first door
+  for (const [m, rx] of [[mIn, ps.inner], [mOut, ps.fx]]) {
+    const r = OW.regions[ps.ry * RW + rx]; if (!r || !r.doors.length) continue; const { x0, y0, x1, y1 } = regionInterior(r); const [sx, sy] = r.doors[0], tx = Math.floor(m.x), ty = Math.floor(m.y);
+    const seen = new Set([sx + ',' + sy]); const q = [[sx, sy]]; let ok = false;
+    while (q.length && !ok) { const [x, y] = q.shift(); if (x === tx && y === ty) { ok = true; break; } for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { const nx = x + dx, ny = y + dy; if (nx < x0 || ny < y0 || nx >= x1 || ny >= y1) continue; const k = nx + ',' + ny; if (seen.has(k) || OW.solidAt(nx + 0.5, ny + 0.5)) continue; seen.add(k); q.push([nx, ny]); } }
+    if (!ok) carve(OW, tx, ty, sx, sy, x0, y0, x1, y1);
+  }
 }
 
 // ---------- DEBUG TEST ZONE ----------
@@ -4728,6 +4986,11 @@ function genTestZone(W) {
   L.gourds = {}; [['GOURD', 3], ['CORAL', 5], ['SLAG', 7], ['BONEPILE', 9], ['CRYSTAL', 11]].forEach(([n, x]) => { if (PR[n] == null) return; const i = L.idx(x, 19); L.props[i] = PR[n]; L.gourds[i] = PR[n]; });
   L.dummies = [['dummy', 13.5, 17.5], ['dummy_armored', 15.5, 17.5]]; sign(14, 19, 'TRAINING DUMMIES: EVERY HIT SHOWS ITS DAMAGE AND THE RUNNING TOTAL. THEY HEAL AFTER 3 SECONDS. THE RIGHT ONE WEARS FULL ARMOR.');
   sign(7, 21, 'GOURDS AND THE LIKE: ONLY A POMMEL STRIKE (SHIFT + HOLD ATTACK, THEN LET GO) SPLITS THEM.');
+  // bottom right: a flight of steps up onto a ledge a full tile high (content/elevation.js). The room is two tiles tall,
+  // so the Gale Cloak lifts you a level in here too.
+  L.ceilH = 2;
+  fill(25, 18, 25, 21, TL.STEP1); fill(26, 18, 26, 21, TL.STEP2); fill(27, 18, 27, 21, TL.STEP3); fill(28, 17, 33, 21, TL.LEDGE);
+  sign(24, 17, 'STEPS AND A LEDGE: CLIMB UP, LOOK DOWN, STEP OFF. THIS ROOM IS TWO TALL, SO THE GALE CLOAK CARRIES YOU UP A LEVEL HERE.');
   L.set(18, h - 1, TL.CEXIT); L.set(18, h - 2, TL.EXIT); L.spawn = { x: 18.5, y: h - 3.5, a: -Math.PI / 2 };
   const ow = W.levels.ow; L.exit = { lvl: 'ow', x: ow.spawn.x, y: ow.spawn.y, a: ow.spawn.a };
   L.gimmicks = ['glass', 'vents'];
@@ -5026,6 +5289,7 @@ function placeCave(W, L, r, rnd, kind, secret) {
   const p = placeStructure(L, r, rnd, TL.ROCK, secret === 'bush' ? TL.ROCK : portalT, false);
   if (!p) return;
   let [px, py] = p; const id = 'c' + (W.caveCount++);
+  if (secret === 'open' && kind !== 'sword0') { const q = caveIntoWall(W, L, r, id, px, py); if (q) [px, py] = q; }
   if (secret === 'bush') {
     // hidden stairs under a bush in front
     const bx = px, by = py + 1; L.props[L.idx(bx, by)] = PR.BUSH;
@@ -5041,6 +5305,31 @@ function placeCave(W, L, r, rnd, kind, secret) {
   r.features.push({ type: 'cave', kind, id, x: px, y: py, secret });
 }
 
+// Some open caves are dug into the region's north wall (a cliff face) instead of standing alone in the field: about half,
+// picked with their own random stream so the rest of the land doesn't move. The cave already placed (placeStructure) is
+// taken down and rebuilt against the wall: a five-wide rock face with the cave in the middle, and the wall behind it made
+// solid so it never opens through into the next region. Returns the new portal spot, or null to leave it where it was.
+function caveIntoWall(W, L, r, id, px, py) {
+  const alt = mulberry32(W.seed * 7 + hashStr(id) * 13); if (alt() < 0.5) return null;
+  const { x0, y0, x1 } = regionInterior(r); const ny = y0; const nx = clamp(px, x0 + 3, x1 - 4);
+  if (Math.abs(ny - py) < 2) return null; // already up against it
+  if (r.doors.some(([dx, dy]) => Math.abs(dx - nx) <= 4 && dy <= ny + 1)) return null; // keep clear of a way in from the north
+  for (let y = ny; y <= ny + 2; y++) for (let x = nx - 2; x <= nx + 2; x++) { const i = L.idx(x, y); const t = TINFO[L.tiles[i]]; if (t.portal || t.bomb || L.props[i] === PR.SIGN || L.secretReveal[i] || (L.noCarve && L.noCarve.has(i))) return null; }
+  if (r.taken) for (let y = ny; y <= ny + 2; y++) for (let x = nx - 2; x <= nx + 2; x++) if (r.taken.has(x + ',' + y) && !(Math.abs(x - px) <= 2 && y >= py - 1 && y <= py + 2)) return null; // something else stands there
+  // take the free-standing one down (its path can stay: a trail to nowhere is fine)
+  const base = baseTile(r.biome); for (let x = px - 1; x <= px + 1; x++) { L.set(x, py, base); L.props[L.idx(x, py)] = 0; }
+  delete L.portals[L.idx(px, py)];
+  // the wall behind: solid, so the cave can't open into the region to the north
+  for (let x = nx - 2; x <= nx + 2; x++) if (!TINFO[L.get(x, ny - 1)].solid) L.set(x, ny - 1, TL.ROCK);
+  for (let x = nx - 2; x <= nx + 2; x++) { L.set(x, ny, TL.ROCK); L.props[L.idx(x, ny)] = 0; }
+  L.set(nx, ny, TL.CAVE);
+  for (let x = nx - 1; x <= nx + 1; x++) { const i = L.idx(x, ny + 1); if (TINFO[L.tiles[i]].solid) L.tiles[i] = TL.PATH; L.props[i] = 0; }
+  { const i = L.idx(nx, ny + 2); if (TINFO[L.tiles[i]].solid) L.tiles[i] = TL.PATH; L.props[i] = 0; }
+  r.taken = r.taken || new Set(); for (let y = ny; y <= ny + 2; y++) for (let x = nx - 2; x <= nx + 2; x++) r.taken.add(x + ',' + y);
+  if (r.entryPoints && r.entryPoints.length) r.entryPoints[r.entryPoints.length - 1] = [nx, ny + 1];
+  return [nx, ny];
+}
+
 // ---------- CAVES ----------
 function genCave(W, id, kind, exit, rnd) {
   const w = 13, h = 9; const L = new Level(id, 'cave', w, h); W.levels[id] = L; L.caveKind = kind;
@@ -5049,11 +5338,19 @@ function genCave(W, id, kind, exit, rnd) {
   L.exit = exit; L.spawn = { x: 6.5, y: h - 2.6, a: -Math.PI / 2 };
   L.props[L.idx(3, 2)] = PR.FLAME; L.props[L.idx(9, 2)] = PR.FLAME;
   const c = Content.caves[kind]; if (!c) return;
+  if (c.grotto) { // under a hollow tree (content/grottos.js): roots and moss, a rounder room, glowing caps instead of torches
+    L.signText = {};
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) { const edge = x === 0 || y === 0 || x === w - 1 || y === h - 1; const corner = (x <= 1 || x >= w - 2) && (y <= 1 || y >= h - 2); L.set(x, y, edge || corner ? TL.ROOTWALL : TL.MOSS); }
+    L.set(6, h - 1, TL.ROOTEXIT); L.props[L.idx(3, 2)] = 0; L.props[L.idx(9, 2)] = 0;
+    for (const [x, y] of [[2, 2], [10, 2], [2, 6], [10, 6], [4, 1]]) L.props[L.idx(x, y)] = PR.GLOWCAP;
+    if (c.spring) for (let y = 3; y <= 5; y++) for (let x = 4; x <= 8; x++) if (!((x === 4 || x === 8) && (y === 3 || y === 5))) L.set(x, y, TL.SPRING);
+    if (c.sign) { const si = L.idx(6, 1); L.props[si] = PR.SIGN; L.signText[si] = c.sign; }
+  }
   for (const s of c.stock) {
     const item = Array.isArray(s.item) ? rnd.pick(s.item) : s.item; // a list means "one of these, chosen per world"
     L.shop.push({ x: s.x + 0.5, y: 4.5, item, price: s.price, gift: s.gift, needHearts: s.needHearts, unique: s.unique, choose: s.choose ? 'h' + id : undefined });
   }
-  if (c.npc) L.npcs.push({ x: 6.5, y: 2.5, spr: c.npc, text: c.text || rnd.pick(Content.hints) });
+  if (c.npc) L.npcs.push({ x: 6.5, y: 2.5, spr: c.npc, text: c.text || rnd.pick(c.lore && Content.lore ? Content.lore : Content.hints) }); // lore: a line of the land's passing talk (content/grottos.js)
 }
 
 // ---------- DUNGEONS ----------
@@ -5211,10 +5508,18 @@ function bossEyeAlcove(L, r, items) {
   L.eyeLinks = L.eyeLinks || {}; L.eyeLinks[at(9, 2)] = { kind: 'seal', opens: [at(10, 3)], openTo: TL.DFLOOR, text: 'THE GREAT EYE BLINKS... A NICHE OPENS IN THE WALL.' };
   r.stash = items.map((item, i) => ({ item, x: 10.5 + (i % 2), y: 1.5 + Math.floor(i / 2) }));
 }
-function dungeonRoomAt(L, x, y) { const rx = Math.floor(x / DSX), ry = Math.floor(y / DSY); return L.rooms[ry * (L.gw || DGW) + rx]; } // L.gw: a wider room grid (the frontier tunnels)
+// ---------- ELEVATION ----------
+// A tile can stand up from the floor: TINFO[t].raised = its height in tiles (steps 0.25-0.75, a ledge 1). You walk up anything
+// at most STEP_UP above your feet; higher is a wall to you. Walk off an edge and you drop. The renderer draws the faces and
+// tops (engine/render.js). Rooms can be built taller than one tile (L.ceilH): there the Gale Cloak lifts you a level.
+const STEP_UP = 0.3;
+function heightAt(L, x, y) { const ti = TINFO[L.get(Math.floor(x), Math.floor(y))]; return ti.wall ? 0 : (ti.raised || 0); }
+// can the Gale Cloak lift you a whole level here? Outdoors (open sky), or in a room at least two tiles tall
+function skyRoom(L) { return L.kind === 'ow' || (L.ceilH || 1) >= 2; }
+function dungeonRoomAt(L, x, y) { const rx = Math.floor(x / DSX), ry = Math.floor(y / DSY); const r = L.rooms[ry * (L.gw || DGW) + rx]; return r && r.mergeInto != null ? L.rooms[r.mergeInto] : r; } // mergeInto: a cell that is part of a bigger room // L.gw: a wider room grid (the frontier tunnels)
 function owRegionAt(L, x, y) { const rx = clamp(Math.floor(x / RSX), 0, RW - 1), ry = clamp(Math.floor(y / RSY), 0, RH - 1); return L.regions[ry * RW + rx]; }
 function roomBounds(L, room) {
-  if (L.kind === 'dungeon' || L.kind === 'tunnel') return { x0: room.rx * DSX + 1, y0: room.ry * DSY + 1, x1: room.rx * DSX + DSX, y1: room.ry * DSY + DSY };
+  if (L.kind === 'dungeon' || L.kind === 'tunnel') { const c0 = room.cx0 != null ? room.cx0 : room.rx; return { x0: c0 * DSX + 1, y0: room.ry * DSY + 1, x1: (c0 + (room.cw || 1)) * DSX, y1: room.ry * DSY + DSY }; } // cx0/cw: a room more than one cell wide
   if (L.kind === 'ow') return { x0: room.rx * RSX + 1, y0: room.ry * RSY + 1, x1: room.rx * RSX + RSX, y1: room.ry * RSY + RSY };
   return { x0: 1, y0: 1, x1: L.w - 1, y1: L.h - 1 };
 }
@@ -5271,7 +5576,7 @@ const DUMMY_RESET = 3; // a training dummy heals (and gets its armor back) after
 const fmtDmg = (n) => String(Math.round(n * 100) / 100);
 const DISARM_STAGGER = 1.2;
 const KNIGHT_WINDUP = 0.45; // seconds a sword knight raises its blade before the counter lands (your cue to back off) // seconds a disarmed foe reels
-const TWIN_EYE_TIME = 1.2; // seconds a twin-eye gate's eye stays shut (content/gimmicks/twingate.js)
+const TWIN_EYE_TIME = 0.55; // seconds a twin-eye gate's eye stays shut (content/gimmicks/twingate.js)
 const GOURD_REGROW = 40; // seconds before a split gourd can grow back (and only with nobody within 6 tiles)
 // how many bombs you can carry: 1 without a bag, 8 with the Bramble Keep bag, 16 with the second one (sold in a grotto)
 const bombCap = (p) => p.items.bombbag2 ? 16 : p.items.bombbag ? 8 : 1;
@@ -5288,7 +5593,7 @@ const partyMul = (n) => PARTY_HP[Math.min(4, Math.max(1, n))];
 function newPlayer(id, name, color, cls) {
   return {
     id, name, color, cls: cls || 'sword', lvl: 'ow', x: 0, y: 0, a: 0, hp: 12, maxHp: 12, gems: 0, bombs: 0, maxBombs: 1, arrows: 0, maxArrows: ARROWS_START, sword: 0, armor: 0,
-    items: {}, potions: 0, alive: true, inv: 0, revive: 0, sel: 'boomerang', atk: 0, lastSeen: 0, warpIdx: 0, kills: 0,
+    items: {}, favs: [], potions: 0, alive: true, inv: 0, revive: 0, sel: 'boomerang', atk: 0, lastSeen: 0, warpIdx: 0, kills: 0,
   };
 }
 
@@ -5321,7 +5626,7 @@ class Sim {
     return p;
   }
   removePlayer(id) { const p = this.players[id]; if (!p) return; this.savedPlayers = this.savedPlayers || {}; this.savedPlayers[p.color] = this.playerSaveData(p); delete this.players[id]; this.ev({ t: 'msg', text: p.name + ' LEFT.' }); }
-  playerSaveData(p) { const o = {}; for (const k of ['cls', 'lvl', 'x', 'y', 'a', 'hp', 'maxHp', 'gems', 'bombs', 'maxBombs', 'arrows', 'maxArrows', 'swordMax', 'armorMax', 'arrowType', 'wandEl', 'sword', 'armor', 'items', 'potions', 'sel']) o[k] = p[k]; o.alive = true; if (o.hp <= 0) o.hp = 12; return o; }
+  playerSaveData(p) { const o = {}; for (const k of ['cls', 'lvl', 'x', 'y', 'a', 'hp', 'maxHp', 'gems', 'bombs', 'maxBombs', 'arrows', 'maxArrows', 'swordMax', 'armorMax', 'arrowType', 'wandEl', 'sword', 'armor', 'items', 'favs', 'potions', 'sel']) o[k] = p[k]; o.alive = true; if (o.hp <= 0) o.hp = 12; return o; }
   ev(e) { this.events.push(e); }
   sfx(s, lvl, x, y) { this.ev({ t: 'sfx', s, lvl, x, y }); }
   msg(text, pid) { this.ev({ t: 'msg', text, pid }); }
@@ -5384,7 +5689,7 @@ class Sim {
   onPlayerState(id, s) {
     const p = this.players[id]; if (!p) return;
     if (s.lvl !== p.lvl) return; // ignore stale states after teleport
-    p.x = s.x; p.y = s.y; p.a = s.a; p.atk = s.atk || 0; p.lastSeen = this.time; p.sel = s.sel || p.sel;
+    p.x = s.x; p.y = s.y; p.z = +s.z || 0; p.a = s.a; p.atk = s.atk || 0; p.lastSeen = this.time; p.sel = s.sel || p.sel;
   }
   onAction(id, a) {
     const p = this.players[id]; if (!p) return;
@@ -5399,6 +5704,7 @@ class Sim {
       case 'unlock': this.tryUnlock(p, a.idx); break;
       case 'revive': this.tryRevive(p); break;
       case 'sel': if (bItems().some(d => d.id === a.item)) p.sel = a.item; break;
+      case 'fav': { if (!bItems().some(d => d.id === a.item)) break; const f = p.favs = (p.favs || []).filter(x => x !== a.item); if (a.on) f.push(a.item); break; } // favorites live on the hero, so each save has its own
       case 'hazard': this.hurtPlayer(p, 1, null); break;
       case 'fall': { // fell into a pit: lose a heart, go back to the last safe spot (sent by the client, sanity-checked)
         if (this.time - (p.fellAt || -9) < 0.8) break; p.fellAt = this.time;
@@ -5541,6 +5847,7 @@ class Sim {
       this.updateBackswing(p); p.maxBombs = bombCap(p); if (p.bombs > p.maxBombs) p.bombs = p.maxBombs;
       if (p.dbg) { p.arrows = Math.max(p.arrows, p.maxArrows || ARROWS_START); p.bombs = Math.max(p.bombs, p.maxBombs); p.items.bombs = true; p.potions = 2; p.items.potion = true; p.gems = Math.max(p.gems, 999); } // debug: never run out
       const t = L.get(Math.floor(p.x), Math.floor(p.y)); const ti = TINFO[t]; const boots = !!p.items.magmaboots;
+      if (ti.heal && p.hp < p.maxHp && this.time >= (p.healNext || 0)) { p.healNext = this.time + 0.35; this.heal(p, 1); if (p.hp >= p.maxHp) this.sfx('heart', p.lvl, p.x, p.y); } // a warm spring (content/grottos.js)
       if (p.inv <= 0 && !this.flying(p) && ((ti.hurt && !(boots && ti.lava)) || (ti.vent && this.ventPhase() === 2 && !boots))) this.hurtPlayer(p, 1, null); // fliers are above it all
       p.swordMax = Math.max(p.swordMax || 0, p.sword); p.armorMax = Math.max(p.armorMax || 0, p.armor); // best gear ever owned (the inventory lets you wear less)
       // pickups & shop
@@ -5624,6 +5931,7 @@ class Sim {
       e.maxHp = e.hp; g.ents.push(e);
     }
     if (L.kind === 'dungeon' || L.kind === 'tunnel') this.roomStatics(L, room, key, false);
+    if (room.miniboss && g.ents.length && this.baitBoth(L, room, key)) this.enrageGroup(g); // they remember who robbed them
     if (!g.ents.length) this.groupCleared(g, true);
   }
   roomStatics(L, room, key, cleared) {
@@ -5631,7 +5939,7 @@ class Sim {
     if (room.item && !this.team.taken[key + ':item']) {
       if (!this.ents.find(e => e.tk === key + ':item')) this.spawn({ k: 'pick', lvl: L.id, x: room.rx * DSX + 6.5, y: room.ry * DSY + 3.5, item: room.item, tk: key + ':item', perm: true, spr: itemSprite(room.item), sc: 0.6, z: 0.35, team: true });
     }
-    (room.stash || []).forEach((s, i) => { const tk = key + ':stash' + i; if (!this.team.taken[tk] && !this.ents.find(e => e.tk === tk)) this.spawn({ k: 'pick', lvl: L.id, x: room.rx * DSX + s.x, y: room.ry * DSY + s.y, item: s.item, tk, perm: true, spr: itemSprite(s.item), sc: 0.55, z: 0.15, team: true }); }); // hidden treasures (world.js bossEyeAlcove)
+    (room.stash || []).forEach((s, i) => { const tk = key + ':stash' + i; if (!this.team.taken[tk] && !this.ents.find(e => e.tk === tk)) this.spawn({ k: 'pick', lvl: L.id, x: room.rx * DSX + s.x, y: room.ry * DSY + s.y, item: s.item, tk, perm: true, spr: itemSprite(s.item), sc: 0.55, z: 0.15, team: true, bait: s.bait, g: key }); }); // hidden treasures (world.js bossEyeAlcove); bait: the wyrm arena's corner gems
     if (room.looseKey && !this.team.taken[key + ':lkey'] && !this.ents.find(e => e.tk === key + ':lkey')) { // a key waiting somewhere awkward (gimmick intro rooms)
       this.spawn({ k: 'pick', lvl: L.id, x: room.rx * DSX + room.looseKey[0], y: room.ry * DSY + room.looseKey[1], item: 'key', tk: key + ':lkey', perm: true, spr: itemSprite('key'), sc: 0.55, z: 0.1, team: true });
     }
@@ -5645,6 +5953,7 @@ class Sim {
     if (room.compass) drop('compass', 1);
     if (room.boss) { drop('hcont', -1.5); if (L.dnum <= 8) drop('shard', 0); const bd = (Content.dungeons[L.dnum] || {}).bossDrop; if (bd) drop(bd, 0); }
     if (room.reward) drop(room.reward, 0); // hidden room treasure
+    for (const [item, dx] of room.rewards || []) drop(item, dx); // several prizes at once (the wyrm arena)
   }
   updateGroups(dt, plist) {
     for (const k in this.groups) {
@@ -5953,6 +6262,7 @@ class Sim {
       if (this.damageEnemy(e, POMMEL_DMG, p, { pid: p.id, kbMul: 0.6 }) && !def.boss && !e.dead) { e.stun = Math.max(e.stun || 0, POMMEL_STUN); e.stunFrom = this.time; }
     }
     for (const d of [0.6, 1.1]) this.breakGourd(L, p.x + Math.cos(p.a) * d, p.y + Math.sin(p.a) * d);
+    for (const d of [0.7, 1.2]) if (this.openHollowTree(L, p.x + Math.cos(p.a) * d, p.y + Math.sin(p.a) * d)) hit = true; // knock on a hollow tree
     this.sfx(hit ? 'pommel' : 'swing', p.lvl, p.x, p.y);
   }
   // Every third sword hit in a chain (hits less than CHAIN_GAP apart) readies a backswing. It fires on the first hit that
@@ -5989,8 +6299,18 @@ class Sim {
     else if (a.slot === 'wand') p.wandEl = ['plain', 'fire', 'thunder'].includes(a.kind) ? a.kind : 'plain'; // the magic wand's element (items/rod.js)
     else if (a.slot === 'arrows') p.arrowType = ['plain', 'frost', 'silver'].includes(a.kind) ? a.kind : (a.plain ? 'plain' : 'frost');
   }
+  // HOMING shots (projectile def homing: turn rate in radians a second) bend toward the nearest target within 12 tiles:
+  // a hero for an enemy's shot, a foe for a hero's
+  steerProj(e, def, dt) {
+    let best = null, bd = 144;
+    if (e.owner === 'e') { for (const p of Object.values(this.players)) if (p.alive && p.lvl === e.lvl) { const d = dist2(p.x, p.y, e.x, e.y); if (d < bd) { bd = d; best = p; } } }
+    else for (const o of this.ents) if (o.k === 'en' && o.lvl === e.lvl && !o.dead && !o.dormant) { const d = dist2(o.x, o.y, e.x, e.y); if (d < bd) { bd = d; best = o; } }
+    if (!best) return; const sp = Math.hypot(e.vx, e.vy); const cur = Math.atan2(e.vy, e.vx);
+    const na = cur + clamp(angDiff(cur, Math.atan2(best.y - e.y, best.x - e.x)), -def.homing * dt, def.homing * dt); e.vx = Math.cos(na) * sp; e.vy = Math.sin(na) * sp;
+  }
   updateProj(e, dt) {
     const L = this.W.levels[e.lvl]; const def = Content.projectiles[e.type];
+    if (def.homing && e.t >= (def.homeDelay || 0)) this.steerProj(e, def, dt);
     let nx = e.x + e.vx * dt, ny = e.y + e.vy * dt; e.life -= dt;
     // sword beams and arrows glance off a door frame instead of breaking on it: if only one axis is blocked and the
     // shot is mostly travelling along the other, it straightens out and carries on through the doorway
@@ -6052,6 +6372,13 @@ class Sim {
     const i = L.idx(Math.floor(x), Math.floor(y)); const ti = TINFO[L.tiles[i]];
     if (ti && ti.cuttable) { this.setTile(L.id, i, TL[ti.opensTo] != null ? TL[ti.opensTo] : TL.DFLOOR); this.spawn({ k: 'fx', lvl: L.id, x: Math.floor(x) + 0.5, y: Math.floor(y) + 0.5, spr: 'puff', life: 0.3, sc: 0.9 }); this.sfx('hit', L.id); }
   }
+  // A HOLLOW TREE (content/grottos.js) splits open on the stair down to its grotto: a pommel strike or a bomb does it.
+  openHollowTree(L, x, y) {
+    const i = L.idx(Math.floor(x), Math.floor(y)); if (PR.HOLLOWTREE == null || L.props[i] !== PR.HOLLOWTREE) return false;
+    const rev = L.secretReveal[i]; this.setTile(L.id, i, rev ? rev.tile : null, 0);
+    this.spawn({ k: 'fx', lvl: L.id, x: Math.floor(x) + 0.5, y: Math.floor(y) + 0.5, spr: 'boom', life: 0.4, sc: 1.2, z: 0.3 }); this.sfx('secret', L.id);
+    return true;
+  }
   burnAt(L, x, y) {
     const tx = Math.floor(x), ty = Math.floor(y);
     for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
@@ -6091,6 +6418,19 @@ class Sim {
     if (e.tk) this.team.taken[e.tk] = true;
     e.dead = true;
     this.giveItem(p, e.item, false);
+    if (e.bait) this.baitTaken(e);
+  }
+  // THE WYRM ARENA'S BAIT (world.js genTunnel): gems and a heart at each end. Take from BOTH ends while the pair lives and they
+  // both fly into a rage (enemies/wyrm.js). They remember: if you wipe and come back, they start out enraged.
+  baitBoth(L, room, key) { const sides = new Set(); (room.stash || []).forEach((s, i) => { if (s.bait && this.team.taken[key + ':stash' + i]) sides.add(s.bait); }); return sides.size >= 2; }
+  baitTaken(e) {
+    const g = this.groups[e.g]; if (!g || g.cleared) return; const L = this.W.levels[g.lvl];
+    if (!this.baitBoth(L, g.room, g.key)) { if (!g.baitWarned) { g.baitWarned = true; this.sfx('growl', L.id, e.x, e.y); this.msg('THE WYRMS WATCH YOU...'); } return; }
+    this.enrageGroup(g);
+  }
+  enrageGroup(g) {
+    let any = false; for (const en of g.ents) { if (en.dead || en.enraged) continue; any = true; en.enraged = true; en.maxHp = Math.round(en.maxHp * 1.5); en.hp = en.maxHp; en.tm = 1; en.chargeIn = 1.5 + Math.random(); }
+    if (any) { const L = this.W.levels[g.lvl]; const e0 = g.ents.find(en => !en.dead); this.sfx('rage', L.id, e0.x, e0.y); this.ev({ t: 'shake', lvl: L.id, x: e0.x, y: e0.y }); this.msg('THIEF! THE WYRMS ARE ENRAGED!'); }
   }
   // Runs the item's give(). Team items run it for every player, and the "you got it" banner shows once.
   giveItem(p, id, fromShop) {
@@ -6133,8 +6473,8 @@ class Sim {
   snapshotFor(pid) {
     const p = this.players[pid]; if (!p) return null;
     const en = []; for (const e of this.ents) if (e.lvl === p.lvl) en.push(this.entView(e, p));
-    const pl = []; for (const o of Object.values(this.players)) pl.push([o.id, o.lvl, Math.round(o.x * 100) / 100, Math.round(o.y * 100) / 100, Math.round(o.a * 100) / 100, o.color, o.armor, o.cls, o.alive ? 1 : 0, o.atk, o.name, Math.round(o.revive / REVIVE_TIME * 100) / 100, o.hp, o.maxHp, o.reviver || 0]);
-    const me = {}; for (const k of ['lvl', 'hp', 'maxHp', 'gems', 'bombs', 'maxBombs', 'arrows', 'maxArrows', 'swordMax', 'armorMax', 'arrowType', 'wandEl', 'sword', 'armor', 'items', 'potions', 'alive', 'cls', 'sel', 'color', 'name', 'dbg', 'god']) me[k] = p[k]; me.spellCd = Math.max(0, Math.round(((p.spellReady || 0) - this.time) * 10) / 10); me.chill = p.chill > 0 ? 1 : 0; me.poison = p.poisonTicks > 0 ? p.poisonTicks : 0; me.fly = this.flying(p) ? Math.round((p.flyUntil - this.time) * 10) / 10 : 0; me.respawnIn = p.alive ? 0 : Math.max(0, Math.ceil(RESPAWN_WAIT - (this.time - (p.downAt || 0))));
+    const pl = []; for (const o of Object.values(this.players)) pl.push([o.id, o.lvl, Math.round(o.x * 100) / 100, Math.round(o.y * 100) / 100, Math.round(o.a * 100) / 100, o.color, o.armor, o.cls, o.alive ? 1 : 0, o.atk, o.name, Math.round(o.revive / REVIVE_TIME * 100) / 100, o.hp, o.maxHp, o.reviver || 0, o.z || 0]); // [15] z: feet height (ledges, the cloak's lift)
+    const me = {}; for (const k of ['lvl', 'hp', 'maxHp', 'gems', 'bombs', 'maxBombs', 'arrows', 'maxArrows', 'swordMax', 'armorMax', 'arrowType', 'wandEl', 'sword', 'armor', 'items', 'favs', 'potions', 'alive', 'cls', 'sel', 'color', 'name', 'dbg', 'god']) me[k] = p[k]; me.spellCd = Math.max(0, Math.round(((p.spellReady || 0) - this.time) * 10) / 10); me.chill = p.chill > 0 ? 1 : 0; me.poison = p.poisonTicks > 0 ? p.poisonTicks : 0; me.fly = this.flying(p) ? Math.round((p.flyUntil - this.time) * 10) / 10 : 0; me.respawnIn = p.alive ? 0 : Math.max(0, Math.ceil(RESPAWN_WAIT - (this.time - (p.downAt || 0))));
     return { t: 's', paused: !!this.paused, pausedBy: this.pausedBy, me, pl, en, team: { keys: this.team.keys, maps: this.team.maps, comps: this.team.comps, shards: this.team.shards, done: this.team.done, relics: this.team.relics }, vp: this.ventPhase(), rg: this.rigCodes(p.lvl), fz: this.frozenList(p.lvl), mv: this.modVer, over: this.over > 0 };
   }
   // ---- save ----
@@ -6152,6 +6492,7 @@ class Sim {
     Object.assign(this.team, s.team); this.team.relics = this.team.relics || []; this.team.clearedAt = {}; this.mods = s.mods || {}; this.savedPlayers = s.players || {};
     for (const lvl in this.mods) { const L = this.W.levels[lvl]; if (L && L.gourds) for (const i in this.mods[lvl]) if (L.gourds[i] != null && this.mods[lvl][i][1] !== L.gourds[i]) delete this.mods[lvl][i]; } // split gourds grow back
     for (const lvl in this.mods) { const L = this.W.levels[lvl]; if (!L) continue; for (const i in this.mods[lvl]) { const [t, pr] = this.mods[lvl][i]; L.tiles[i] = t; L.props[i] = pr; } }
+    for (const L of Object.values(this.W.levels)) for (const r of Object.values(L.rooms || {})) for (const [a, b] of (r && r.legacyTk) || []) if (this.team.taken[L.id + ':' + a]) this.team.taken[L.id + ':' + b] = true; // prizes that moved (the wyrm arena)
     // never restore closed shutters
     for (const lvl in this.mods) for (const i in this.mods[lvl]) if (this.mods[lvl][i][0] === TL.SHUTTER) { this.W.levels[lvl].tiles[i] = TL.OPENDOOR; this.mods[lvl][i][0] = TL.OPENDOOR; }
   }
@@ -6262,7 +6603,7 @@ function renderWorld(cam, L, ents, players, myId) {
   const ceilTex = kind === 'dungeon' ? texFor('brick', L) : TEX.cwall;
   for (let y = 0; y < H; y++) {
     const floorRow = y >= hz; if (!floorRow && outdoor) continue;
-    const p = floorRow ? Math.max(0.5, y - hz) : hz - y; const posZ = (floorRow ? eye : 1 - eye) * H;
+    const p = floorRow ? Math.max(0.5, y - hz) : hz - y; const posZ = (floorRow ? eye : (L.ceilH || 1) - eye) * H;
     const rowD = posZ / p;
     const stepX = rowD * (rdx1 - rdx0) / W, stepY = rowD * (rdy1 - rdy0) / W;
     let fx = cam.x + rowD * rdx0, fy = cam.y + rowD * rdy0;
@@ -6284,36 +6625,64 @@ function renderWorld(cam, L, ents, players, myId) {
       buf[row + x] = c; fx += stepX; fy += stepY;
     }
   }
-  // --- walls ---
-  // Each column finds the nearest wall; outdoors it keeps looking past short walls for a tall one (peaks, the great wood,
-  // gate towers) and draws that one's top above the near wall, so landmarks show over trees.
+  // --- walls, ledges and steps ---
+  // Each column marches outward cell by cell, FRONT TO BACK. `clip` is the lowest screen row not yet painted in this column
+  // (everything from clip down is final): the floor pass painted the ground plane everywhere, and here every cell that
+  // stands up from it paints its face (from the height of the cell before it up to its own height) and, when the eye is
+  // above it, its top (cap) - but only above `clip`. So a raised ledge shows its top when you stand higher, a short wall
+  // hides what's behind it only up to its own top, and tall walls (peaks, the great wood, gate towers) show over everything.
+  // Walls indoors reach the ceiling (L.ceilH, 1 unless a room is built taller) and end the march.
+  // Per column, up to OCC occluders (distance, rows they cover) are kept for the sprite pass.
   const maxSteps = outdoor ? 150 : 64; const triW = (v) => 1 - 2 * Math.abs(v - Math.floor(v) - 0.5);
-  const drawCol = (x, tile, side, pd, rdx, rdy, mx, my, yLimit) => {
-    const ti = TINFO[tile]; const dist = Math.max(0.05, pd);
-    const lh = H / dist; const bot = hz + eye * lh;
-    let wx = side === 0 ? cam.y + pd * rdy : cam.x + pd * rdx; const along = wx; wx -= Math.floor(wx);
-    let tx = (wx * TS) | 0; if ((side === 0 && rdx > 0) || (side === 1 && rdy < 0)) tx = TS - 1 - tx;
-    let hcol = 1;
-    if (ti.tall) {
-      hcol = ti.tall;
-      if (ti.jag === 'peak') hcol *= 0.55 + 0.3 * triW(along * 0.23) + 0.15 * triW(along * 0.71 + 0.4);
-      else if (ti.jag === 'trees') hcol *= 0.8 + 0.2 * Math.sqrt(Math.abs(Math.sin(along * 1.7)));
-      else if (ti.jag === 'battlement' && ((tx >> 3) & 1)) hcol += 0.18;
-    }
-    const top = bot - hcol * lh;
-    const th = L.towerTheme && L.towerTheme[my * L.w + mx]; const tex = (th && TEX[TINFO[tile].wall + '@' + th]) || texFor(ti.wall, L) || TEX.brick;
+  const ceilH = outdoor ? 1 : (L.ceilH || 1);
+  const wallH = (ti, along, tx) => {
+    if (!ti.tall) return outdoor ? 1 : ceilH;
+    let h = ti.tall;
+    if (ti.jag === 'peak') h *= 0.55 + 0.3 * triW(along * 0.23) + 0.15 * triW(along * 0.71 + 0.4);
+    else if (ti.jag === 'trees') h *= 0.8 + 0.2 * Math.sqrt(Math.abs(Math.sin(along * 1.7)));
+    else if (ti.jag === 'battlement' && ((tx >> 3) & 1)) h += 0.18;
+    return h;
+  };
+  // a face: the side of a cell, from height h0 up to h1, at distance pd. Returns the top row it reaches.
+  const drawFace = (x, ti, tile, side, pd, rdx, rdy, mx, my, h0, h1, along, tx, clip) => {
+    const dist = Math.max(0.05, pd); const lh = H / dist;
+    const th = L.towerTheme && L.towerTheme[my * L.w + mx]; const tname = ti.wall || ti.side || 'brick'; const tex = (th && TEX[tname + '@' + th]) || texFor(tname, L) || TEX.brick;
     const lf = (dark ? darkLight(cam.x + rdx * pd, cam.y + rdy * pd, dist) : lightFor(kind, dist)) * (side ? 0.78 : 1);
     const fogF = outdoor ? (ti.tall ? clamp((dist - 14) / 40, 0, 0.6) : clamp((dist - 9) / 9, 0, 0.85)) : 0;
-    const y0 = Math.max(0, Math.round(top)), y1 = Math.min(H, Math.round(bot), yLimit);
-    const snowLine = hcol - 0.5 - 0.3 * triW(along * 1.3);
+    const top = hz + (eye - h1) * lh, bot = hz + (eye - h0) * lh;
+    const y0 = Math.max(0, Math.round(top)), y1 = Math.min(H, Math.round(bot), clip);
+    const snowLine = h1 - 0.5 - 0.3 * triW(along * 1.3);
     for (let y = y0; y < y1; y++) {
-      const z = (bot - y) / lh; const ty = ((1 - (z - Math.floor(z))) * TS) | 0; let c = tex[(ty & 31) * TS + tx];
+      const z = eye - (y - hz) / lh; const ty = ((1 - (z - Math.floor(z))) * TS) | 0; let c = tex[(ty & 31) * TS + tx];
       if (ti.snow && z > snowLine) c = ((tx + ty) & 7) ? rgb(236, 242, 252) : rgb(200, 210, 230);
+      if (ti.raised) c = h1 - z < 0.06 ? fogC(c, 0.4, 235, 225, 200) : shadeC(c, 0.8); // a step's edge catches the light; its riser is darker
       c = shadeC(c, lf); if (fogF > 0) c = fogC(c, fogF, fogR, fogG, fogB);
       buf[y * W + x] = c;
     }
     return Math.max(0, Math.round(top));
   };
+  // a cap: the top of a cell at height h, seen from above, between distances d0 (near edge) and d1 (far edge)
+  const drawCap = (x, ti, h, d0, d1, rdx, rdy, clip) => {
+    const k = (eye - h) * H; if (k <= 0) return clip;
+    const yN = d0 > 0.001 ? hz + k / d0 : H, yF = hz + k / d1;
+    const y0 = Math.max(0, Math.ceil(yF)), y1 = Math.min(H, Math.round(yN), clip);
+    const capName = ti.cap || (ti.wall && (ti.portal || ti.exitWall || ti.locked || ti.eye) ? TINFO[outdoor ? TL.ROCK : TL.BRICK].wall : ti.wall); // a doorway's top is plain stone
+    let tex = ti.wall ? (texFor(capName, L) || TEX.brick) : (texFor(ti.floor || 'grass', L) || TEX.grass); if (Array.isArray(tex)) tex = tex[wf];
+    const capShade = ti.wall ? 0.82 : 1;
+    for (let y = y0; y < y1; y++) {
+      const d = k / Math.max(0.5, y - hz); const fx = cam.x + rdx * d, fy = cam.y + rdy * d;
+      let c = tex[(((fy - Math.floor(fy)) * TS) & 31) * TS + (((fx - Math.floor(fx)) * TS) & 31)];
+      const lf = (dark ? darkLight(fx, fy, d) : lightFor(kind, d)) * capShade; c = shadeC(c, lf);
+      if (outdoor) { const fogF = clamp((d - 9) / 9, 0, 0.85); if (fogF > 0) c = fogC(c, fogF, fogR, fogG, fogB); }
+      buf[y * W + x] = c;
+    }
+    return Math.min(clip, Math.max(0, Math.ceil(yF)));
+  };
+  const OCC = 6; if (!R.occD || R.occD.length !== W * OCC) { R.occD = new Float32Array(W * OCC); R.occY = new Int16Array(W * OCC); R.occN = new Uint8Array(W); }
+  const cellH = (ti) => ti.wall ? 1 : (ti.raised || 0); // (walls get their real height in the march)
+  const camTi = TINFO[L.get(Math.floor(cam.x), Math.floor(cam.y))];
+  let clip = H, first = 1e9, occ = 0, ob = 0; // per column (reset at the start of each)
+  const occlude = (d, y) => { if (y >= clip) return; clip = y; if (first === 1e9) first = Math.max(0.05, d); if (occ < OCC) { R.occD[ob + occ] = Math.max(0.05, d); R.occY[ob + occ] = y; occ++; } else R.occY[ob + OCC - 1] = y; };
   for (let x = 0; x < W; x++) {
     const camX = 2 * x / W - 1; const rdx = dirX + plX * camX, rdy = dirY + plY * camX;
     let mx = Math.floor(cam.x), my = Math.floor(cam.y);
@@ -6321,28 +6690,35 @@ function renderWorld(cam, L, ents, players, myId) {
     let stepX, stepY, sdx, sdy;
     if (rdx < 0) { stepX = -1; sdx = (cam.x - mx) * ddx; } else { stepX = 1; sdx = (mx + 1 - cam.x) * ddx; }
     if (rdy < 0) { stepY = -1; sdy = (cam.y - my) * ddy; } else { stepY = 1; sdy = (my + 1 - cam.y) * ddy; }
-    let side = 0, n = 0; let near = null, far = null;
-    while (n++ < maxSteps) {
+    clip = H; first = 1e9; occ = 0; ob = x * OCC;
+    // the cell you're standing in: if it's raised (a step, a ledge), its top is under your feet
+    let prevH = camTi.wall ? 0 : (camTi.raised || 0);
+    if (prevH > 0) occlude(0, drawCap(x, camTi, prevH, 0, Math.min(sdx, sdy), rdx, rdy, clip));
+    let side = 0, n = 0;
+    while (n++ < maxSteps && clip > 0) {
       if (sdx < sdy) { sdx += ddx; mx += stepX; side = 0; } else { sdy += ddy; my += stepY; side = 1; }
-      if (mx < 0 || my < 0 || mx >= L.w || my >= L.h) { if (!near && !outdoor) near = { tile: TL.BRICK, side, pd: side === 0 ? sdx - ddx : sdy - ddy, mx, my }; break; }
+      const pd = side === 0 ? sdx - ddx : sdy - ddy;
+      if (mx < 0 || my < 0 || mx >= L.w || my >= L.h) { if (!outdoor) { drawFace(x, TINFO[TL.BRICK], TL.BRICK, side, pd, rdx, rdy, mx, my, prevH, ceilH, 0, 0, clip); occlude(pd, 0); } break; }
       const tile = L.tiles[my * L.w + mx]; const ti = TINFO[tile];
-      if (!ti.wall) continue;
-      const hit = { tile, side, pd: side === 0 ? sdx - ddx : sdy - ddy, mx, my };
-      if (!near) { near = hit; if (ti.tall || !outdoor) break; }
-      else if (ti.tall) { far = hit; break; }
+      const hc0 = cellH(ti); if (hc0 <= 0 && prevH <= 0) continue; // plain ground: the floor pass already has it
+      let wx = side === 0 ? cam.y + pd * rdy : cam.x + pd * rdx; const along = wx; wx -= Math.floor(wx);
+      let tx = (wx * TS) | 0; if ((side === 0 && rdx > 0) || (side === 1 && rdy < 0)) tx = TS - 1 - tx;
+      const hc = ti.wall ? wallH(ti, along, tx) : hc0;
+      if (hc > prevH + 1e-4) { const top = drawFace(x, ti, tile, side, pd, rdx, rdy, mx, my, prevH, hc, along, tx, clip); if (eye <= hc) occlude(pd, top); }
+      if (hc > 0 && eye > hc) occlude(pd, drawCap(x, ti, hc, pd, Math.min(sdx, sdy), rdx, rdy, clip)); // seen from above
+      prevH = hc;
+      if (ti.wall && !outdoor) { occlude(pd, 0); break; } // indoors, a wall meets the ceiling: nothing behind it shows
+      if (outdoor && clip <= hz - (3.5 - eye) * H / Math.max(0.05, pd)) break; // nothing farther can reach above what's painted
     }
-    R.zbuf[x] = near ? Math.max(0.05, near.pd) : 1e9;
-    if (!near) continue;
-    const nearTop = drawCol(x, near.tile, near.side, near.pd, rdx, rdy, near.mx, near.my, H);
-    if (far) drawCol(x, far.tile, far.side, far.pd, rdx, rdy, far.mx, far.my, nearTop);
+    R.zbuf[x] = first; R.occN[x] = occ;
   }
   // --- sprites ---
   const sprites = [];
   const rad = 16; const cx0 = Math.max(0, Math.floor(cam.x) - rad), cx1 = Math.min(L.w - 1, Math.floor(cam.x) + rad), cy0 = Math.max(0, Math.floor(cam.y) - rad), cy1 = Math.min(L.h - 1, Math.floor(cam.y) + rad);
-  for (let y = cy0; y <= cy1; y++) for (let x = cx0; x <= cx1; x++) { const pr = L.props[y * L.w + x]; if (pr) sprites.push({ x: x + 0.5, y: y + 0.5, spr: SPR[PROPS[pr]], sc: PROP_INFO[pr].scale, z: 0, fl: pr === PR.FLAME ? 8 : 0 }); }
+  for (let y = cy0; y <= cy1; y++) for (let x = cx0; x <= cx1; x++) { const pr = L.props[y * L.w + x]; if (pr) sprites.push({ x: x + 0.5, y: y + 0.5, spr: SPR[PROPS[pr]], sc: PROP_INFO[pr].scale, z: heightAt(L, x + 0.5, y + 0.5), fl: pr === PR.FLAME ? 8 : 0 }); }
   for (const e of ents) {
     const s = animFrame(e[1], R.time, e[0], e[6] & 2); if (!s) continue; // stunned enemies freeze
-    sprites.push({ x: e[2], y: e[3], spr: s, sc: e[4], z: e[5], fl: e[6], price: e[7], id: e[0], elite: e[10] || 0 });
+    sprites.push({ x: e[2], y: e[3], spr: s, sc: e[4], z: e[5] + heightAt(L, e[2], e[3]), fl: e[6], price: e[7], id: e[0], elite: e[10] || 0 });
   }
   for (const p of players) {
     if (p[0] === myId || p[1] !== L.id) continue;
@@ -6356,7 +6732,7 @@ function renderWorld(cam, L, ents, players, myId) {
     let fr = -1, rsc = 1, flip = false;
     if (p[8] && an.spd > 0.8) { an.ph += ddt * 9; const step = Math.floor(an.ph); fr = RUN_SEQ[step % 4]; rsc = RUN_SCALE[step % 4]; flip = (dir === 'front' || dir === 'back') && (Math.floor(step / 4) & 1); } else an.ph = 0;
     const s = heroSpriteRun(p[7], col, p[6], dir, fr, flip);
-    sprites.push({ x: p[2], y: p[3], spr: s, sc: 0.78 * rsc, z: p[8] ? 0 : -0.45, fl: p[8] ? (p[9] > 0 ? 16 : 0) : 32, name: p[10], col, aura: p[7] === 'monk' ? p[6] : 0 });
+    sprites.push({ x: p[2], y: p[3], spr: s, sc: 0.78 * rsc, z: (p[8] ? 0 : -0.45) + (p[15] || 0), fl: p[8] ? (p[9] > 0 ? 16 : 0) : 32, name: p[10], col, aura: p[7] === 'monk' ? p[6] : 0 });
   }
   for (const s of sprites) { const dx = s.x - cam.x, dy = s.y - cam.y; s.d = dx * dx + dy * dy; }
   sprites.sort((a, b) => b.d - a.d);
@@ -6374,9 +6750,10 @@ function renderWorld(cam, L, ents, players, myId) {
     const fogF = outdoor ? clamp((dist - 9) / 9, 0, 0.85) : 0;
     const hurt = (s.fl & 1) && (Math.floor(t * 20) & 1); const stun = s.fl & 2; const ghost = s.fl & 4; const down = s.fl & 32;
     for (let x = Math.max(0, x0); x < Math.min(W, x1); x++) {
-      if (tY >= R.zbuf[x]) continue;
+      let lim = H; for (let k = 0, ob = x * OCC; k < R.occN[x]; k++) { if (R.occD[ob + k] < tY) lim = R.occY[ob + k]; else break; } // rows from lim down are behind a wall or ledge
+      if (lim <= 0) continue;
       const tx = Math.floor((x - x0) / (x1 - x0) * s.spr.w); if (tx < 0 || tx >= s.spr.w) continue;
-      for (let y = Math.max(0, y0); y < Math.min(H, y1); y++) {
+      for (let y = Math.max(0, y0); y < Math.min(H, y1, lim); y++) {
         const ty = Math.floor((y - y0) / (y1 - y0) * s.spr.h); let c = s.spr.px[ty * s.spr.w + tx]; if (!c) continue;
         if (ghost && ((x + y + (t * 30 | 0)) & 1)) continue;
         if (hurt) c = (ty + tx) & 1 ? rgb(255, 255, 255) : rgb(255, 60, 40); else if (stun) c = fogC(c, 0.45, 120, 180, 255);
@@ -6598,12 +6975,13 @@ function drawViewmodel(st) {
 function c32ToHex(c) { return '#' + c.map(v => v.toString(16).padStart(2, '0')).join(''); }
 
 // ---- HUD ----
-function drawHearts(x, y, hp, maxHp) {
-  const n = Math.ceil(maxHp / 4);
+// poisoned: the hearts turn purple (and pulse) until the poison runs out
+function drawHearts(x, y, hp, maxHp, poison) {
+  const n = Math.ceil(maxHp / 4); const full = poison ? rgb(150 + Math.round(30 * Math.sin(R.time * 6)), 60, 220) : rgb(230, 40, 40), empty = poison ? rgb(40, 18, 56) : rgb(60, 20, 30);
   for (let i = 0; i < n; i++) {
     const hx = x + (i % 10) * 8, hy = y + Math.floor(i / 10) * 8; const q = clamp(hp - i * 4, 0, 4);
     const pat = ['.##.##.', '#######', '#######', '.#####.', '..###..', '...#...'];
-    for (let j = 0; j < pat.length; j++) for (let k = 0; k < 7; k++) if (pat[j][k] === '#') { const fill = k < q * 7 / 4; px(hx + k, hy + j, fill ? rgb(230, 40, 40) : rgb(60, 20, 30)); }
+    for (let j = 0; j < pat.length; j++) for (let k = 0; k < 7; k++) if (pat[j][k] === '#') { const fill = k < q * 7 / 4; px(hx + k, hy + j, fill ? full : empty); }
   }
 }
 function drawHUD(st) {
@@ -6611,7 +6989,7 @@ function drawHUD(st) {
   // minimap
   drawMinimap(st, 4, 4, 72, 44);
   // hearts
-  const hx = W - 86; drawHearts(hx, 5, me.hp, me.maxHp);
+  const hx = W - 86; drawHearts(hx, 5, me.hp, me.maxHp, me.poison > 0);
   if (me.hp <= 4 && me.alive && Math.floor(R.time * 4) & 1) frame(hx - 2, 3, 84, 10, rgb(255, 60, 60));
   // counters
   let cy = 5 + Math.ceil(Math.ceil(me.maxHp / 4) / 10) * 8 + 2;
@@ -6807,6 +7185,8 @@ function sfx(name, vol) {
     case 'heal': seq([523, 659, 784, 1047, 1319], 0.06, 'triangle', 0.15 * v); break;
     case 'stairs': seq([392, 349, 330, 294, 262], 0.06, 'square', 0.1 * v); break;
     case 'roar': tone(120, 0.5, 'sawtooth', 0.2 * v, 60); noise(0.4, 0.15 * v, 600); break;
+    case 'growl': tone(70, 0.7, 'sawtooth', 0.12 * v, 55); noise(0.6, 0.06 * v, 300); break; // a low warning rumble (the wyrm arena's bait)
+    case 'rage': tone(140, 0.8, 'sawtooth', 0.22 * v, 50); tone(95, 0.9, 'square', 0.12 * v, 40); noise(0.8, 0.2 * v, 500); break; // both wyrms enraged
     case 'whistle': seq([1047, 1175, 1319, 1568, 1319, 1568, 2093], 0.1, 'sine', 0.16 * v); break;
     case 'lowhp': tone(1760, 0.06, 'square', 0.05 * v); break;
     case 'text': tone(1200, 0.02, 'square', 0.04 * v); break;
@@ -7184,7 +7564,7 @@ function startGame(mode, cont) {
   G.sim.time = 0;
 }
 function enterPlay(lvl, x, y, a) {
-  G.local = { lvl, x, y, a, pitch: 0, kx: 0, ky: 0, atkCd: 0, swing: null, punch: null, combo: 0, comboT: 0, charge: 0, held: 0, bob: 0, useFlash: 0, useSpr: null, bumpT: 0, dashT: 0, dashCd: 0, dialog: null, title: null, flash: 0, flashC: 0, shake: 0, get: null, pow: [], fade: 1, reviveT: 0, npcTalked: {}, downT: 0, sel: null, lowT: 0, atkVis: 0 };
+  G.local = { lvl, x, y, a, pitch: 0, kx: 0, ky: 0, atkCd: 0, swing: null, punch: null, combo: 0, comboT: 0, charge: 0, held: 0, bob: 0, useFlash: 0, useSpr: null, bumpT: 0, dashT: 0, dashCd: 0, dialog: null, title: null, flash: 0, flashC: 0, shake: 0, get: null, pow: [], fade: 1, reviveT: 0, npcTalked: {}, downT: 0, sel: null, lowT: 0, atkVis: 0, z: 0, vz: 0, lift: 0 }; // z: your feet's height (steps, ledges); lift: 0-1, how far the Gale Cloak has carried you up a level
   G.state = 'play'; G.msgs = []; showScreen(null); $('hudbtns').classList.add('on');
 }
 function clientOnMsg(m) {
@@ -7220,7 +7600,7 @@ function handleEvent(e) {
     case 'poisontick': if (e.pid === me) { Lc.flash = 0.18; Lc.flashC = rgb(120, 220, 60); } break;
     case 'hurt': if (e.pid === me) { Lc.kx = e.kx; Lc.ky = e.ky; Lc.flash = 0.25; Lc.flashC = rgb(255, 40, 40); Lc.shake = 0.2; sfx('hurt'); if (navigator.vibrate) try { navigator.vibrate(60); } catch (er) { } } break;
     case 'block': if (e.pid === me) { Lc.blockT = 0.32; } break;
-    case 'tp': if (e.pid === me) { Lc.lvl = e.lvl; Lc.x = e.x; Lc.y = e.y; Lc.a = e.a; Lc.fade = 0; Lc.pitch = 0; G.smooth = {}; Lc.npcTalked = {}; } break;
+    case 'tp': if (e.pid === me) { Lc.lvl = e.lvl; Lc.x = e.x; Lc.y = e.y; Lc.a = e.a; Lc.fade = 0; Lc.pitch = 0; G.smooth = {}; Lc.npcTalked = {}; Lc.z = heightAt(G.world.levels[e.lvl], e.x, e.y); Lc.vz = 0; Lc.lift = 0; } break;
     case 'title': if (e.pid === me) Lc.title = { text: e.text, sub: e.sub, t: 3 }; break;
     case 'dialog': if (e.pid === me) showDialog(e.text); break;
     case 'get': if (e.pid === me || e.all) { Lc.get = { item: e.item, text: (e.pid === me ? '' : '') + e.text, t: 2.2 }; sfx(e.item === 'shard' ? 'fanfare' : 'get'); if (e.item === 'fists' && e.pid === me) unlockMonk(); } break;
@@ -7239,9 +7619,10 @@ function showDialog(text) { if (!G.local) return; G.local.dialog = { text, shown
 
 // ---------- local player update ----------
 // favorite items live in this browser only (a per-player convenience); every read and write is guarded
-function loadFavs() { try { const a = JSON.parse(localStorage.getItem('emberwake_favs') || '[]'); return new Set(Array.isArray(a) ? a : []); } catch (e) { return new Set(); } }
-function toggleFav(id) { if (!G.favs) G.favs = loadFavs(); if (G.favs.has(id)) G.favs.delete(id); else G.favs.add(id); try { localStorage.setItem('emberwake_favs', JSON.stringify([...G.favs])); } catch (e) { } }
-function favList(owned) { if (!G.favs) G.favs = loadFavs(); const f = owned.filter(id => G.favs.has(id)); return f.length ? f : owned; }
+// favorites are kept on your hero in the save (game/sim.js 'fav' action), so a new game starts with none
+function myFavs() { const me = G.snap && G.snap.me; return new Set((me && me.favs) || []); }
+function toggleFav(id) { const on = !myFavs().has(id); sendAction({ t: 'fav', item: id, on }); if (G.snap && G.snap.me) { const f = (G.snap.me.favs || []).filter(x => x !== id); if (on) f.push(id); G.snap.me.favs = f; } }
+function favList(owned) { const fs = myFavs(); const f = owned.filter(id => fs.has(id)); return f.length ? f : owned; }
 const BODY_PTS = [-0.22, 0, 0.22].flatMap(ox => [-0.22, 0, 0.22].map(oy => [ox, oy])); // the hero's collision box, sampled 3x3 (corners, edge middles, center) so small round props can't hide between the corners
 const POMMEL_MIN = 0.2, LUNGE_HOLD = 1.5, LUNGE_DUR = 0.22, LUNGE_SPD = 11; // reverse grip timings (seconds) and lunge speed (tiles/s)
 function raftOK(me, L, ti) { return !!me.items.raft && L.kind !== 'dungeon' && !ti.ocean; }
@@ -7303,13 +7684,20 @@ function updateLocal(dt, inp) {
   const moving = Math.abs(inp.fwd) + Math.abs(inp.str) > 0.1; if (moving) Lc.bob += dt * spd * 2.6;
   Lc.moveK = lerp(Lc.moveK || 0, moving ? 1 : 0, Math.min(1, dt * 8)); if (Lc.blockT > 0) Lc.blockT -= dt;
   Lc.stillT = moving || Lc.swing != null ? 0 : (Lc.stillT || 0) + dt; Lc.readyK = lerp(Lc.readyK || 0, Lc.stillT > 0.3 ? 1 : 0, Math.min(1, dt * (Lc.stillT > 0.3 ? 5 : 10))); // shield comes up after standing still
-  const raft = !!me.items.raft && L.kind !== 'dungeon'; const rad = 0.22; const sop = { raft, fly: flying, mx: Lc.x, my: Lc.y }; // the raft only works on open water
+  // ELEVATION (game/world.js): your feet follow the floor up steps and onto ledges; walk off an edge and you drop. Where
+  // there's room overhead (outdoors, or a tall room) the Gale Cloak lifts you a whole level: up there you sail over hedges,
+  // rocks and trees (the tall walls still stop you). If the wind gives out over something solid, it holds you up until you're clear.
+  const sky = skyRoom(L); const lowSolid = (x, y) => { for (const [ox, oy] of BODY_PTS) if (L.solidAt(x + ox, y + oy, { z: Lc.z || 0, mx: x, my: y })) return true; return false; };
+  { const want = flying && sky ? 1 : 0; if (want < Lc.lift && Lc.lift > 0.5 && lowSolid(Lc.x, Lc.y)) { if (!Lc.hoverMsg || R.time - Lc.hoverMsg > 4) { Lc.hoverMsg = R.time; pushMsg('THE WIND HOLDS YOU UP UNTIL THERE IS GROUND BELOW.', 2); } } else Lc.lift = want > Lc.lift ? Math.min(want, Lc.lift + dt * 2.2) : Math.max(want, Lc.lift - dt * 2.6); }
+  const high = Lc.lift > 0.75;
+  const raft = !!me.items.raft && L.kind !== 'dungeon'; const rad = 0.22; const sop = { raft, fly: flying || Lc.lift > 0.3, mx: Lc.x, my: Lc.y, z: (Lc.z || 0) + Lc.lift, high }; // the raft only works on open water
   // tide water that rose under the edge of you doesn't pin you in place: you can step off it (into it, you sink)
   const wetEdge = new Set(); for (const [ox, oy] of [[-rad, -rad], [rad, -rad], [-rad, rad], [rad, rad]]) { const tx = Math.floor(Lc.x + ox), ty = Math.floor(Lc.y + oy); if (TINFO[L.get(tx, ty)].water && L.solidAt(tx, ty, sop)) wetEdge.add(ty * L.w + tx); }
   const solid = (x, y) => { for (const [ox, oy] of BODY_PTS) { const tx = Math.floor(x + ox), ty = Math.floor(y + oy); if (wetEdge.has(ty * L.w + tx)) continue; if (L.solidAt(x + ox, y + oy, sop)) return true; } return false; };
   const nx = Lc.x + mvx * dt, ny = Lc.y + mvy * dt; let blockedX = false, blockedY = false;
   if (!solid(nx, Lc.y)) Lc.x = nx; else { blockedX = true; Lc.svx = 0; }
   if (!solid(Lc.x, ny)) Lc.y = ny; else { blockedY = true; Lc.svy = 0; }
+  { const gh = heightAt(L, Lc.x, Lc.y); if (gh >= Lc.z) { Lc.z = Math.min(gh, Lc.z + dt * 3.5); Lc.vz = 0; } else { Lc.vz = (Lc.vz || 0) - 14 * dt; Lc.z = Math.max(gh, Lc.z + Lc.vz * dt); if (Lc.z <= gh) { if (Lc.vz < -3) sfx('land'); Lc.vz = 0; } } } // up steps, down drops
   // the southern sea is too rough to sail
   if ((blockedX || blockedY) && moving && L.kind === 'ow' && R.time - (Lc.seaMsgAt || -99) > 6) { const ax = Math.floor(Lc.x + Math.cos(Lc.a) * 0.7), ay = Math.floor(Lc.y + Math.sin(Lc.a) * 0.7); if (TINFO[L.get(ax, ay)].ocean) { Lc.seaMsgAt = R.time; pushMsg(raft ? 'THE SEA IS FAR TOO ROUGH FOR A RAFT.' : 'ROUGH WATER. NOTHING COULD SAIL THIS.', 3); } }
   if ((blockedX || blockedY) && moving && L.kind === 'dungeon' && me.items.raft && R.time - (Lc.seaMsgAt || -99) > 6) { const ax = Math.floor(Lc.x + Math.cos(Lc.a) * 0.7), ay = Math.floor(Lc.y + Math.sin(Lc.a) * 0.7); if (TINFO[L.get(ax, ay)].water) { Lc.seaMsgAt = R.time; pushMsg('NO ROOM FOR THE RAFT IN HERE.', 3); } }
@@ -7437,7 +7825,7 @@ function loop(now) {
   else if (G.state === 'pause' && (inp.pause || inp.inv) && performance.now() - (G.pauseAt || 0) > 250 && $('bagScreen').classList.contains('on')) resume();
   if (NET.role === 'host' && G.sim) hostStep(rdt, now);
   else if (NET.role === 'client' && NET.hostConn && now - G.lastSend > 50) {
-    G.lastSend = now; const Lc = G.local; NET.hostConn.send({ t: 'ps', lvl: Lc.lvl, x: Math.round(Lc.x * 100) / 100, y: Math.round(Lc.y * 100) / 100, a: Math.round(Lc.a * 100) / 100, atk: Lc.atkVis > 0 ? 1 : 0, sel: Lc.sel });
+    G.lastSend = now; const Lc = G.local; NET.hostConn.send({ t: 'ps', lvl: Lc.lvl, x: Math.round(Lc.x * 100) / 100, y: Math.round(Lc.y * 100) / 100, z: Math.round(((Lc.z || 0) + (Lc.lift || 0)) * 100) / 100, a: Math.round(Lc.a * 100) / 100, atk: Lc.atkVis > 0 ? 1 : 0, sel: Lc.sel });
   }
   const hostPaused = NET.role === 'client' && G.snap && G.snap.paused;
   if (G.state === 'play' && !hostPaused) updateLocal(dt, inp);
@@ -7453,7 +7841,7 @@ function hostStep(rdt, now) {
   const paused = hostPausedNow(); G.sim.paused = paused && G.state === 'pause'; G.sim.pausedBy = G.profile.name;
   if (!paused && G.state !== 'title') {
     const Lc = G.local; const mp = G.sim.players[G.myId];
-    if (mp && G.state === 'play') G.sim.onPlayerState(G.myId, { lvl: Lc.lvl, x: Lc.x, y: Lc.y, a: Lc.a, atk: Lc.atkVis > 0 ? 1 : 0, sel: Lc.sel });
+    if (mp && G.state === 'play') G.sim.onPlayerState(G.myId, { lvl: Lc.lvl, x: Lc.x, y: Lc.y, z: (Lc.z || 0) + (Lc.lift || 0), a: Lc.a, atk: Lc.atkVis > 0 ? 1 : 0, sel: Lc.sel });
     // fixed steps that catch up after slow frames, so game time keeps pace with real time
     G.simAcc = Math.min(0.25, (G.simAcc || 0) + rdt);
     while (G.simAcc >= 1 / 60) { G.sim.tick(1 / 60); G.simAcc -= 1 / 60; }
@@ -7486,7 +7874,7 @@ function draw(dt) {
   }
   const down = me && !me.alive;
   const shake = Lc.shake > 0 ? (Math.random() - 0.5) * 6 * Lc.shake : 0;
-  const cam = { x: Lc.x, y: Lc.y, a: Lc.a + shake * 0.01, pitch: Lc.pitch + shake * 4, eye: down ? 0.12 : (me && me.fly > 0 ? 0.68 + Math.sin(R.time * 5) * 0.02 : 0.5) + Math.sin(Lc.bob * 2) * 0.012 };
+  const cam = { x: Lc.x, y: Lc.y, a: Lc.a + shake * 0.01, pitch: Lc.pitch + shake * 4, eye: (Lc.z || 0) + (down ? 0.12 : (me && me.fly > 0 ? 0.68 + Math.sin(R.time * 5) * 0.02 : 0.5) + (skyRoom(L) ? (Lc.lift || 0) * 0.82 : 0) + Math.sin(Lc.bob * 2) * 0.012) }; // the cloak lifts the eye to about 1.5 where there's sky
   R.ventPhase = snap ? snap.vp || 0 : 0;
   renderWorld(cam, L, ents, snap ? snap.pl : [], G.myId);
   // pow words
@@ -7609,7 +7997,7 @@ function renderBag() {
   }
   const owned = ownedBItems(me);
   if (page === 'items' && owned.length) { const r = sec('ITEM BUTTON (RIGHT-CLICK / E) - HOLD FOR POWER, SHIFT FOR TECHNIQUE'); for (const id of owned) { const d = itemDef(id); const sub = id === 'bow' ? [me.items.loaded || me.items.loaded2 ? 'HOLD: LOADED SHOT' : 'FIRES WHEN YOU LET GO', me.items.bombarrow ? 'SHIFT: BOMB ARROW' : ''].filter(Boolean).join(' / ') : id === 'rod' && me.cls !== 'monk' ? ({ plain: 'FORCE', fire: 'FIRE', thunder: 'STORM' }[me.wandEl || 'plain'] || 'FORCE') + ' MAGIC. SHIFT: ITS SPELL' : id === 'galecloak' ? 'FLY OVER ANYTHING FOR ' + FLY_TIME + 's. PRESS AGAIN TO DROP' + (me.items.cloakslam ? ' AND SLAM' : '') : d.useAlt ? 'SHIFT: TECHNIQUE' : null; btn(r, itemSprite(id, me.cls), itemName(id, me.cls), sub, Lc_sel() === id, () => { G.local.sel = id; sendAction({ t: 'sel', item: id }); });
-      if (!G.favs) G.favs = loadFavs(); const star = document.createElement('span'); star.className = 'fav' + (G.favs.has(id) ? ' on' : ''); star.textContent = G.favs.has(id) ? '\u2605' : '\u2606'; star.title = 'FAVORITE: THE SCROLL WHEEL ONLY STEPS THROUGH FAVORITES'; star.onclick = (ev) => { ev.stopPropagation(); toggleFav(id); sfx('menu'); renderBag(); }; r.lastChild.appendChild(star); }
+      const favs = myFavs(); const star = document.createElement('span'); star.className = 'fav' + (favs.has(id) ? ' on' : ''); star.textContent = favs.has(id) ? '\u2605' : '\u2606'; star.title = 'FAVORITE: THE SCROLL WHEEL ONLY STEPS THROUGH FAVORITES'; star.onclick = (ev) => { ev.stopPropagation(); toggleFav(id); sfx('menu'); renderBag(); }; r.lastChild.appendChild(star); }
     const n = document.createElement('small'); n.className = 'favnote'; n.textContent = 'STAR YOUR FAVORITES: THE WHEEL STEPS THROUGH THEM, KEYS 1-4 PICK THEM, Q + WHEEL STEPS THROUGH EVERYTHING'; body.appendChild(n); }
   const ups = []; if ((me.maxArrows || ARROWS_START) > ARROWS_START) ups.push(['quiver', itemName('quiver', me.cls), 'HOLDS ' + me.maxArrows]);
   if (me.items.loaded) ups.push(['scroll', itemName('loadedshot', me.cls), 'HOLD THE ITEM BUTTON WITH THE BOW']);

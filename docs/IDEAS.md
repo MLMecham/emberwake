@@ -6,7 +6,7 @@ Not built yet. Parked here so they don't get lost. Newest at the bottom.
 - Built: the TEST ZONE, the enemy spawner and the boss-room warps (pause menu, debug on). Add more test strips as new mechanics arrive.
 
 ## Items to place
-- **Gale Cloak** (fly for 4 s over water, lava, pits and vents; walls still stop you). Built, but not in the world yet. Where should it come from? Maybe a late dungeon or a hard optional grotto.
+- **Gale Cloak** (fly for 4 s over water, lava, pits and vents; outdoors and in tall rooms it lifts you a level, over hedges, rocks and trees). Built, but not in the world yet. Where should it come from? Maybe a late dungeon or a hard optional grotto.
 - **Skeleton Key** (every lock, no keys used). Built, but not in the world yet. A post-game reward, or the prize for finding every secret?
 
 ## Combat
@@ -42,7 +42,7 @@ Not built yet. Parked here so they don't get lost. Newest at the bottom.
 
 ## World
 - **Test the darkness.** Play the dark rooms (Starless Deep) with and without the candle and tune how much the light matters, now that the candle only flames every 4 s.
-- **More grottos and push-open tombs.** Extra hidden grottos, and graves or tombs you push aside to find stairs, so exploring pays off beyond bombing walls.
+- **Push-open tombs.** Graves or tombs you push aside to find stairs. (Grottos under hollow trees are built: spring, cache, hermit, root merchant. More kinds welcome: a thornling den, a gem game, a lore room.)
 - **Salt water.** Tiles marked `salty` never freeze (only the rough southern sea for now). Later: salty pools or a coastal dungeon where frost arrows don't work, so you need another way across.
 - Grottos you've already found still regrow their trees, just differently.
 
@@ -58,3 +58,13 @@ Not built yet. Parked here so they don't get lost. Newest at the bottom.
 
 ## Lore
 - The hollow king can offer one of the players a deal. if they accept they can kill their teamates for an alternate ending?
+
+## Open questions (from Mitch, to decide)
+- **Lakes: drain or dive?** Draining reuses the eye/tide machinery: a sluice eye on the shore of two lake regions drains them for good and shows a cave on the lakebed. It's cheap, but it's another eye puzzle. Diving would be a new item: swim under deep fresh water, with a blue underwater view and caves under the surface. It's more novel, but it would be the fourth way across water (raft, frost arrows, cloak). Leaning: drain now, dive later if a water dungeon wants it.
+- **Shield techniques.** The shield rises on its own when you stand still. Ideas, best first:
+  - (1) **Perfect block:** a shot that hits in the first moment your shield is up bounces back at the thrower. It reflects spears and thornseer seeds.
+  - (2) **Taunt**, a co-op scroll: Shift + three quick clicks with the shield up bangs blade on shield. Every foe within 8 tiles comes for you for 5 s, and you take 25% less damage while it lasts. Mitch's version used 5 clicks; fewer is easier.
+  - (3) **Cover:** a raised shield also stops shots aimed at a friend standing right behind you.
+- **Story mechanic: EMBERS** (see docs/STORY.md). Hollow foes drop their ember when they fall. Take it within a few seconds or they stand back up. Embers rekindle Wardhold braziers (safe rooms and respawn points the Hollow won't enter) and, later, the Hearth.
+- **A hero's homing shot.** Homing works for hero projectiles too (`homing` on the projectile def). A "seeker" wand orb or scroll could use it.
+- **Elevation next steps.** Smooth ramps (not just steps), cliffs on the overworld, a mountain region with levels you climb, and ledges in dungeons. Enemies that climb steps. Arrows shot down from a ledge.

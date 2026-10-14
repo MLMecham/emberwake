@@ -29,3 +29,6 @@ defineProjectile({ id: 'forcebolt', spr: 'forcebolt', spd: 9, dmg: 0.5, sc: 0.7,
 defineProjectile({ id: 'lance', spr: 'beam', spd: 22, dmg: 3, sc: 1.1, player: true, pierce: true, pierceShield: true, stun: 2, range: 10 }); // Lightning Lance: through everything in a line
 defineProjectile({ id: 'rodbolt', spr: 'magic', spd: 8, dmg: 3, player: true });
 defineProjectile({ id: 'thunder', spr: 'beam', spd: 14, dmg: 3, sc: 0.9, player: true, pierce: true, pierceShield: true, endFx: 'boom' });
+// the Thornseer's seed (enemies/thornling.js): slow, and it HOMES: it turns toward the nearest hero (homing: radians a second)
+// after a short delay. Outrun it around a corner, let it hit a wall, or block it with your shield.
+defineProjectile({ id: 'seed', spr: 'seedwisp', spd: 3.3, dmg: 1, sc: 0.55, blockable: true, range: 15, homing: 1.9, homeDelay: 0.25 });

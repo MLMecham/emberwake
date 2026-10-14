@@ -9,15 +9,21 @@ const AI = {
     if (e.tm <= 0) { e.tm = 0.8 + Math.random() * 0.6; e.f = p && Math.random() < 0.7 ? Math.atan2(p.y - e.y, p.x - e.x) + (Math.random() - 0.5) : Math.random() * TAU; e.hop = 0.4; }
     if (e.hop > 0) { e.hop -= dt; sim.moveEnt(e, Math.cos(e.f) * spd * 2 * dt, Math.sin(e.f) * spd * 2 * dt, def); }
   },
-  // walks in straight lines, stops and fires `proj` at nearby heroes
-  shooter(proj) {
+  // walks in straight lines, stops and fires `proj` at nearby heroes. opt.pair: two side by side (the Briarback's double spear)
+  shooter(proj, opt) {
+    const pair = opt && opt.pair;
     return function (sim, e, dt, { p, spd, def }) {
       if (e.st === 0) {
         if (sim.moveEnt(e, Math.cos(e.f) * spd * dt, Math.sin(e.f) * spd * dt, def) || e.tm <= 0) {
           e.tm = 1 + Math.random() * 1.5; e.f = (Math.floor(Math.random() * 4)) * Math.PI / 2;
           if (p && dist2(p.x, p.y, e.x, e.y) < 64 && Math.random() < 0.55) { e.st = 1; e.tm = 0.5; e.f = Math.atan2(p.y - e.y, p.x - e.x); }
         }
-      } else if (e.tm <= 0) { sim.fireProj(proj, e.lvl, e.x, e.y, e.f, 'e', null, { dmg: Content.projectiles[proj].dmg * e.dmgMul }); e.st = 0; e.tm = 0.6; sim.sfx('shoot', e.lvl, e.x, e.y); }
+      } else if (e.tm <= 0) {
+        const ex = { dmg: Content.projectiles[proj].dmg * e.dmgMul };
+        if (pair) for (const s of [-1, 1]) sim.fireProj(proj, e.lvl, e.x + Math.cos(e.f + Math.PI / 2) * pair * s, e.y + Math.sin(e.f + Math.PI / 2) * pair * s, e.f, 'e', null, ex); // two, a hand's width apart: sidestep both
+        else sim.fireProj(proj, e.lvl, e.x, e.y, e.f, 'e', null, ex);
+        e.st = 0; e.tm = 0.6; sim.sfx('shoot', e.lvl, e.x, e.y);
+      }
     };
   },
   // erratic flight, sometimes darting at heroes

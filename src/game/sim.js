@@ -49,7 +49,7 @@ const DUMMY_RESET = 3; // a training dummy heals (and gets its armor back) after
 const fmtDmg = (n) => String(Math.round(n * 100) / 100);
 const DISARM_STAGGER = 1.2;
 const KNIGHT_WINDUP = 0.45; // seconds a sword knight raises its blade before the counter lands (your cue to back off) // seconds a disarmed foe reels
-const TWIN_EYE_TIME = 1.2; // seconds a twin-eye gate's eye stays shut (content/gimmicks/twingate.js)
+const TWIN_EYE_TIME = 0.55; // seconds a twin-eye gate's eye stays shut (content/gimmicks/twingate.js)
 const GOURD_REGROW = 40; // seconds before a split gourd can grow back (and only with nobody within 6 tiles)
 // how many bombs you can carry: 1 without a bag, 8 with the Bramble Keep bag, 16 with the second one (sold in a grotto)
 const bombCap = (p) => p.items.bombbag2 ? 16 : p.items.bombbag ? 8 : 1;
@@ -66,7 +66,7 @@ const partyMul = (n) => PARTY_HP[Math.min(4, Math.max(1, n))];
 function newPlayer(id, name, color, cls) {
   return {
     id, name, color, cls: cls || 'sword', lvl: 'ow', x: 0, y: 0, a: 0, hp: 12, maxHp: 12, gems: 0, bombs: 0, maxBombs: 1, arrows: 0, maxArrows: ARROWS_START, sword: 0, armor: 0,
-    items: {}, potions: 0, alive: true, inv: 0, revive: 0, sel: 'boomerang', atk: 0, lastSeen: 0, warpIdx: 0, kills: 0,
+    items: {}, favs: [], potions: 0, alive: true, inv: 0, revive: 0, sel: 'boomerang', atk: 0, lastSeen: 0, warpIdx: 0, kills: 0,
   };
 }
 
@@ -99,7 +99,7 @@ class Sim {
     return p;
   }
   removePlayer(id) { const p = this.players[id]; if (!p) return; this.savedPlayers = this.savedPlayers || {}; this.savedPlayers[p.color] = this.playerSaveData(p); delete this.players[id]; this.ev({ t: 'msg', text: p.name + ' LEFT.' }); }
-  playerSaveData(p) { const o = {}; for (const k of ['cls', 'lvl', 'x', 'y', 'a', 'hp', 'maxHp', 'gems', 'bombs', 'maxBombs', 'arrows', 'maxArrows', 'swordMax', 'armorMax', 'arrowType', 'wandEl', 'sword', 'armor', 'items', 'potions', 'sel']) o[k] = p[k]; o.alive = true; if (o.hp <= 0) o.hp = 12; return o; }
+  playerSaveData(p) { const o = {}; for (const k of ['cls', 'lvl', 'x', 'y', 'a', 'hp', 'maxHp', 'gems', 'bombs', 'maxBombs', 'arrows', 'maxArrows', 'swordMax', 'armorMax', 'arrowType', 'wandEl', 'sword', 'armor', 'items', 'favs', 'potions', 'sel']) o[k] = p[k]; o.alive = true; if (o.hp <= 0) o.hp = 12; return o; }
   ev(e) { this.events.push(e); }
   sfx(s, lvl, x, y) { this.ev({ t: 'sfx', s, lvl, x, y }); }
   msg(text, pid) { this.ev({ t: 'msg', text, pid }); }
@@ -162,7 +162,7 @@ class Sim {
   onPlayerState(id, s) {
     const p = this.players[id]; if (!p) return;
     if (s.lvl !== p.lvl) return; // ignore stale states after teleport
-    p.x = s.x; p.y = s.y; p.a = s.a; p.atk = s.atk || 0; p.lastSeen = this.time; p.sel = s.sel || p.sel;
+    p.x = s.x; p.y = s.y; p.z = +s.z || 0; p.a = s.a; p.atk = s.atk || 0; p.lastSeen = this.time; p.sel = s.sel || p.sel;
   }
   onAction(id, a) {
     const p = this.players[id]; if (!p) return;
@@ -177,6 +177,7 @@ class Sim {
       case 'unlock': this.tryUnlock(p, a.idx); break;
       case 'revive': this.tryRevive(p); break;
       case 'sel': if (bItems().some(d => d.id === a.item)) p.sel = a.item; break;
+      case 'fav': { if (!bItems().some(d => d.id === a.item)) break; const f = p.favs = (p.favs || []).filter(x => x !== a.item); if (a.on) f.push(a.item); break; } // favorites live on the hero, so each save has its own
       case 'hazard': this.hurtPlayer(p, 1, null); break;
       case 'fall': { // fell into a pit: lose a heart, go back to the last safe spot (sent by the client, sanity-checked)
         if (this.time - (p.fellAt || -9) < 0.8) break; p.fellAt = this.time;
@@ -319,6 +320,7 @@ class Sim {
       this.updateBackswing(p); p.maxBombs = bombCap(p); if (p.bombs > p.maxBombs) p.bombs = p.maxBombs;
       if (p.dbg) { p.arrows = Math.max(p.arrows, p.maxArrows || ARROWS_START); p.bombs = Math.max(p.bombs, p.maxBombs); p.items.bombs = true; p.potions = 2; p.items.potion = true; p.gems = Math.max(p.gems, 999); } // debug: never run out
       const t = L.get(Math.floor(p.x), Math.floor(p.y)); const ti = TINFO[t]; const boots = !!p.items.magmaboots;
+      if (ti.heal && p.hp < p.maxHp && this.time >= (p.healNext || 0)) { p.healNext = this.time + 0.35; this.heal(p, 1); if (p.hp >= p.maxHp) this.sfx('heart', p.lvl, p.x, p.y); } // a warm spring (content/grottos.js)
       if (p.inv <= 0 && !this.flying(p) && ((ti.hurt && !(boots && ti.lava)) || (ti.vent && this.ventPhase() === 2 && !boots))) this.hurtPlayer(p, 1, null); // fliers are above it all
       p.swordMax = Math.max(p.swordMax || 0, p.sword); p.armorMax = Math.max(p.armorMax || 0, p.armor); // best gear ever owned (the inventory lets you wear less)
       // pickups & shop
@@ -402,6 +404,7 @@ class Sim {
       e.maxHp = e.hp; g.ents.push(e);
     }
     if (L.kind === 'dungeon' || L.kind === 'tunnel') this.roomStatics(L, room, key, false);
+    if (room.miniboss && g.ents.length && this.baitBoth(L, room, key)) this.enrageGroup(g); // they remember who robbed them
     if (!g.ents.length) this.groupCleared(g, true);
   }
   roomStatics(L, room, key, cleared) {
@@ -409,7 +412,7 @@ class Sim {
     if (room.item && !this.team.taken[key + ':item']) {
       if (!this.ents.find(e => e.tk === key + ':item')) this.spawn({ k: 'pick', lvl: L.id, x: room.rx * DSX + 6.5, y: room.ry * DSY + 3.5, item: room.item, tk: key + ':item', perm: true, spr: itemSprite(room.item), sc: 0.6, z: 0.35, team: true });
     }
-    (room.stash || []).forEach((s, i) => { const tk = key + ':stash' + i; if (!this.team.taken[tk] && !this.ents.find(e => e.tk === tk)) this.spawn({ k: 'pick', lvl: L.id, x: room.rx * DSX + s.x, y: room.ry * DSY + s.y, item: s.item, tk, perm: true, spr: itemSprite(s.item), sc: 0.55, z: 0.15, team: true }); }); // hidden treasures (world.js bossEyeAlcove)
+    (room.stash || []).forEach((s, i) => { const tk = key + ':stash' + i; if (!this.team.taken[tk] && !this.ents.find(e => e.tk === tk)) this.spawn({ k: 'pick', lvl: L.id, x: room.rx * DSX + s.x, y: room.ry * DSY + s.y, item: s.item, tk, perm: true, spr: itemSprite(s.item), sc: 0.55, z: 0.15, team: true, bait: s.bait, g: key }); }); // hidden treasures (world.js bossEyeAlcove); bait: the wyrm arena's corner gems
     if (room.looseKey && !this.team.taken[key + ':lkey'] && !this.ents.find(e => e.tk === key + ':lkey')) { // a key waiting somewhere awkward (gimmick intro rooms)
       this.spawn({ k: 'pick', lvl: L.id, x: room.rx * DSX + room.looseKey[0], y: room.ry * DSY + room.looseKey[1], item: 'key', tk: key + ':lkey', perm: true, spr: itemSprite('key'), sc: 0.55, z: 0.1, team: true });
     }
@@ -423,6 +426,7 @@ class Sim {
     if (room.compass) drop('compass', 1);
     if (room.boss) { drop('hcont', -1.5); if (L.dnum <= 8) drop('shard', 0); const bd = (Content.dungeons[L.dnum] || {}).bossDrop; if (bd) drop(bd, 0); }
     if (room.reward) drop(room.reward, 0); // hidden room treasure
+    for (const [item, dx] of room.rewards || []) drop(item, dx); // several prizes at once (the wyrm arena)
   }
   updateGroups(dt, plist) {
     for (const k in this.groups) {
@@ -731,6 +735,7 @@ class Sim {
       if (this.damageEnemy(e, POMMEL_DMG, p, { pid: p.id, kbMul: 0.6 }) && !def.boss && !e.dead) { e.stun = Math.max(e.stun || 0, POMMEL_STUN); e.stunFrom = this.time; }
     }
     for (const d of [0.6, 1.1]) this.breakGourd(L, p.x + Math.cos(p.a) * d, p.y + Math.sin(p.a) * d);
+    for (const d of [0.7, 1.2]) if (this.openHollowTree(L, p.x + Math.cos(p.a) * d, p.y + Math.sin(p.a) * d)) hit = true; // knock on a hollow tree
     this.sfx(hit ? 'pommel' : 'swing', p.lvl, p.x, p.y);
   }
   // Every third sword hit in a chain (hits less than CHAIN_GAP apart) readies a backswing. It fires on the first hit that
@@ -767,8 +772,18 @@ class Sim {
     else if (a.slot === 'wand') p.wandEl = ['plain', 'fire', 'thunder'].includes(a.kind) ? a.kind : 'plain'; // the magic wand's element (items/rod.js)
     else if (a.slot === 'arrows') p.arrowType = ['plain', 'frost', 'silver'].includes(a.kind) ? a.kind : (a.plain ? 'plain' : 'frost');
   }
+  // HOMING shots (projectile def homing: turn rate in radians a second) bend toward the nearest target within 12 tiles:
+  // a hero for an enemy's shot, a foe for a hero's
+  steerProj(e, def, dt) {
+    let best = null, bd = 144;
+    if (e.owner === 'e') { for (const p of Object.values(this.players)) if (p.alive && p.lvl === e.lvl) { const d = dist2(p.x, p.y, e.x, e.y); if (d < bd) { bd = d; best = p; } } }
+    else for (const o of this.ents) if (o.k === 'en' && o.lvl === e.lvl && !o.dead && !o.dormant) { const d = dist2(o.x, o.y, e.x, e.y); if (d < bd) { bd = d; best = o; } }
+    if (!best) return; const sp = Math.hypot(e.vx, e.vy); const cur = Math.atan2(e.vy, e.vx);
+    const na = cur + clamp(angDiff(cur, Math.atan2(best.y - e.y, best.x - e.x)), -def.homing * dt, def.homing * dt); e.vx = Math.cos(na) * sp; e.vy = Math.sin(na) * sp;
+  }
   updateProj(e, dt) {
     const L = this.W.levels[e.lvl]; const def = Content.projectiles[e.type];
+    if (def.homing && e.t >= (def.homeDelay || 0)) this.steerProj(e, def, dt);
     let nx = e.x + e.vx * dt, ny = e.y + e.vy * dt; e.life -= dt;
     // sword beams and arrows glance off a door frame instead of breaking on it: if only one axis is blocked and the
     // shot is mostly travelling along the other, it straightens out and carries on through the doorway
@@ -830,6 +845,13 @@ class Sim {
     const i = L.idx(Math.floor(x), Math.floor(y)); const ti = TINFO[L.tiles[i]];
     if (ti && ti.cuttable) { this.setTile(L.id, i, TL[ti.opensTo] != null ? TL[ti.opensTo] : TL.DFLOOR); this.spawn({ k: 'fx', lvl: L.id, x: Math.floor(x) + 0.5, y: Math.floor(y) + 0.5, spr: 'puff', life: 0.3, sc: 0.9 }); this.sfx('hit', L.id); }
   }
+  // A HOLLOW TREE (content/grottos.js) splits open on the stair down to its grotto: a pommel strike or a bomb does it.
+  openHollowTree(L, x, y) {
+    const i = L.idx(Math.floor(x), Math.floor(y)); if (PR.HOLLOWTREE == null || L.props[i] !== PR.HOLLOWTREE) return false;
+    const rev = L.secretReveal[i]; this.setTile(L.id, i, rev ? rev.tile : null, 0);
+    this.spawn({ k: 'fx', lvl: L.id, x: Math.floor(x) + 0.5, y: Math.floor(y) + 0.5, spr: 'boom', life: 0.4, sc: 1.2, z: 0.3 }); this.sfx('secret', L.id);
+    return true;
+  }
   burnAt(L, x, y) {
     const tx = Math.floor(x), ty = Math.floor(y);
     for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
@@ -869,6 +891,19 @@ class Sim {
     if (e.tk) this.team.taken[e.tk] = true;
     e.dead = true;
     this.giveItem(p, e.item, false);
+    if (e.bait) this.baitTaken(e);
+  }
+  // THE WYRM ARENA'S BAIT (world.js genTunnel): gems and a heart at each end. Take from BOTH ends while the pair lives and they
+  // both fly into a rage (enemies/wyrm.js). They remember: if you wipe and come back, they start out enraged.
+  baitBoth(L, room, key) { const sides = new Set(); (room.stash || []).forEach((s, i) => { if (s.bait && this.team.taken[key + ':stash' + i]) sides.add(s.bait); }); return sides.size >= 2; }
+  baitTaken(e) {
+    const g = this.groups[e.g]; if (!g || g.cleared) return; const L = this.W.levels[g.lvl];
+    if (!this.baitBoth(L, g.room, g.key)) { if (!g.baitWarned) { g.baitWarned = true; this.sfx('growl', L.id, e.x, e.y); this.msg('THE WYRMS WATCH YOU...'); } return; }
+    this.enrageGroup(g);
+  }
+  enrageGroup(g) {
+    let any = false; for (const en of g.ents) { if (en.dead || en.enraged) continue; any = true; en.enraged = true; en.maxHp = Math.round(en.maxHp * 1.5); en.hp = en.maxHp; en.tm = 1; en.chargeIn = 1.5 + Math.random(); }
+    if (any) { const L = this.W.levels[g.lvl]; const e0 = g.ents.find(en => !en.dead); this.sfx('rage', L.id, e0.x, e0.y); this.ev({ t: 'shake', lvl: L.id, x: e0.x, y: e0.y }); this.msg('THIEF! THE WYRMS ARE ENRAGED!'); }
   }
   // Runs the item's give(). Team items run it for every player, and the "you got it" banner shows once.
   giveItem(p, id, fromShop) {
@@ -911,8 +946,8 @@ class Sim {
   snapshotFor(pid) {
     const p = this.players[pid]; if (!p) return null;
     const en = []; for (const e of this.ents) if (e.lvl === p.lvl) en.push(this.entView(e, p));
-    const pl = []; for (const o of Object.values(this.players)) pl.push([o.id, o.lvl, Math.round(o.x * 100) / 100, Math.round(o.y * 100) / 100, Math.round(o.a * 100) / 100, o.color, o.armor, o.cls, o.alive ? 1 : 0, o.atk, o.name, Math.round(o.revive / REVIVE_TIME * 100) / 100, o.hp, o.maxHp, o.reviver || 0]);
-    const me = {}; for (const k of ['lvl', 'hp', 'maxHp', 'gems', 'bombs', 'maxBombs', 'arrows', 'maxArrows', 'swordMax', 'armorMax', 'arrowType', 'wandEl', 'sword', 'armor', 'items', 'potions', 'alive', 'cls', 'sel', 'color', 'name', 'dbg', 'god']) me[k] = p[k]; me.spellCd = Math.max(0, Math.round(((p.spellReady || 0) - this.time) * 10) / 10); me.chill = p.chill > 0 ? 1 : 0; me.poison = p.poisonTicks > 0 ? p.poisonTicks : 0; me.fly = this.flying(p) ? Math.round((p.flyUntil - this.time) * 10) / 10 : 0; me.respawnIn = p.alive ? 0 : Math.max(0, Math.ceil(RESPAWN_WAIT - (this.time - (p.downAt || 0))));
+    const pl = []; for (const o of Object.values(this.players)) pl.push([o.id, o.lvl, Math.round(o.x * 100) / 100, Math.round(o.y * 100) / 100, Math.round(o.a * 100) / 100, o.color, o.armor, o.cls, o.alive ? 1 : 0, o.atk, o.name, Math.round(o.revive / REVIVE_TIME * 100) / 100, o.hp, o.maxHp, o.reviver || 0, o.z || 0]); // [15] z: feet height (ledges, the cloak's lift)
+    const me = {}; for (const k of ['lvl', 'hp', 'maxHp', 'gems', 'bombs', 'maxBombs', 'arrows', 'maxArrows', 'swordMax', 'armorMax', 'arrowType', 'wandEl', 'sword', 'armor', 'items', 'favs', 'potions', 'alive', 'cls', 'sel', 'color', 'name', 'dbg', 'god']) me[k] = p[k]; me.spellCd = Math.max(0, Math.round(((p.spellReady || 0) - this.time) * 10) / 10); me.chill = p.chill > 0 ? 1 : 0; me.poison = p.poisonTicks > 0 ? p.poisonTicks : 0; me.fly = this.flying(p) ? Math.round((p.flyUntil - this.time) * 10) / 10 : 0; me.respawnIn = p.alive ? 0 : Math.max(0, Math.ceil(RESPAWN_WAIT - (this.time - (p.downAt || 0))));
     return { t: 's', paused: !!this.paused, pausedBy: this.pausedBy, me, pl, en, team: { keys: this.team.keys, maps: this.team.maps, comps: this.team.comps, shards: this.team.shards, done: this.team.done, relics: this.team.relics }, vp: this.ventPhase(), rg: this.rigCodes(p.lvl), fz: this.frozenList(p.lvl), mv: this.modVer, over: this.over > 0 };
   }
   // ---- save ----
@@ -930,6 +965,7 @@ class Sim {
     Object.assign(this.team, s.team); this.team.relics = this.team.relics || []; this.team.clearedAt = {}; this.mods = s.mods || {}; this.savedPlayers = s.players || {};
     for (const lvl in this.mods) { const L = this.W.levels[lvl]; if (L && L.gourds) for (const i in this.mods[lvl]) if (L.gourds[i] != null && this.mods[lvl][i][1] !== L.gourds[i]) delete this.mods[lvl][i]; } // split gourds grow back
     for (const lvl in this.mods) { const L = this.W.levels[lvl]; if (!L) continue; for (const i in this.mods[lvl]) { const [t, pr] = this.mods[lvl][i]; L.tiles[i] = t; L.props[i] = pr; } }
+    for (const L of Object.values(this.W.levels)) for (const r of Object.values(L.rooms || {})) for (const [a, b] of (r && r.legacyTk) || []) if (this.team.taken[L.id + ':' + a]) this.team.taken[L.id + ':' + b] = true; // prizes that moved (the wyrm arena)
     // never restore closed shutters
     for (const lvl in this.mods) for (const i in this.mods[lvl]) if (this.mods[lvl][i][0] === TL.SHUTTER) { this.W.levels[lvl].tiles[i] = TL.OPENDOOR; this.mods[lvl][i][0] = TL.OPENDOOR; }
   }

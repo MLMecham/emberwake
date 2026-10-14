@@ -50,6 +50,7 @@ function solveDungeon(D) {
   }
   return reached.size === Object.keys(rooms).length;
 }
+let wallCaves = 0;
 for (let s = 1; s <= SEEDS; s++) {
   const seed = s === 1 ? 7319 : s * 7919; const W = genWorld(seed, 'rogue'); const L = W.levels.ow;
   for (let d = 1; d <= NDUNGEONS(); d++) { const D = W.levels['d' + d]; __ok(solveDungeon(D), 'seed ' + seed + ': dungeon ' + d + ' has unreachable rooms'); __ok(!!W.dungeons[d], 'seed ' + seed + ': dungeon ' + d + ' gate missing'); }
@@ -73,7 +74,12 @@ for (let s = 1; s <= SEEDS; s++) {
     else __ok(!!seen[gi], 'seed ' + seed + ': gate ' + d + ' unreachable'); }
   const g6 = W.dungeons[6]; __ok(g6 && !!seen[(g6.y + 1) * L.w + g6.x], 'seed ' + seed + ': gate 6 (the raft) must be reachable on foot');
   for (const r of L.regions) for (const f of r.features) if (f.type === 'cave' && f.secret !== 'bush') __ok(!!seen[(f.y + 1) * L.w + f.x], 'seed ' + seed + ': cave "' + f.kind + '" unreachable');
+  __ok((L.grottos || []).length === Content.grottoKinds.length, 'seed ' + seed + ': one grotto of each kind (' + (L.grottos || []).length + ')');
+  for (const g of L.grottos || []) __ok(L.props[L.idx(g.x, g.y)] === PR.HOLLOWTREE && L.portals[L.idx(g.x, g.y)].to === g.id && !!seen[(g.y + 1) * L.w + g.x] && !!W.levels[g.id], 'seed ' + seed + ': grotto ' + g.kind + ' under a reachable hollow tree');
+  // some open caves are dug into the north wall, with solid rock behind them
+  for (const r of L.regions) for (const f of r.features) if (f.type === 'cave' && f.y === regionInterior(r).y0) { wallCaves++; __ok([-1, 0, 1].every(dx => TINFO[L.get(f.x + dx, f.y - 1)].solid) && !!L.portals[L.idx(f.x, f.y)], 'seed ' + seed + ': wall cave "' + f.kind + '" has solid rock behind it'); }
 }
+__ok(wallCaves >= SEEDS, 'some caves are dug into the wall (' + wallCaves + ' over ' + SEEDS + ' lands)');
 
 // ---------- 3. simulation smoke tests ----------
 function freshSim() {
@@ -720,10 +726,16 @@ attempt('frontier tunnels', () => {
     const themed = (r) => { let n = 0, all = 0; for (let y = r.ry * DSY; y <= r.ry * DSY + DSY; y++) for (let x = r.rx * DSX; x <= r.rx * DSX + DSX; x++) { const t = T.get(x, y); all++; if ([TL.ICEWALL, TL.SNOW, TL.ICE, TL.BASALT, TL.ASH, TL.LAVA].includes(t)) n++; } return n / all; };
     __ok(themed(rooms[rooms.length - 1]) > themed(rooms[1]) + 0.3, b + ': the far end is much ' + (b === 'snow' ? 'colder' : 'hotter') + ' (' + themed(rooms[1]).toFixed(2) + ' -> ' + themed(rooms[rooms.length - 1]).toFixed(2) + ')');
     __ok(Object.values(T.rooms).filter(r => r.side && !r.wing).every(r => r.reward), b + ': every side room guards a prize');
-    const mbr = Object.values(T.rooms).find(r => r.miniboss); __ok(mbr && mbr.enemies.length === 2 && mbr.enemies.every(t => enemyDef(t).boss && /^wyrm_elder/.test(t)) && mbr.reward === 'hpiece', b + ': a pair of elder wyrmlings guards a heart piece');
+    const mbr = Object.values(T.rooms).find(r => r.miniboss); __ok(mbr && mbr.enemies.length === 2 && mbr.enemies.every(t => enemyDef(t).boss && /^wyrm_elder/.test(t)) && mbr.rewards.some(r => r[0] === 'hpiece'), b + ': a pair of elder wyrmlings guards a heart piece');
     __ok(Object.values(T.rooms).every(r => r.enemies.every(t => t !== 'skeleton' && t !== 'slime')), b + ': skeletons here are always armored');
-    sim.teleport(p, T.id, mbr.rx * DSX + 1.5, mbr.ry * DSY + 4.5, 0); sim.tick(1 / 60); __ok(sim.ents.filter(e => e.k === 'en' && e.lvl === T.id && !e.dead && enemyDef(e.type).boss).length === 2, b + ': both wyrmlings show up together');
+    sim.teleport(p, T.id, roomBounds(T, mbr).x0 + 2.5, mbr.ry * DSY + 2.5, 0); sim.tick(1 / 60); __ok(sim.ents.filter(e => e.k === 'en' && e.lvl === T.id && !e.dead && enemyDef(e.type).boss).length === 2, b + ': both wyrmlings show up together');
+    const scroll = b === 'snow' ? 'tripleshot' : 'quiver50'; __ok(!sim.ents.some(e => e.k === 'pick' && e.lvl === T.id && (e.item === scroll || e.item === 'gems100' || e.item === 'hpiece')), b + ': no prize while the wyrms live');
+    __ok(sim.ents.filter(e => e.k === 'pick' && e.lvl === T.id && e.bait).length === 6, b + ': bait: gems in four corners and two hearts');
     for (const e of sim.ents) if (e.k === 'en' && e.lvl === T.id) e.dead = true; sim.tick(1 / 60); sim.tick(1 / 60); __ok(sim.ents.some(e => e.k === 'pick' && e.item === 'hpiece' && e.lvl === T.id), b + ': beating them drops the heart piece');
+    __ok(sim.ents.some(e => e.k === 'pick' && e.item === scroll && e.lvl === T.id) && sim.ents.some(e => e.k === 'pick' && e.item === 'gems100' && e.lvl === T.id), b + ': and the scroll and the purse');
+    // one big arena: no wall between the two cells, and nothing solid along the middle row from end to end
+    const bd = roomBounds(T, mbr); __ok(bd.x1 - bd.x0 === 23, b + ': the arena is two rooms wide'); let open = true; for (let x = bd.x0; x < bd.x1; x++) for (const y of [2, 4, 6]) if (TINFO[T.get(x, mbr.ry * DSY + y)].solid) open = false; __ok(open, b + ': no wall splits the arena');
+    __ok(dungeonRoomAt(T, bd.x0 + 0.5, mbr.ry * DSY + 4.5) === mbr && dungeonRoomAt(T, bd.x1 - 0.5, mbr.ry * DSY + 4.5) === mbr, b + ': both halves are the same room');
     // walking in wakes a room's foes
     const mid = rooms[6]; sim.teleport(p, T.id, mid.rx * DSX + 6.5, DSY + 4.5, 0); sim.tick(1 / 60); __ok(sim.ents.some(e => e.k === 'en' && e.lvl === T.id && !e.dead), b + ': foes in the rooms');
   }
@@ -733,7 +745,7 @@ attempt('twin-eye gates', () => {
   for (const b of ['snow', 'ash']) {
     const T = sim.W.levels['t' + b]; const g = T.twinGates[0]; const [e1, e2] = g.eyes; const gx = g.gate % T.w, gy = Math.floor(g.gate / T.w);
     __ok(T.tiles[g.gate] === TL.TWINGATE && g.eyes.every(i => T.tiles[i] === TL.EYE), b + ': a closed gate between two eyes');
-    const wing = Object.values(T.rooms).filter(r => r.wing); __ok(wing.length === 2 && wing.some(r => r.miniboss) && wing.some(r => (r.stash || []).length >= 2), b + ': behind it the wyrm pair and a loot room');
+    const wing = Object.values(T.rooms).filter(r => r.wing); __ok(wing.length === 2 && wing.some(r => r.miniboss && r.cw === 2) && wing.some(r => r.mergeInto != null), b + ': behind it the wyrm pair, in one arena two rooms wide');
     sim.teleport(p, T.id, gx + 0.5, gy + 3.5, -Math.PI / 2);
     sim.hitEye(T, e1, false); __ok(T.tiles[g.gate] === TL.TWINGATE_HALF, b + ': one eye: half way up');
     sim.time += TWIN_EYE_TIME + 0.1; sim.updateTempTiles(); sim.updateTwinGates(); __ok(T.tiles[e1] === TL.EYE && T.tiles[g.gate] === TL.TWINGATE, b + ': too slow: the eye opens and the gate drops');
@@ -745,6 +757,68 @@ attempt('twin-eye gates', () => {
   const sim2 = freshSim(); const T = sim2.W.levels.tsnow; const g = T.twinGates[0];
   sim2.hitEye(T, g.eyes[0], true); sim2.time += 10; sim2.updateTempTiles(); sim2.updateTwinGates(); __ok(T.tiles[g.eyes[0]] === TL.EYE_SHUT && T.tiles[g.gate] === TL.TWINGATE_HALF, 'a bomb arrow keeps one eye shut (gate half up)');
   sim2.hitEye(T, g.eyes[1], false); __ok(T.tiles[g.gate] === TL.CFLOOR, 'then one arrow in the other opens it');
+});
+attempt('wyrm arena bait', () => {
+  const sim = freshSim(); const p = sim.players.p1; p.god = true; const T = sim.W.levels.tash; const mb = Object.values(T.rooms).find(r => r.miniboss); const bd = roomBounds(T, mb);
+  sim.teleport(p, T.id, (bd.x0 + bd.x1) / 2, mb.ry * DSY + 4.5, 0); sim.tick(1 / 60);
+  const ws = () => sim.ents.filter(e => e.k === 'en' && e.lvl === T.id && !e.dead && e.type === 'wyrm_elder'); __ok(ws().length === 2, 'two wyrms in the arena');
+  for (let k = 0; k < 600; k++) { for (const w of ws()) { w.chargeIn = 99; w.tm = 99; } sim.tick(1 / 60); }
+  const xs = ws().map(w => w.x).sort((a, c) => a - c); __ok(xs[0] < bd.x0 + 7 && xs[1] > bd.x1 - 7, 'they hold the far ends of the wide arena (' + xs.map(x => (x - bd.x0).toFixed(1)).join(', ') + ')');
+  const bait = (side) => sim.ents.find(e => e.k === 'pick' && e.lvl === T.id && e.bait === side && !e.dead);
+  const a = bait('a'); sim.pickup(p, a); __ok(!ws().some(w => w.enraged), 'robbing one end: they only watch');
+  const a2 = bait('a'); sim.pickup(p, a2); __ok(!ws().some(w => w.enraged), 'still only one end');
+  const hp0 = ws()[0].maxHp; sim.pickup(p, bait('b')); __ok(ws().length === 2 && ws().every(w => w.enraged) && ws()[0].maxHp > hp0, 'robbing both ends: both enraged, and tougher');
+  __ok(enemyDef('wyrm_elder').sprFor(ws()[0]) === 'wyrm_elder_rage' && !!SPR.wyrm_elder_rage, 'enraged ones look it');
+  // they remember after a wipe
+  sim.respawnAll(); sim.teleport(p, T.id, (bd.x0 + bd.x1) / 2, mb.ry * DSY + 4.5, 0); sim.tick(1 / 60); __ok(ws().length === 2 && ws().every(w => w.enraged), 'after a wipe they come back enraged');
+  // saves from before the merge: the moved loot stays taken
+  const sim2 = freshSim(); const save = sim2.makeSave(); const loot = Object.values(T.rooms).find(r => r.mergeInto != null); save.team.taken['tash:' + loot.id + ':stash1'] = true;
+  const sim3 = new Sim(genWorld(save.seed, save.mode), save); __ok(sim3.team.taken['tash:' + mb.id + ':gems100'] === true, 'an old save that took the purse keeps it taken');
+});
+attempt('grottos under hollow trees', () => {
+  const sim = freshSim(); const p = sim.players.p1; p.items.pommel = true; const L = sim.W.levels.ow;
+  const g = L.grottos.find(g => g.kind === 'g_spring'); const i = L.idx(g.x, g.y);
+  sim.tryEnter(p, i); __ok(p.lvl === 'ow', 'a closed hollow tree is just a tree');
+  sim.teleport(p, 'ow', g.x + 0.5, g.y + 1.5, -Math.PI / 2); sim.pommelStrike(p, L); __ok(L.tiles[i] === TL.STAIRS && !L.props[i], 'a pommel strike splits it open on a stair');
+  __ok(sim.makeSave().mods.ow[i][0] === TL.STAIRS, 'and it stays open (saved)');
+  sim.tryEnter(p, i); __ok(p.lvl === g.id, 'down the stair into the grotto');
+  const G = sim.W.levels[g.id]; let sp = -1; for (let k = 0; k < G.tiles.length; k++) if (G.tiles[k] === TL.SPRING) { sp = k; break; } __ok(sp >= 0, 'the spring grotto has a spring');
+  p.maxHp = 12; p.hp = 4; p.x = sp % G.w + 0.5; p.y = Math.floor(sp / G.w) + 0.5; for (let k = 0; k < 400; k++) sim.tick(1 / 60); __ok(p.hp >= p.maxHp, 'standing in it heals you');
+  p.x = 6.5; p.y = G.h - 1.5; sim.tryExit(p); __ok(p.lvl === 'ow' && Math.abs(p.y - (g.y + 1.5)) < 0.01, 'out in front of the tree');
+  // a bomb works too
+  const h = L.grottos.find(g => g.kind === 'g_cache'); sim.spawn({ k: 'bomb', lvl: 'ow', x: h.x + 0.5, y: h.y + 1.3, fuse: 0 }); sim.tick(1 / 60); __ok(L.tiles[L.idx(h.x, h.y)] === TL.STAIRS, 'a bomb splits one open too');
+  __ok(sim.W.levels[L.grottos.find(g => g.kind === 'g_hermit').id].npcs[0].text && Content.lore.includes(sim.W.levels[L.grottos.find(g => g.kind === 'g_hermit').id].npcs[0].text), 'the hermit mutters a line of lore');
+});
+attempt('steps, ledges and the cloak lift', () => {
+  const W = genWorld(7319, 'adv'); const D = W.levels.dbg; const at = (t) => { for (let i = 0; i < D.tiles.length; i++) if (D.tiles[i] === t) return [i % D.w + 0.5, Math.floor(i / D.w) + 0.5]; };
+  const [s1x, s1y] = at(TL.STEP1), [s3x, s3y] = at(TL.STEP3), [lx, ly] = at(TL.LEDGE);
+  __ok(D.ceilH === 2 && skyRoom(D), 'the training room is two tiles tall');
+  __ok(heightAt(D, lx, ly) === 1 && heightAt(D, s1x, s1y) === 0.25, 'heights: a ledge is one tile up, the first step a quarter');
+  __ok(!D.solidAt(s1x, s1y, { z: 0 }) && D.solidAt(s3x, s3y, { z: 0 }) && !D.solidAt(s3x, s3y, { z: 0.5 }), 'you can step up a quarter at a time, not more');
+  __ok(D.solidAt(lx, ly) && !D.solidAt(lx, ly, { z: 0.75 }), 'the ledge is a wall from the floor, floor from the top step');
+  __ok(D.solidAt(0.5, 5.5, { high: true, fly: true }), 'flying high indoors: the room walls still reach the ceiling');
+  const O = W.levels.ow; let tw = -1, pk = -1; for (let i = 0; i < O.tiles.length; i++) { if (tw < 0 && O.tiles[i] === TL.TREEWALL) tw = i; if (pk < 0 && O.tiles[i] === TL.PEAKS) pk = i; }
+  const c = (i) => [i % O.w + 0.5, Math.floor(i / O.w) + 0.5];
+  __ok(O.solidAt(...c(tw)) && !O.solidAt(...c(tw), { high: true, fly: true }), 'outdoors, high on the cloak you sail over a hedge');
+  __ok(O.solidAt(...c(pk), { high: true, fly: true }), 'but not over the peaks');
+  let tree = -1; for (let i = 0; i < O.props.length; i++) if (O.props[i] === PR.TREE) { tree = i; break; } __ok(O.solidAt(...c(tree)) && !O.solidAt(...c(tree), { high: true, fly: true }), 'or over a tree');
+  __ok(!skyRoom(W.levels.d1) && skyRoom(O), 'dungeons are one tall: no lift there');
+});
+attempt('thorn-folk and homing seeds', () => {
+  const sim = freshSim(); const p = sim.players.p1; p.god = true; const L = sim.W.levels.dbg; sim.teleport(p, 'dbg', 18.5, 18.5, 0); sim.tick(1 / 60);
+  // a seed fired off to the side bends round toward the hero
+  const s = sim.fireProj('seed', 'dbg', 12.5, 18.5, -Math.PI / 2, 'e', null, {}); for (let k = 0; k < 90; k++) sim.tick(1 / 60);
+  __ok(s.vx > 0 && Math.abs(Math.atan2(s.vy, s.vx)) < 1.2, 'the seed turns toward you (' + Math.atan2(s.vy, s.vx).toFixed(2) + ')');
+  // a briarback throws two spears at once
+  const b = sim.spawn({ k: 'en', type: 'thornling_briar', lvl: 'dbg', x: 12.5, y: 18.5, hp: 4, maxHp: 4, f: 0, st: 1, tm: 0, stun: 0, hurt: 0, spawnFx: 0, dmgMul: 1 });
+  const before = sim.ents.filter(e => e.k === 'proj' && e.type === 'spear').length; sim.updateEnemy(b, 1 / 60); __ok(sim.ents.filter(e => e.k === 'proj' && e.type === 'spear').length - before === 2, 'a briarback throws two spears');
+  __ok(['thornling_briar', 'thornling_seer', 'thornling_nettle'].every(id => enemyDef(id).title && !enemyDef(id).boss), 'the kin have their own names');
+});
+attempt('favorites per save', () => {
+  const sim = freshSim(); const p = sim.players.p1; p.items.bow = true; p.items.bombs = true;
+  sim.onAction('p1', { t: 'fav', item: 'bow', on: true }); sim.onAction('p1', { t: 'fav', item: 'bombs', on: true }); sim.onAction('p1', { t: 'fav', item: 'bombs', on: false });
+  __ok(JSON.stringify(p.favs) === '["bow"]', 'favorites live on the hero'); const save = sim.makeSave(); __ok(JSON.stringify(save.players[p.color].favs) === '["bow"]', 'and are saved with them');
+  __ok(!(freshSim().players.p1.favs || []).length, 'a new game starts with none');
 });
 attempt('elder wyrmlings', () => {
   const sim = freshSim(); const p = sim.players.p1; p.god = false; p.hp = p.maxHp = 60; const T = sim.W.levels.tsnow; const mb = Object.values(T.rooms).find(r => r.miniboss);

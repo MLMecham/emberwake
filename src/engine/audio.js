@@ -57,6 +57,8 @@ function sfx(name, vol) {
     case 'heal': seq([523, 659, 784, 1047, 1319], 0.06, 'triangle', 0.15 * v); break;
     case 'stairs': seq([392, 349, 330, 294, 262], 0.06, 'square', 0.1 * v); break;
     case 'roar': tone(120, 0.5, 'sawtooth', 0.2 * v, 60); noise(0.4, 0.15 * v, 600); break;
+    case 'growl': tone(70, 0.7, 'sawtooth', 0.12 * v, 55); noise(0.6, 0.06 * v, 300); break; // a low warning rumble (the wyrm arena's bait)
+    case 'rage': tone(140, 0.8, 'sawtooth', 0.22 * v, 50); tone(95, 0.9, 'square', 0.12 * v, 40); noise(0.8, 0.2 * v, 500); break; // both wyrms enraged
     case 'whistle': seq([1047, 1175, 1319, 1568, 1319, 1568, 2093], 0.1, 'sine', 0.16 * v); break;
     case 'lowhp': tone(1760, 0.06, 'square', 0.05 * v); break;
     case 'text': tone(1200, 0.02, 'square', 0.04 * v); break;
