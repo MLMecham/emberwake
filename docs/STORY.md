@@ -60,6 +60,10 @@ Up here, a dead king rules through dead knights. The dragons hate him more than 
   - They hate people for the burning.
 - **Everything else** (slimes, bats, frogs, wolves) is neutral to kings and dragons alike. They remember who hunted them, and that was people.
 
+## The first old man
+- The old man who gives you your first sword sits on a door to the passage below: the one the hero came up. When the party first reaches 8 hearts, he is found dead in the dark, the passage behind him brought down on himself, a knight's helmet outside. They killed him and gave up.
+- His shield is the WARDHOLD SHIELD, with the same crest the knights carry. One old man, once, says: "THAT SHIELD... DON'T PITY HIM. HE CHOSE THE FIRST DOOR. HE KNEW." That's all anyone ever says. The old men are not mad hermits: they are the elderly who took the job of sitting on the doors.
+
 ## Threads to pull later (don't resolve them in a line of dialog)
 - **Our fathers.** (Said as "our", never "your": everyone below lost someone to the knights.)
   - He was a knight. One knight, somewhere late, carries a different crest or a dented shield. An old man says he "had kind hands. He still walks the north road. I don't wave anymore."

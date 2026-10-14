@@ -815,17 +815,33 @@ attempt('thorn-folk and homing seeds', () => {
   const before = sim.ents.filter(e => e.k === 'proj' && e.type === 'spear').length; sim.updateEnemy(b, 1 / 60); __ok(sim.ents.filter(e => e.k === 'proj' && e.type === 'spear').length - before === 2, 'a briarback throws two spears');
   __ok(['thornling_briar', 'thornling_seer', 'thornling_nettle'].every(id => enemyDef(id).title && !enemyDef(id).boss), 'the kin have their own names');
 });
-attempt('perfect block', () => {
-  const sim = freshSim(); const p = sim.players.p1; p.god = false; p.hp = p.maxHp = 40; sim.teleport(p, 'dbg', 22.5, 19.5, -Math.PI / 2); sim.tick(1 / 60);
-  const shoot = () => sim.fireProj('spear', 'dbg', 22.5, 16.5, Math.PI / 2, 'e', null, { dmg: 1 });
-  sim.onPlayerState('p1', { lvl: 'dbg', x: 22.5, y: 19.5, a: -Math.PI / 2, sh: 1 }); const s1 = shoot(); for (let k = 0; k < 40 && s1.owner === 'e' && !s1.dead; k++) sim.tick(1 / 60);
-  __ok(!s1.dead && s1.owner === 'p' && s1.vy < 0 && p.hp === 40, 'just after the shield comes up, a spear flies back');
-  sim.time += 1.2; const s2 = shoot(); for (let k = 0; k < 40 && !s2.dead; k++) sim.tick(1 / 60); __ok(s2.dead && s2.owner === 'e' && p.hp === 40, 'later it is only blocked');
-  p.items.mirrorguard = true; sim.onPlayerState('p1', { lvl: 'dbg', x: 22.5, y: 19.5, a: -Math.PI / 2, sh: 0 }); sim.onPlayerState('p1', { lvl: 'dbg', x: 22.5, y: 19.5, a: -Math.PI / 2, sh: 1 }); sim.time += 1.5;
-  const s3 = shoot(); for (let k = 0; k < 40 && s3.owner === 'e' && !s3.dead; k++) sim.tick(1 / 60); __ok(s3.owner === 'p', 'Mirror Guard: still reflecting 1.5 s in');
-  const e = sim.spawn({ k: 'en', type: 'thornling', lvl: 'dbg', x: 22.5, y: 15.5, hp: 2, maxHp: 2, f: 0, st: 0, tm: 99, stun: 99, hurt: 0, spawnFx: 0, dmgMul: 1 });
+attempt('the first old man and the Wardhold shield', () => {
+  const sim = freshSim(); const p = sim.players.p1; p.god = false; p.hp = p.maxHp = 40; const W = sim.W; const C = W.levels[W.startCave];
+  __ok(!!W.startCave && W.levels[W.startCave].caveKind === 'sword0' && C.tiles[C.idx(6, 1)] === TL.HATCH, 'the first cave has a plain hatch behind the old man');
+  const shoot = (type) => sim.fireProj(type || 'spear', 'dbg', 22.5, 16.5, Math.PI / 2, 'e', null, { dmg: 1 });
+  sim.teleport(p, 'dbg', 22.5, 19.5, -Math.PI / 2); sim.tick(1 / 60);
+  // a wooden shield only blocks
+  sim.onPlayerState('p1', { lvl: 'dbg', x: 22.5, y: 19.5, a: -Math.PI / 2, sh: 1 }); const s0 = shoot(); for (let k = 0; k < 40 && !s0.dead; k++) sim.tick(1 / 60); __ok(s0.dead && s0.owner === 'e' && p.hp === 40, 'the wooden shield just blocks');
+  // the old man falls once someone has 8 hearts and nobody is in his cave
+  p.maxHp = 32; sim.tick(1 / 60); __ok(sim.team.fallen && C.dark && C.tiles[C.idx(6, 1)] === TL.HATCH_CAVED && C.props[C.idx(6, 1)] === PR.RUBBLE, 'at 8 hearts: the passage is caved in and the cave is dark');
+  __ok(C.props[C.idx(3, 2)] === 0 && C.npcs[0].spr === 'oldman_fallen' && C.npcs[0].text === Content.fallen.text, 'the torches are out and he lies there');
+  const O = W.levels.ow; __ok(O.props.some(pr => pr === PR.HELM), 'a dented helmet outside');
+  const save = sim.makeSave(); const sim2 = new Sim(genWorld(save.seed, save.mode), save); __ok(sim2.team.fallen && sim2.W.levels[W.startCave].dark, 'it stays that way after loading');
+  sim.teleport(p, W.startCave, 6.5, 6.5, -Math.PI / 2); sim.tick(1 / 60); const sh = sim.ents.find(e => e.item === 'wardshield' && !e.dead); __ok(!!sh, 'his shield lies beside him');
+  sim.pickup(p, sh); __ok(p.items.wardshield && sim.players.p2.items.wardshield, 'the Wardhold shield (for everyone)');
+  // reflect for 1 s after it comes up
+  sim.teleport(p, 'dbg', 22.5, 19.5, -Math.PI / 2); sim.tick(1 / 60); p.maxHp = p.hp = 40;
   sim.onPlayerState('p1', { lvl: 'dbg', x: 22.5, y: 19.5, a: -Math.PI / 2, sh: 0 }); sim.onPlayerState('p1', { lvl: 'dbg', x: 22.5, y: 19.5, a: -Math.PI / 2, sh: 1 });
-  sim.fireProj('spear', 'dbg', 22.5, 16.5, Math.PI / 2, 'e', null, { dmg: 1 }); for (let k = 0; k < 90; k++) sim.tick(1 / 60); __ok(e.dead || e.hp < 2, 'a reflected spear hits its thrower');
+  const s1 = shoot(); for (let k = 0; k < 40 && s1.owner === 'e' && !s1.dead; k++) sim.tick(1 / 60); __ok(!s1.dead && s1.owner === 'p' && s1.vy < 0 && s1.dmg === 2 && p.hp === 40, 'just after it comes up, a spear flies back');
+  sim.time += 1.2; const s2 = shoot(); for (let k = 0; k < 40 && !s2.dead; k++) sim.tick(1 / 60); __ok(s2.dead && s2.owner === 'e' && p.hp === 40, 'later it is only blocked');
+  p.items.mirrorguard = true; sim.onPlayerState('p1', { lvl: 'dbg', x: 22.5, y: 19.5, a: -Math.PI / 2, sh: 0 }); sim.onPlayerState('p1', { lvl: 'dbg', x: 22.5, y: 19.5, a: -Math.PI / 2, sh: 1 });
+  const s3 = shoot(); for (let k = 0; k < 40 && s3.owner === 'e' && !s3.dead; k++) sim.tick(1 / 60); __ok(s3.owner === 'p' && s3.dmg === 6, 'Mirror Guard: reflected shots hit three times as hard');
+  // the ward stops one unblockable shot, then needs WARD_TIME
+  sim.time += 9; const m1 = shoot('magic'); for (let k = 0; k < 40 && !m1.dead; k++) sim.tick(1 / 60); __ok(p.hp === 40, 'the ward stops a magic bolt');
+  const m2 = shoot('magic'); for (let k = 0; k < 40 && !m2.dead; k++) sim.tick(1 / 60); __ok(p.hp < 40, 'but only one every ' + WARD_TIME + ' s');
+  // the first old man met afterwards says the line, once
+  const other = Object.values(W.levels).find(L => L.kind === 'cave' && L.caveKind === 'hint'); sim.teleport(p, other.id, 6.5, 4.8, -Math.PI / 2); sim.tick(1 / 60); sim.tick(1 / 60);
+  const npc = sim.ents.find(e => e.k === 'npc' && e.lvl === other.id); __ok(npc && npc.text === Content.wardLine && sim.team.wardLine, 'the next old man knows that shield');
 });
 attempt('favorites per save', () => {
   const sim = freshSim(); const p = sim.players.p1; p.items.bow = true; p.items.bombs = true;

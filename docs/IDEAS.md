@@ -61,7 +61,7 @@ Not built yet. Parked here so they don't get lost. Newest at the bottom.
 
 ## Open questions (from Mitch, to decide)
 - **Lakes: drain or dive?** Draining reuses the eye/tide machinery: a sluice eye on the shore of two lake regions drains them for good and shows a cave on the lakebed. It's cheap, but it's another eye puzzle. Diving would be a new item: swim under deep fresh water, with a blue underwater view and caves under the surface. It's more novel, but it would be the fourth way across water (raft, frost arrows, cloak). Leaning: drain now, dive later if a water dungeon wants it.
-- **Shield techniques.** Perfect block is built (1 s, 2 s with Mirror Guard; the scroll still needs a place in the world). Still open:
+- **Shield techniques.** Perfect block is the Wardhold shield's (built). The Mirror Guard scroll (reflected shots x3) still needs a place in the world. Still open:
   - **Taunt**, a co-op scroll: Shift + three quick clicks with the shield up bangs blade on shield; every foe within 8 tiles comes for you for 5 s and you take 25% less damage.
   - **Cover:** a raised shield also stops shots aimed at a friend standing right behind you.
 - **Story mechanic: EMBERS** (see docs/STORY.md). Hollow foes drop their ember when they fall. Take it within a few seconds or they stand back up. Embers rekindle Wardhold braziers (safe rooms and respawn points the Hollow won't enter) and, later, the Hearth. (Mitch: no "one player grabs embers" co-op role.)

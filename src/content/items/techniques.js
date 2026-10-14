@@ -31,7 +31,7 @@ defineItem({ id: 'lunge', name: 'SCROLL: LUNGE', sprite: 'scroll', team: true, d
 defineItem({ id: 'heavypommel', name: 'SCROLL: HEAVY POMMEL', sprite: 'scroll', team: true, debug: true,
   debugGrant(p) { p.items.heavypommel = true; },
   give(sim, p, ctx) { p.items.heavypommel = true; ctx.banner(); sim.ev({ t: 'dialog', pid: p.id, text: 'YOUR POMMEL STRIKE NOW CRACKS ARMOR. EACH FOE ONLY LOSES ONE PIECE TO IT, SO MIX IT WITH BOMBS.' }); } });
-// MIRROR GUARD: the perfect block (game/sim.js reflectProj) lasts 2 s after the shield comes up instead of 1.
+// MIRROR GUARD: shots the Wardhold shield reflects (game/sim.js reflectProj) hit three times as hard.
 defineItem({ id: 'mirrorguard', name: 'SCROLL: MIRROR GUARD', sprite: 'scroll', team: true, debug: true,
   debugGrant(p) { p.items.mirrorguard = true; },
-  give(sim, p, ctx) { p.items.mirrorguard = true; ctx.banner(); sim.ev({ t: 'dialog', pid: p.id, text: 'WHEN YOUR SHIELD FIRST COMES UP, ITS RIM SHINES: A SHOT THAT HITS IT THEN FLIES STRAIGHT BACK. NOW IT SHINES TWICE AS LONG.' }); } });
+  give(sim, p, ctx) { p.items.mirrorguard = true; ctx.banner(); sim.ev({ t: 'dialog', pid: p.id, text: 'SHOTS YOUR SHIELD SENDS BACK NOW HIT THREE TIMES AS HARD.' }); } });

@@ -134,6 +134,7 @@ function updateLocal(dt, inp) {
     if (inp.cycle) pick(favs, inp.cycle); if (inp.cycleAll) pick(owned, inp.cycleAll);
     if (inp.slot && favs[inp.slot - 1]) { Lc.sel = favs[inp.slot - 1]; sfx('menu'); sendAction({ t: 'sel', item: Lc.sel }); }
   }
+  if (snap.team && snap.team.fallen && G.world.startCave) applyFallen(G.world); // the first old man has fallen (content/wardhold.js)
   // turning
   Lc.a += inp.turn; Lc.pitch = clamp(Lc.pitch + inp.pitch, -50, 50); if (!IN.locked && !IN.mouseL && !IN.mouseR) Lc.pitch *= 0.95;
   // movement
@@ -358,7 +359,7 @@ function draw(dt) {
   // pow words
   for (const p of Lc.pow) { const sc = projectPt(cam, p.x, p.y); if (sc) { const c = p.big ? rgb(255, 230, 60) : rgb(255, 255, 255); text(p.word, sc.x - p.word.length * 3, sc.y - 30 - p.t * (p.num ? 45 : 30), p.num ? rgb(255, 236, 120) : Math.floor(p.t * 20) & 1 ? c : rgb(255, 80, 40)); } }
   const bossE = ents.find(e => e[8] >= 0);
-  const st = { me, bob: Lc.bob, moveK: Lc.moveK || 0, readyK: Lc.readyK || 0, blockT: Lc.blockT || 0, mirror: !!(me && me.mirror), swing: Lc.swing, swingDir: Lc.swingDir || 1, grip: Lc.gripT || 0, pommelT: Lc.pommelT, lungeReady: !!(Lc.gripT >= LUNGE_HOLD && me && me.items.lunge), punch: Lc.punch, charge: Lc.charge, useFlash: Lc.useFlash, useSpr: Lc.useSpr, level: L, cam, players: snap ? snap.pl : [], myId: G.myId, team: snap ? snap.team : { keys: {}, maps: {}, comps: {}, shards: [], done: [] }, seen: G.seen[L.id] || new Uint8Array(L.w * L.h), seenOW: G.seen.ow || new Uint8Array(1), seenRooms: G.seenRooms, selItem: Lc.sel, pitch: Lc.pitch, lvlKind: L.kind, bossHp: bossE ? bossE[8] : -1, bossName: bossE ? ((bossDefFor(bossE[1]) || {}).title || null) : null, world: G.world };
+  const st = { me, bob: Lc.bob, moveK: Lc.moveK || 0, readyK: Lc.readyK || 0, blockT: Lc.blockT || 0, mirror: !!(me && me.mirror), wardShield: !!(me && me.items.wardshield && me.cls !== 'monk'), ward: !!(me && me.ward), swing: Lc.swing, swingDir: Lc.swingDir || 1, grip: Lc.gripT || 0, pommelT: Lc.pommelT, lungeReady: !!(Lc.gripT >= LUNGE_HOLD && me && me.items.lunge), punch: Lc.punch, charge: Lc.charge, useFlash: Lc.useFlash, useSpr: Lc.useSpr, level: L, cam, players: snap ? snap.pl : [], myId: G.myId, team: snap ? snap.team : { keys: {}, maps: {}, comps: {}, shards: [], done: [] }, seen: G.seen[L.id] || new Uint8Array(L.w * L.h), seenOW: G.seen.ow || new Uint8Array(1), seenRooms: G.seenRooms, selItem: Lc.sel, pitch: Lc.pitch, lvlKind: L.kind, bossHp: bossE ? bossE[8] : -1, bossName: bossE ? ((bossDefFor(bossE[1]) || {}).title || null) : null, world: G.world };
   if (me && !down) drawViewmodel(st);
   if (me && me.cls === 'monk' && me.armor > 0 && !down) { const ac = me.armor === 2 ? rgb(255, 248, 200) : rgb(100, 190, 255); for (let i = 0; i < 18; i++) { const side = Math.random() < 0.5; const x = side ? (Math.random() < 0.5 ? Math.random() * 10 : R.W - Math.random() * 10) : Math.random() * R.W; const y = side ? Math.random() * R.H : R.H - Math.random() * 8; px(x, y, ac); } }
   if (Lc.dashT > 0) rectA(0, 0, R.W, R.H, rgb(200, 240, 255), 0.15);
@@ -482,13 +483,13 @@ function renderBag() {
   if (me.items.loaded2) ups.push(['scroll', itemName('tripleshot', me.cls), 'ONE MORE ARROW ON THE STRING']);
   if (me.items.lunge) ups.push(['scroll', itemName('lunge', me.cls), 'SHIFT + HOLD ATTACK UNTIL IT CHIMES, THEN LET GO']);
   if (me.items.heavypommel) ups.push(['scroll', itemName('heavypommel', me.cls), 'POMMEL STRIKES CRACK ARMOR']);
-  if (me.cls !== 'monk') ups.push(['scroll', 'PERFECT BLOCK', me.items.mirrorguard ? 'MIRROR GUARD: FOR 2 S AFTER THE SHIELD COMES UP, SHOTS BOUNCE BACK' : 'FOR 1 S AFTER THE SHIELD COMES UP, SHOTS BOUNCE BACK']);
+  if (me.items.wardshield) ups.push(['wardshield', 'WARDHOLD SHIELD', 'FOR 1 S AFTER IT COMES UP, SHOTS BOUNCE BACK' + (me.items.mirrorguard ? ' (3X DAMAGE)' : '') + '. ITS RIM GLOWS: IT WILL STOP ONE SHOT A SHIELD CAN\'T']);
   if (me.items.wandfire) ups.push(['orb_fire', itemName('flameorb', me.cls), 'THE WAND CAN HURL FIRE']);
   if (me.items.wandthunder) ups.push(['orb_thunder', itemName('stormorb', me.cls), 'THE WAND CAN CALL LIGHTNING']);
   if (me.items.cloakslam) ups.push(['scroll', itemName('galeslam', me.cls), 'END A FLIGHT EARLY TO SLAM DOWN']);
   if (me.items.bombbag2) ups.push(['bomb', itemName('bombbag2', me.cls), 'CARRY 16 BOMBS']); else if (me.items.bombbag) ups.push(['bomb', itemName('bombbag', me.cls), 'CARRY 8 BOMBS']);
   if (me.items.bombarrow) ups.push(['scroll', itemName('bombarrows', me.cls), 'SHIFT + BOW: COSTS AN ARROW AND A BOMB']);
-  for (const k of Object.keys(me.items)) { if (!me.items[k] || owned.includes(k) || ['loaded', 'loaded2', 'lunge', 'heavypommel', 'mirrorguard', 'cloakslam', 'bombbag', 'bombbag2', 'frostarrows', 'silver', 'potion', 'bombarrow'].includes(k)) continue; const d = Content.items[k]; if (!d || d.slot === 'b') continue; ups.push([itemSprite(k, me.cls), itemName(k, me.cls), k === 'skeletonkey' ? 'OPENS EVERY LOCK' : k === 'silver' ? 'ONLY THEY CAN FINISH THE HOLLOW KING' : k === 'magmaboots' ? 'WALK ON LAVA AND VENTS' : k === 'raft' ? 'OPEN WATER ONLY' : null]); }
+  for (const k of Object.keys(me.items)) { if (!me.items[k] || owned.includes(k) || ['loaded', 'loaded2', 'lunge', 'heavypommel', 'wardshield', 'cloakslam', 'bombbag', 'bombbag2', 'frostarrows', 'silver', 'potion', 'bombarrow'].includes(k)) continue; const d = Content.items[k]; if (!d || d.slot === 'b') continue; ups.push([itemSprite(k, me.cls), itemName(k, me.cls), k === 'skeletonkey' ? 'OPENS EVERY LOCK' : k === 'silver' ? 'ONLY THEY CAN FINISH THE HOLLOW KING' : k === 'magmaboots' ? 'WALK ON LAVA AND VENTS' : k === 'raft' ? 'OPEN WATER ONLY' : null]); }
   if (page === 'upgrades' && me.dbg) { // debug: every upgrade and scroll, switched on and off with a click
     const all = sec('DEBUG: CLICK TO SWITCH ON OR OFF'); btn(all, 'scroll', 'ALL ON', 'AND THE BOW, BOOMERANG, CLOAK AND BOMBS', false, () => sendAction({ t: 'dbgup', all: true })); btn(all, 'scroll', 'ALL OFF', null, false, () => sendAction({ t: 'dbgup', all: false }));
     // one compact grid (no scrolling): name and ON/OFF on each button, the description on hover

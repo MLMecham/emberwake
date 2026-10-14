@@ -1,4 +1,5 @@
 // ===== content/enemies/knight.js =====
+// Every knight's shield carries the old Wardhold crest, faded: a flame inside a gate (content/wardhold.js).
 // Armored chaser. Its shield blocks hits from the front, so strike from the side or use bombs.
 // It turns slowly in that armor, so you can get behind it. From behind you see its back (backSprite), and only then
 // do you know you're clear of the shield.
@@ -22,9 +23,9 @@ defineEnemy({
     '.....kuuuuk.....',
     '..kkkUuuuuUk....',
     '.kBBkUuuuuUuk...',
-    '.kBybkUuuUkuk...',
-    '.kByykUUUUkuk...',
-    '.kBybkUuuUk.k...',
+    '.kBoBkUuuUkuk...',
+    '.kZYZkUUUUkuk...',
+    '.kBZBkUuuUk.k...',
     '.kBBk.UuuU......',
     '..kk..UU.UU.....',
     '......UU.UU.....',
@@ -58,8 +59,8 @@ defineSprite('knight_bare', [
   '...kuUuuuuUuk...', '...kukUuuUkuk...', '...kukUUUUkuk...', '...k.kUuuUk.k...', '......UuuU......', '......UU.UU.....', '......UU.UU.....', '.....kUk.kUk....', '................']);
 defineAnim('knight_bare', 6, (s, kit) => [s, kit.step(s, 12, -1, 0), s, kit.step(s, 12, 0, -1)]);
 defineSprite('shield_drop', [ // the knight's shield, tumbling away
-  '................', '................', '................', '.....kkkkkk.....', '....kBBBBBBk....', '....kByyyyBk....', '....kBybbyBk....', '....kByyyyBk....',
-  '....kBBybBBk....', '.....kBBBBk.....', '......kBBk......', '.......kk.......', '................', '................', '................', '................']);
+  '................', '................', '................', '.....kkkkkk.....', '....kBBBBBBk....', '....kBZooZBk....', '....kBZoYZBk....', '....kBZYYZBk....',
+  '....kBBZZBBk....', '.....kBBBBk.....', '......kBBk......', '.......kk.......', '................', '................', '................', '................']);
 defineHints(['A BOOMERANG CURVES. IT CAN FIND THE BACK OF A SHIELDED FOE THAT YOUR BLADE CANNOT.']);
 // ===================== STRONGER KNIGHTS =====================
 // Sword knights hold a blade as well. Their shield counts the hits it stops (game/sim.js shieldBlocked): after

@@ -49,7 +49,7 @@ const DUMMY_RESET = 3; // a training dummy heals (and gets its armor back) after
 const fmtDmg = (n) => String(Math.round(n * 100) / 100);
 const DISARM_STAGGER = 1.2;
 const KNIGHT_WINDUP = 0.45; // seconds a sword knight raises its blade before the counter lands (your cue to back off) // seconds a disarmed foe reels
-const REFLECT_TIME = 1, REFLECT_TIME_SCROLL = 2; // perfect block: seconds after the shield comes up that it sends shots back (items/techniques.js Mirror Guard)
+const REFLECT_TIME = 1, WARD_TIME = 8; // the Wardhold shield (content/wardhold.js): reflect window after it comes up; seconds between wards
 const TWIN_EYE_TIME = 0.55; // seconds a twin-eye gate's eye stays shut (content/gimmicks/twingate.js)
 const GOURD_REGROW = 40; // seconds before a split gourd can grow back (and only with nobody within 6 tiles)
 // how many bombs you can carry: 1 without a bag, 8 with the Bramble Keep bag, 16 with the second one (sold in a grotto)
@@ -271,11 +271,34 @@ class Sim {
       }
     }
   }
+  // ---- the first old man (content/wardhold.js) ----
+  updateFirstDoor(plist) {
+    const W = this.W, C = Content.fallen; if (!C || !W.startCave) return;
+    if (!this.team.fallen && plist.some(p => p.maxHp >= C.hearts * 4) && !plist.some(p => p.lvl === W.startCave)) this.fallOldMan();
+    // the first old man anyone meets after taking his shield says one line, once
+    if (!this.team.wardLine) for (const p of plist) {
+      if (!p.alive || !p.items.wardshield || this.W.levels[p.lvl].kind !== 'cave') continue;
+      const e = this.ents.find(o => o.k === 'npc' && o.lvl === p.lvl && Content.oldMen.includes(o.spr) && dist2(o.x, o.y, p.x, p.y) < 9);
+      if (e) { this.team.wardLine = true; e.textOrig = e.text; e.text = Content.wardLine; e.restoreAt = this.time + 30; break; }
+    }
+    for (const e of this.ents) if (e.k === 'npc' && e.restoreAt && this.time > e.restoreAt) { e.text = e.textOrig; delete e.restoreAt; }
+  }
+  fallOldMan() {
+    const W = this.W, L = W.levels[W.startCave]; this.team.fallen = true;
+    this.setTile(L.id, L.idx(6, 1), TL.HATCH_CAVED, PR.RUBBLE); // he brought the passage down
+    for (const [x, y] of [[3, 2], [9, 2]]) this.setTile(L.id, L.idx(x, y), null, 0); // the torches are out
+    const at = W.startCaveAt, O = W.levels.ow; if (at) for (const [dx, dy] of [[1, 1], [-1, 1], [0, 2], [1, 2]]) { const i = O.idx(at.x + dx, at.y + dy); if (!TINFO[O.tiles[i]].solid && !TINFO[O.tiles[i]].portal && !O.props[i]) { this.setTile('ow', i, null, PR.HELM); break; } } // a dented helmet outside
+    applyFallen(W);
+    for (const e of this.ents) if (e.k === 'npc' && e.lvl === L.id) e.dead = true; // (nobody is inside when this happens)
+    if (this.levelInit[L.id]) { for (const n of L.npcs) this.spawn({ k: 'npc', lvl: L.id, x: n.x, y: n.y, spr: n.spr, text: n.text, sc: 0.95 }); this.layWardShield(L); }
+  }
+  layWardShield(L) { const tk = L.id + ':wardshield'; if (this.team.taken[tk] || this.ents.some(e => e.tk === tk && !e.dead)) return; this.spawn({ k: 'pick', lvl: L.id, x: 8.3, y: 2.8, item: 'wardshield', tk, perm: true, spr: 'wardshield', sc: 0.6, z: 0.02, team: true }); }
   // ---- level init (static entities) ----
   initLevel(id) {
     if (this.levelInit[id]) return; this.levelInit[id] = true;
     const L = this.W.levels[id];
     for (const n of L.npcs) this.spawn({ k: 'npc', lvl: id, x: n.x, y: n.y, spr: n.spr, text: n.text, sc: 0.95 });
+    if (id === this.W.startCave && this.team.fallen) this.layWardShield(L);
     L.shop.forEach((s, i) => {
       const tk = id + ':shop' + i; if (this.team.taken[tk] || (s.choose && this.team.taken[s.choose])) return;
       this.spawn({ k: 'shop', lvl: id, x: s.x, y: s.y, item: s.item, price: s.price, gift: s.gift, need: s.needHearts, choose: s.choose, unique: s.unique, tk, spr: itemSprite(s.item), sc: 0.55, z: 0.12 });
@@ -309,6 +332,7 @@ class Sim {
     // groups activation
     for (const p of plist) if (p.alive) this.activateGroupFor(p);
     this.updateGroups(dt, plist);
+    this.updateFirstDoor(plist);
     // entities
     for (const e of this.ents) { if (!active.has(e.lvl)) continue; this.updateEnt(e, dt); }
     this.ents = this.ents.filter(e => !e.dead);
@@ -782,12 +806,12 @@ class Sim {
     if (!best) return; const sp = Math.hypot(e.vx, e.vy); const cur = Math.atan2(e.vy, e.vx);
     const na = cur + clamp(angDiff(cur, Math.atan2(best.y - e.y, best.x - e.x)), -def.homing * dt, def.homing * dt); e.vx = Math.cos(na) * sp; e.vy = Math.sin(na) * sp;
   }
-  // PERFECT BLOCK: for the first REFLECT_TIME seconds after your shield comes up (the Mirror Guard scroll makes it longer),
-  // a blockable shot that hits it flies straight back the way it came, now yours: it hurts foes, and a homing seed chases them.
-  reflectWindow(p) { return p.items.mirrorguard ? REFLECT_TIME_SCROLL : REFLECT_TIME; }
-  reflectOpen(p) { return !!p.shUp && this.time - (p.shieldAt || -99) <= this.reflectWindow(p); }
+  // THE WARDHOLD SHIELD's reflect (content/wardhold.js): for REFLECT_TIME after your shield comes up, a blockable shot that
+  // hits it flies straight back the way it came, now yours (three times as hard with Mirror Guard); a homing seed chases foes.
+  reflectOpen(p) { return p.cls !== 'monk' && !!p.items.wardshield && !!p.shUp && this.time - (p.shieldAt || -99) <= REFLECT_TIME; }
+  wardReady(p) { return p.cls !== 'monk' && !!p.items.wardshield && this.time >= (p.wardAt || 0); }
   reflectProj(e, p) {
-    e.owner = 'p'; e.pid = p.id; e.vx = -e.vx * 1.3; e.vy = -e.vy * 1.3; e.dmg = 2; e.hitSet = {}; e.life = Math.max(e.life, 2); e.reflected = true;
+    e.owner = 'p'; e.pid = p.id; e.vx = -e.vx * 1.3; e.vy = -e.vy * 1.3; e.dmg = p.items.mirrorguard ? 6 : 2; e.hitSet = {}; e.life = Math.max(e.life, 2); e.reflected = true;
     this.sfx('reflect', e.lvl, p.x, p.y); this.ev({ t: 'block', pid: p.id, reflect: true });
   }
   updateProj(e, dt) {
@@ -826,6 +850,7 @@ class Sim {
           const toP = Math.atan2(e.y - p.y, e.x - p.x);
           if (def.poison) this.poisonPlayer(p); // poison gets through a shield
           if (p.cls !== 'monk' && def.blockable && Math.abs(angDiff(p.a, toP)) < 0.7 && this.reflectOpen(p)) { this.reflectProj(e, p); return; }
+          if (!def.blockable && Math.abs(angDiff(p.a, toP)) < 0.7 && this.wardReady(p)) { p.wardAt = this.time + WARD_TIME; e.dead = true; this.sfx('ward', e.lvl, p.x, p.y); this.ev({ t: 'block', pid: p.id, reflect: true }); return; } // the shield's ward stops what a shield can't
           if (p.cls !== 'monk' && def.blockable && Math.abs(angDiff(p.a, toP)) < 0.7) { e.dead = true; this.sfx('clink', e.lvl); this.ev({ t: 'block', pid: p.id }); return; }
           if (def.chill && p.inv <= 0 && !p.god) p.chill = Math.max(p.chill || 0, def.chill);
           this.hurtPlayer(p, e.dmg, e); e.dead = true; return;
@@ -958,8 +983,8 @@ class Sim {
     const p = this.players[pid]; if (!p) return null;
     const en = []; for (const e of this.ents) if (e.lvl === p.lvl) en.push(this.entView(e, p));
     const pl = []; for (const o of Object.values(this.players)) pl.push([o.id, o.lvl, Math.round(o.x * 100) / 100, Math.round(o.y * 100) / 100, Math.round(o.a * 100) / 100, o.color, o.armor, o.cls, o.alive ? 1 : 0, o.atk, o.name, Math.round(o.revive / REVIVE_TIME * 100) / 100, o.hp, o.maxHp, o.reviver || 0, o.z || 0]); // [15] z: feet height (ledges, the cloak's lift)
-    const me = {}; for (const k of ['lvl', 'hp', 'maxHp', 'gems', 'bombs', 'maxBombs', 'arrows', 'maxArrows', 'swordMax', 'armorMax', 'arrowType', 'wandEl', 'sword', 'armor', 'items', 'favs', 'potions', 'alive', 'cls', 'sel', 'color', 'name', 'dbg', 'god']) me[k] = p[k]; me.spellCd = Math.max(0, Math.round(((p.spellReady || 0) - this.time) * 10) / 10); me.chill = p.chill > 0 ? 1 : 0; me.mirror = p.cls !== 'monk' && this.reflectOpen(p) ? 1 : 0; me.poison = p.poisonTicks > 0 ? p.poisonTicks : 0; me.fly = this.flying(p) ? Math.round((p.flyUntil - this.time) * 10) / 10 : 0; me.respawnIn = p.alive ? 0 : Math.max(0, Math.ceil(RESPAWN_WAIT - (this.time - (p.downAt || 0))));
-    return { t: 's', paused: !!this.paused, pausedBy: this.pausedBy, me, pl, en, team: { keys: this.team.keys, maps: this.team.maps, comps: this.team.comps, shards: this.team.shards, done: this.team.done, relics: this.team.relics }, vp: this.ventPhase(), rg: this.rigCodes(p.lvl), fz: this.frozenList(p.lvl), mv: this.modVer, over: this.over > 0 };
+    const me = {}; for (const k of ['lvl', 'hp', 'maxHp', 'gems', 'bombs', 'maxBombs', 'arrows', 'maxArrows', 'swordMax', 'armorMax', 'arrowType', 'wandEl', 'sword', 'armor', 'items', 'favs', 'potions', 'alive', 'cls', 'sel', 'color', 'name', 'dbg', 'god']) me[k] = p[k]; me.spellCd = Math.max(0, Math.round(((p.spellReady || 0) - this.time) * 10) / 10); me.chill = p.chill > 0 ? 1 : 0; me.mirror = this.reflectOpen(p) ? 1 : 0; me.ward = this.wardReady(p) ? 1 : 0; me.poison = p.poisonTicks > 0 ? p.poisonTicks : 0; me.fly = this.flying(p) ? Math.round((p.flyUntil - this.time) * 10) / 10 : 0; me.respawnIn = p.alive ? 0 : Math.max(0, Math.ceil(RESPAWN_WAIT - (this.time - (p.downAt || 0))));
+    return { t: 's', paused: !!this.paused, pausedBy: this.pausedBy, me, pl, en, team: { keys: this.team.keys, maps: this.team.maps, comps: this.team.comps, shards: this.team.shards, done: this.team.done, relics: this.team.relics, fallen: !!this.team.fallen }, vp: this.ventPhase(), rg: this.rigCodes(p.lvl), fz: this.frozenList(p.lvl), mv: this.modVer, over: this.over > 0 };
   }
   // ---- save ----
   makeSave() {
@@ -969,13 +994,14 @@ class Sim {
     const tileNames = []; for (const k in TL) tileNames[TL[k]] = k;
     let mods = this.mods; if (this.tempTiles.length) { mods = JSON.parse(JSON.stringify(this.mods)); for (const t of this.tempTiles) if (mods[t.lvl] && mods[t.lvl][t.i]) mods[t.lvl][t.i][0] = t.orig; } // temporary tiles are saved as they'll end up
     const propNames = PROPS.slice();
-    return { v: SAVE_VERSION, tileNames, propNames, seed: this.W.seed, mode: this.W.mode, team: { keys: this.team.keys, maps: this.team.maps, comps: this.team.comps, shards: this.team.shards, done: this.team.done, relics: this.team.relics, taken: this.team.taken, cleared: cl }, mods, players, time: Date.now() };
+    return { v: SAVE_VERSION, tileNames, propNames, seed: this.W.seed, mode: this.W.mode, team: { keys: this.team.keys, maps: this.team.maps, comps: this.team.comps, shards: this.team.shards, done: this.team.done, relics: this.team.relics, taken: this.team.taken, cleared: cl, fallen: !!this.team.fallen, wardLine: !!this.team.wardLine }, mods, players, time: Date.now() };
   }
   loadSave(s) {
     s = migrateSave(s);
     Object.assign(this.team, s.team); this.team.relics = this.team.relics || []; this.team.clearedAt = {}; this.mods = s.mods || {}; this.savedPlayers = s.players || {};
     for (const lvl in this.mods) { const L = this.W.levels[lvl]; if (L && L.gourds) for (const i in this.mods[lvl]) if (L.gourds[i] != null && this.mods[lvl][i][1] !== L.gourds[i]) delete this.mods[lvl][i]; } // split gourds grow back
     for (const lvl in this.mods) { const L = this.W.levels[lvl]; if (!L) continue; for (const i in this.mods[lvl]) { const [t, pr] = this.mods[lvl][i]; L.tiles[i] = t; L.props[i] = pr; } }
+    if (this.team.fallen) applyFallen(this.W);
     for (const L of Object.values(this.W.levels)) for (const r of Object.values(L.rooms || {})) for (const [a, b] of (r && r.legacyTk) || []) if (this.team.taken[L.id + ':' + a]) this.team.taken[L.id + ':' + b] = true; // prizes that moved (the wyrm arena)
     // never restore closed shutters
     for (const lvl in this.mods) for (const i in this.mods[lvl]) if (this.mods[lvl][i][0] === TL.SHUTTER) { this.W.levels[lvl].tiles[i] = TL.OPENDOOR; this.mods[lvl][i][0] = TL.OPENDOOR; }

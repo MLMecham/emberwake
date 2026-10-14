@@ -95,6 +95,13 @@ function genWorld(seed, mode) {
   genTestZone(W);
   return W;
 }
+// The first old man's cave after he has fallen (content/wardhold.js): dark, and him slumped against the rubble. The tile
+// changes go through sim.setTile (saved); this part is the same on every machine (called by the host, on load, and by
+// clients when the snapshot says so).
+function applyFallen(W) {
+  const L = W.levels[W.startCave]; if (!L || L.fallen) return; L.fallen = true; L.dark = true;
+  L.npcs = [{ x: 6.5, y: 2.2, spr: 'oldman_fallen', text: Content.fallen.text }];
+}
 // ---------- GROTTOS ----------
 // One grotto of each kind (content/grottos.js) under a hollow tree: a tree already standing in a forest or plains region
 // becomes HOLLOWTREE, with a portal on its tile and a stair revealed when it's split open (game/sim.js openHollowTree).
@@ -569,6 +576,7 @@ function placeCave(W, L, r, rnd, kind, secret) {
     genCave(W, id, kind, { lvl: 'ow', x: px + 0.5, y: py + 1.6, a: Math.PI / 2 }, rnd);
   }
   r.features.push({ type: 'cave', kind, id, x: px, y: py, secret });
+  if (kind === 'sword0') { W.startCave = id; W.startCaveAt = { x: px, y: py }; } // the first old man's cave (content/wardhold.js)
 }
 
 // Some open caves are dug into the region's north wall (a cliff face) instead of standing alone in the field: about half,
@@ -603,6 +611,7 @@ function genCave(W, id, kind, exit, rnd) {
   L.set(6, h - 1, TL.CEXIT); L.set(6, h - 2, TL.EXIT); // archway in the wall, and the step in front of it takes you out
   L.exit = exit; L.spawn = { x: 6.5, y: h - 2.6, a: -Math.PI / 2 };
   L.props[L.idx(3, 2)] = PR.FLAME; L.props[L.idx(9, 2)] = PR.FLAME;
+  if (kind === 'sword0' && TL.HATCH != null) L.set(6, 1, TL.HATCH); // a plain wooden hatch behind him (content/wardhold.js)
   const c = Content.caves[kind]; if (!c) return;
   if (c.grotto) { // under a hollow tree (content/grottos.js): roots and moss, a rounder room, glowing caps instead of torches
     L.signText = {};

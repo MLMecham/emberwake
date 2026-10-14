@@ -372,7 +372,7 @@ function drawViewmodel(st) {
     const shx = W * 0.27 - ready * W * 0.02 + sway + bk * 7 + (Math.random() - 0.5) * bk * 4;
     const shy = H - 12 - ready * 34 + lift + bk * 10;
     const sw = Math.round(50 * sc), sh = Math.round(58 * sc); const x0 = Math.round(shx - sw / 2), y0 = Math.round(shy - sh / 2);
-    const rim = bk > 0.3 ? rgb(255, 255, 255) : st.mirror && ready > 0.8 ? ((Math.floor(R.time * 12) & 1) ? rgb(255, 236, 150) : rgb(255, 255, 230)) : rgb(176, 178, 194), rimD = rgb(96, 98, 116), wood = rgb(116, 76, 40), woodD = rgb(78, 50, 26), woodH = rgb(140, 94, 52); // st.mirror: the perfect-block moment, the rim shines
+    const rim = bk > 0.3 ? rgb(255, 255, 255) : st.mirror && ready > 0.8 ? ((Math.floor(R.time * 12) & 1) ? rgb(255, 236, 150) : rgb(255, 255, 230)) : rgb(176, 178, 194), rimD = rgb(96, 98, 116); const ws = st.wardShield; const wood = ws ? rgb(78, 84, 100) : rgb(116, 76, 40), woodD = ws ? rgb(48, 52, 64) : rgb(78, 50, 26), woodH = ws ? rgb(112, 120, 138) : rgb(140, 94, 52); // st.mirror: the perfect-block moment, the rim shines
     const halfW = (j) => { const f = j / sh; if (j < 2) return sw / 2 - (2 - j); return f < 0.42 ? sw / 2 : (sw / 2) * (1 - Math.pow((f - 0.42) / 0.58, 1.7)); }; // round top corners, sides curving into the point
     for (let j = 0; j < sh; j++) {
       const hw = halfW(j); const xl = Math.round(shx - hw), xr = Math.round(shx + hw); if (xr <= xl) continue;
@@ -382,6 +382,9 @@ function drawViewmodel(st) {
         if (j > 3 && j < sh - 4 && xr - xl > 8) for (let x = xl + 3; x < xr - 3; x++) { const plank = ((x - x0) % 9) === 0; px(x, y0 + j, plank ? woodD : (x < shx - hw * 0.4 ? woodH : wood)); }
       }
     }
+    // the Wardhold shield: steel bands and rivets on the back, and while its ward is ready, a soft glow creeps round the rim
+    if (ws) { for (let j = 6; j < sh - 6; j += 9) { const hw = halfW(j); for (let x = Math.round(shx - hw) + 3; x < Math.round(shx + hw) - 3; x++) px(x, y0 + j, rgb(150, 156, 172)); px(Math.round(shx - hw) + 4, y0 + j + 1, rgb(210, 214, 226)); px(Math.round(shx + hw) - 5, y0 + j + 1, rgb(210, 214, 226)); } }
+    if (ws && st.ward && ready > 0.5) { const ph = R.time * 3; for (let i = 0; i < 10; i++) { const j = Math.floor(((i / 10 + ph * 0.1) % 1) * sh); const hw = halfW(j); const side = i & 1 ? 1 : -1; px(Math.round(shx + side * hw), y0 + j, (i + Math.floor(R.time * 8)) % 3 ? rgb(255, 214, 120) : rgb(255, 246, 200)); } }
     if (st.blockT > 0) for (let i = 0; i < 6; i++) { const a = Math.random() * TAU, r = sw * 0.6 + Math.random() * 6; px(shx + Math.cos(a) * r, shy - sh * 0.1 + Math.sin(a) * r * 0.8, rgb(255, 240, 160)); }
     const aw = 13 * sc; // arm thickness
     const fy = y0 + sh * 0.4;                         // forearm height
