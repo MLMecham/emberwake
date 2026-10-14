@@ -787,6 +787,7 @@ attempt('grottos under hollow trees', () => {
   const G = sim.W.levels[g.id]; let sp = -1; for (let k = 0; k < G.tiles.length; k++) if (G.tiles[k] === TL.SPRING) { sp = k; break; } __ok(sp >= 0, 'the spring grotto has a spring');
   p.maxHp = 12; p.hp = 4; p.x = sp % G.w + 0.5; p.y = Math.floor(sp / G.w) + 0.5; for (let k = 0; k < 400; k++) sim.tick(1 / 60); __ok(p.hp >= p.maxHp, 'standing in it heals you');
   p.x = 6.5; p.y = G.h - 1.5; sim.tryExit(p); __ok(p.lvl === 'ow' && Math.abs(p.y - (g.y + 1.5)) < 0.01, 'out in front of the tree');
+  { const G2 = sim.W.levels[L.grottos.find(g => g.kind === 'g_psalm').id]; __ok(G2.npcs[0].text.split('|').length === 6 && G2.props.filter(pr => pr === PR.GRAVE).length === 2, 'the lament: a six-page psalm between two graves'); }
   __ok(sim.W.levels[L.grottos.find(g => g.kind === 'g_hermit').id].npcs[0].text && Content.lore.includes(sim.W.levels[L.grottos.find(g => g.kind === 'g_hermit').id].npcs[0].text), 'the hermit mutters a line of lore');
 });
 attempt('steps, ledges and the cloak lift', () => {

@@ -90,10 +90,10 @@ function handleEvent(e) {
   }
 }
 function pushMsg(text, dur) { G.msgs.push({ text, t: dur || 4 }); if (G.msgs.length > 4) G.msgs.shift(); }
-function showDialog(text) { if (!G.local) return; G.local.dialog = { text, shown: 0, lines: wrapText(text, Math.floor((R.W - 30) / 6)) }; }
+// A '|' in the text starts a new page: confirm shows the rest of a page, then turns to the next (the lament grotto's psalm)
+function showDialog(text) { if (!G.local) return; const pages = String(text).split('|').map(s => s.trim()).filter(Boolean); G.local.dialog = { text, pages, page: 0, shown: 0, lines: wrapText(pages[0] || '', Math.floor((R.W - 30) / 6)) }; }
 
 // ---------- local player update ----------
-// favorite items live in this browser only (a per-player convenience); every read and write is guarded
 // favorites are kept on your hero in the save (game/sim.js 'fav' action), so a new game starts with none
 // the shield is up once you've stood still a moment and aren't swinging (it's drawn coming up then too); the host times the
 // perfect block from the moment it rises (game/sim.js reflectWindow)
@@ -123,7 +123,7 @@ function updateLocal(dt, inp) {
   // dialog
   if (Lc.dialog) {
     const d = Lc.dialog; const total = d.lines.join('').length; const prev = Math.floor(d.shown); d.shown = Math.min(total, d.shown + dt * 45); if (Math.floor(d.shown) > prev && Math.floor(d.shown) % 2 === 0) sfx('text', 0.6);
-    if (inp.confirm || inp.atkP || inp.interactP) { if (d.shown < total) d.shown = total; else Lc.dialog = null; }
+    if (inp.confirm || inp.atkP || inp.interactP) { if (d.shown < total) d.shown = total; else if (d.pages && d.page < d.pages.length - 1) { d.page++; d.shown = 0; d.lines = wrapText(d.pages[d.page], Math.floor((R.W - 30) / 6)); } else Lc.dialog = null; }
     return;
   }
   if (!me.alive) { if (me.respawnIn === 0 && inp.enterP && Lc.downT > 1) { sendAction({ t: 'respawn' }); Lc.downT = 0; } /* never automatic: you can keep waiting for a friend */ Lc.downT += dt; Lc.swing = null; Lc.charge = 0; Lc.pitch = lerp(Lc.pitch, 25, dt * 3); Lc.a += inp.turn * 0.3; return; }

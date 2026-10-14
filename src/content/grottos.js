@@ -6,6 +6,7 @@
 //   CACHE    someone's buried stash: arrows, bombs and gems, free (once)
 //   HERMIT   a moss hermit who mutters about the way things are (a random line from Content.lore)
 //   ROOTS    a root merchant: odd hours, cheap prices
+//   LAMENT   an old man by two grave markers, singing a psalm for the living buried by the dead
 // The interior is built by genCave (world.js) when the cave def has grotto: true.
 'use strict';
 defineProp('HOLLOWTREE', 'hollowtree', { solid: true, scale: 1.5 });
@@ -52,12 +53,21 @@ defineSprite('glowcap', [
   '................', '................', '.........kkk....', '..kkk...kcccK...', '.kcwck..kcccck..', '.kccck...kzk....',
   '..kzk....kzk....', '..kzk....kzk....', '.kkzkk..kkzkk...', '................'], { K: '#14121c' });
 defineSpriteVariant('hermit_moss', 'oldman', { R: '#4f7a34', w: '#d8e0c0' });
+defineSpriteVariant('hermit_ash', 'oldman', { R: '#4a4650', w: '#c8c4cc' }); // the lament grotto's mourner, in grave-grey
 
 defineCave('g_spring', { name: 'WARM SPRING', grotto: true, npc: null, spring: true, sign: 'WARM WATER, DEEP UNDER THE ROOTS. REST A WHILE. NOBODY WILL LOOK FOR YOU HERE.', stock: [] });
 defineCave('g_cache', { name: 'ROOT CACHE', grotto: true, npc: null, sign: 'SCRATCHED INTO A ROOT: FOR WHOEVER COMES UP NEXT. TAKE IT. WE HAVE ENOUGH DOWN THERE.', stock: [{ x: 4, item: 'arrows', price: 0, gift: true }, { x: 6, item: 'gems50', price: 0, gift: true }, { x: 8, item: 'bombs', price: 0, gift: true }] });
 defineCave('g_hermit', { name: 'MOSS HERMIT', grotto: true, npc: 'hermit_moss', lore: true, stock: [] });
 defineCave('g_roots', { name: 'ROOT MERCHANT', grotto: true, npc: 'hermit_moss', text: 'CUSTOMERS! UNDER A TREE! WHAT A WORLD. EVERYTHING CHEAP. COIN IS NO USE TO ME, BUT I LIKE THE SOUND.', stock: [{ x: 3, item: 'arrows', price: 18 }, { x: 6, item: 'heart', price: 5 }, { x: 9, item: 'potion', price: 32 }] });
-Content.grottoKinds = ['g_spring', 'g_cache', 'g_hermit', 'g_roots'];
+// LAMENT: an old man by two grave markers, singing a psalm for the living buried by the dead. Pages split on '|'.
+defineCave('g_psalm', { name: 'THE LAMENT', grotto: true, npc: 'hermit_ash', graves: true, stock: [],
+  text: 'HEAR ME, ROOTS, FOR NO ONE ELSE WILL LISTEN. WE LAID OUR DEAD IN THE COOL EARTH. WE SANG OVER THEM, AND WENT HOME TO OUR FIRES.' +
+    '|NOW THE DEAD WALK IN THE SUN, AND THE LIVING LIE DOWN IN THE DARK. THEY HAVE TAKEN OUR FIELDS, AND WE HAVE TAKEN THEIR GRAVES.' +
+    '|WE DIG OUR HOMES WHERE WE ONCE DUG THEIR RESTING PLACES. OUR CHILDREN ARE BORN UNDER STONE. THEY NAME THE ROOTS THE WAY WE NAMED THE STARS.' +
+    '|THE DEAD DO NOT HUNGER, YET THEY TOOK THE HARVEST. THE DEAD DO NOT SLEEP, YET THEY TOOK THE BEDS. THE DEAD CANNOT BE WARMED, YET THEY TOOK THE FIRE.' +
+    '|HOW LONG, O HEARTH? HOW LONG SHALL YOUR CHILDREN KEEP THE GRAVE WARM FOR THOSE WHO WILL NOT LIE IN IT? WE BURIED THEM ONCE. NOW THEY BURY US, AND CALL IT PEACE.' +
+    '|AND YET A SEED IS BURIED TOO. AND A SEED IS NOT DEAD.' });
+Content.grottoKinds = ['g_spring', 'g_cache', 'g_hermit', 'g_roots', 'g_psalm'];
 
 // ---- passing talk: hermits, hint caves and old signs say these. Nobody explains; you put it together. ----
 Content.lore = [

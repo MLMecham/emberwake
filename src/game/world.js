@@ -611,6 +611,7 @@ function genCave(W, id, kind, exit, rnd) {
     for (const [x, y] of [[2, 2], [10, 2], [2, 6], [10, 6], [4, 1]]) L.props[L.idx(x, y)] = PR.GLOWCAP;
     if (c.spring) for (let y = 3; y <= 5; y++) for (let x = 4; x <= 8; x++) if (!((x === 4 || x === 8) && (y === 3 || y === 5))) L.set(x, y, TL.SPRING);
     if (c.sign) { const si = L.idx(6, 1); L.props[si] = PR.SIGN; L.signText[si] = c.sign; }
+    if (c.graves) for (const x of [4, 8]) L.props[L.idx(x, 2)] = PR.GRAVE; // the lament: two markers beside the mourner
   }
   for (const s of c.stock) {
     const item = Array.isArray(s.item) ? rnd.pick(s.item) : s.item; // a list means "one of these, chosen per world"
