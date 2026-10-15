@@ -90,7 +90,9 @@ function genWorld(seed, mode) {
   const rnd = mulberry32(seed);
   genOverworld(W, rnd);
   for (const biome of ['snow', 'ash']) genTunnel(W, biome, mulberry32(seed * 53 + (biome === 'snow' ? 11 : 29))); // the caves into the frontier lands
+  if (Content.dungeons[13]) genSilkPlaces(W, mulberry32(seed * 101 + 13)); // before the dungeons: the Silkwood's gate and its far mouth
   for (let d = 1; d <= NDUNGEONS(); d++) genDungeon(W, d, mulberry32(seed * 31 + d * 977));
+  if (W.levels.d13) finishSilkPass(W);
   genGrottos(W, mulberry32(seed * 17 + 5));
   genTestZone(W);
   return W;
@@ -101,6 +103,33 @@ function genWorld(seed, mode) {
 function applyFallen(W) {
   const L = W.levels[W.startCave]; if (!L || L.fallen) return; L.fallen = true; L.dark = true;
   L.npcs = [{ x: 6.5, y: 2.2, spr: 'oldman_fallen', text: Content.fallen.text }];
+}
+// ---------- THE SILKWOOD (dungeon 13, content/gimmicks/webs.js) ----------
+// Its gate stands in one region of the Wilds, and a webbed-over cave mouth (SILKSEAL) in another, at least three columns
+// away. The far end of the dungeon (beyond the Broodmother) leads out of that mouth, and both are sealed until she dies
+// (sim.openSilkPass): after that the Silkwood is a shortcut across the land. Own random stream, so the rest doesn't move.
+// Both get a carved way to their region's first door if rocks or trees box them in.
+function linkToDoor(L, r, tx, ty) {
+  if (!r || !r.doors.length) return; const { x0, y0, x1, y1 } = regionInterior(r); const [sx, sy] = r.doors[0];
+  const seen = new Set([sx + ',' + sy]); const q = [[sx, sy]];
+  while (q.length) { const [x, y] = q.shift(); if (x === tx && y === ty) return; for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { const nx = x + dx, ny = y + dy; if (nx < x0 || ny < y0 || nx >= x1 || ny >= y1) continue; const k = nx + ',' + ny; if (seen.has(k) || L.solidAt(nx + 0.5, ny + 0.5)) continue; seen.add(k); q.push([nx, ny]); } }
+  carve(L, tx, ty, sx, sy, x0, y0, x1, y1);
+}
+function genSilkPlaces(W, rnd) {
+  const L = W.levels.ow; const sr = owRegionAt(L, L.spawn.x, L.spawn.y);
+  const passRegion = (r) => Object.values(L.passes || {}).some(ps => ps.ry === r.ry && (ps.inner === r.rx || ps.fx === r.rx)); // (keep clear of the tunnel mouths)
+  const ok = (r) => r !== sr && !FRONTIER[r.rx] && !passRegion(r) && r.biome !== 'lake' && !r.island && !r.gate && r.features.length < 2 && r.doors.length;
+  const cands = rnd.shuffle(L.regions.filter(ok)); if (!cands.length) return;
+  const a = cands.find(r => r.biome === 'forest') || cands[0];
+  const b = cands.filter(r => r !== a && Math.abs(r.rx - a.rx) >= 3).sort((p, q) => Math.abs(q.rx - a.rx) - Math.abs(p.rx - a.rx))[0]; if (!b) return;
+  placeGate(W, L, a, rnd, 13); const g = W.dungeons[13]; if (!g) return; connectRegion(L, a); linkToDoor(L, a, g.x, g.y + 1); // (the new walls mustn't cut the region in two)
+  const p = placeStructure(L, b, rnd, TL.ROCK, TL.SILKSEAL, false); if (!p) return; const [px, py] = p; connectRegion(L, b); linkToDoor(L, b, px, py + 1);
+  b.features.push({ type: 'silkmouth', x: px, y: py }); W.silkMouth = { idx: L.idx(px, py), x: px + 0.5, y: py + 1.6, a: Math.PI / 2 };
+}
+function finishSilkPass(W) {
+  const D = W.levels.d13, m = W.silkMouth, OW = W.levels.ow; if (!D || !m || D.passIn == null) return;
+  OW.portals[m.idx] = { to: 'd13', at: D.passIn };
+  const s = D.startRoom; D.exits = [{ x: s.rx * DSX + 6, y: s.ry * DSY + DSY, to: D.exit }, { x: D.passSeal % D.w, y: Math.floor(D.passSeal / D.w), to: { lvl: 'ow', x: m.x, y: m.y, a: m.a } }];
 }
 // ---------- GROTTOS ----------
 // One grotto of each kind (content/grottos.js) under a hollow tree: a tree already standing in a forest or plains region

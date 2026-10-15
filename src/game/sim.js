@@ -49,6 +49,7 @@ const DUMMY_RESET = 3; // a training dummy heals (and gets its armor back) after
 const fmtDmg = (n) => String(Math.round(n * 100) / 100);
 const DISARM_STAGGER = 1.2;
 const KNIGHT_WINDUP = 0.45; // seconds a sword knight raises its blade before the counter lands (your cue to back off) // seconds a disarmed foe reels
+const WEB_HELPLESS = 1, ARM_DELAY = 0.12, ARM_MIRROR = 0.25, ARM_SWAP = 1.5; // stuck in a web: seconds before a slash frees you; the Silk Arm's mirror cut: delay, share of the hit; stance change time
 const GRUDGE_COOL = 180, THORN_RING_GRUDGE = 12; // the thorn-folk's grudge: seconds per point it cools; the most the root merchant forgives
 const REFLECT_TIME = 1, WARD_TIME = 8; // the Wardhold shield (content/wardhold.js): reflect window after it comes up; seconds between wards
 const TWIN_EYE_TIME = 0.55; // seconds a twin-eye gate's eye stays shut (content/gimmicks/twingate.js)
@@ -101,7 +102,7 @@ class Sim {
     return p;
   }
   removePlayer(id) { const p = this.players[id]; if (!p) return; this.savedPlayers = this.savedPlayers || {}; this.savedPlayers[p.color] = this.playerSaveData(p); delete this.players[id]; this.ev({ t: 'msg', text: p.name + ' LEFT.' }); }
-  playerSaveData(p) { const o = {}; for (const k of ['cls', 'lvl', 'x', 'y', 'a', 'hp', 'maxHp', 'gems', 'bombs', 'maxBombs', 'arrows', 'maxArrows', 'swordMax', 'armorMax', 'arrowType', 'wandEl', 'sword', 'armor', 'items', 'favs', 'ring', 'potions', 'sel']) o[k] = p[k]; o.alive = true; if (o.hp <= 0) o.hp = 12; return o; }
+  playerSaveData(p) { const o = {}; for (const k of ['cls', 'lvl', 'x', 'y', 'a', 'hp', 'maxHp', 'gems', 'bombs', 'maxBombs', 'arrows', 'maxArrows', 'swordMax', 'armorMax', 'arrowType', 'wandEl', 'sword', 'armor', 'items', 'favs', 'ring', 'armMode', 'potions', 'sel']) o[k] = p[k]; o.alive = true; if (o.hp <= 0) o.hp = 12; return o; }
   ev(e) { this.events.push(e); }
   sfx(s, lvl, x, y) { this.ev({ t: 'sfx', s, lvl, x, y }); }
   msg(text, pid) { this.ev({ t: 'msg', text, pid }); }
@@ -174,7 +175,8 @@ class Sim {
     if (!p.alive) { if (a.t === 'respawn') this.tryRespawn(p); return; }
     switch (a.t) {
       case 'atk': this.playerAttack(p, a); break;
-      case 'use': this.useItem(p, a.item, a); break;
+      case 'use': if (p.webbed) break; this.useItem(p, a.item, a); break;
+      case 'webline': { const i = a.idx | 0; const x = i % L.w, y = Math.floor(i / L.w); if (L.props[i] === PR.WEBLINE && !p.webbed && !this.flying(p) && dist2(x + 0.5, y + 0.5, p.x, p.y) < 1.5) { p.webbed = { at: this.time, idx: i, by: 'line' }; this.sfx('webstick', p.lvl, p.x, p.y); } break; } // walked into a strand (gimmicks/webs.js)
       case 'equip': this.equip(p, a); break;
       case 'enter': this.tryEnter(p, a.idx); break;
       case 'exit': this.tryExit(p); break;
@@ -220,7 +222,7 @@ class Sim {
   }
   // ---- teleport ----
   teleport(p, lvl, x, y, a) {
-    p.lvl = lvl; p.x = x; p.y = y; p.a = a; this.ev({ t: 'tp', pid: p.id, lvl, x, y, a });
+    p.lvl = lvl; p.x = x; p.y = y; p.a = a; p.webbed = null; this.ev({ t: 'tp', pid: p.id, lvl, x, y, a });
     this.initLevel(lvl);
     if (this.W.levels[lvl] && this.W.levels[lvl].kind === 'tunnel') { const T = this.W.levels[lvl]; this.ev({ t: 'title', pid: p.id, text: T.label, sub: T.tunnelBiome === 'snow' ? 'TO THE FROZEN REACH' : 'TO THE CINDER WASTES' }); }
     if (lvl === 'dbg') { this.ev({ t: 'title', pid: p.id, text: 'TEST ZONE', sub: 'DEBUG' }); // and its training dummies (world.js genTestZone L.dummies)
@@ -241,6 +243,7 @@ class Sim {
       else this.ev({ t: 'dialog', pid: p.id, text: 'A GATE OF THREE FLAMES. TWO OF THE HOLLOWS ARE EMPTY: ONE COLD AS THE FROZEN REACH, ONE HOT AS THE CINDER WASTES.' + (has('fang') ? ' (THE FROST FANG FITS.)' : '') + (has('emberheart') ? ' (THE EMBER HEART FITS.)' : '') });
       return;
     }
+    if (TINFO[t].sealedMsg) { this.ev({ t: 'dialog', pid: p.id, text: TINFO[t].sealedMsg }); return; }
     const portal = L.portals[idx]; if (!portal) return;
     if (!TINFO[t].portal && !TINFO[t].stairs) return;
     const T = this.W.levels[portal.to]; if (!T) return;
@@ -273,6 +276,28 @@ class Sim {
       }
     }
   }
+  // ---- the Silkwood (gimmicks/webs.js, enemies/silk.js) ----
+  igniteSilk(L, i) {
+    const t = L.tiles[i]; if (!(TINFO[t].silk || t === TL.WEB)) return; this.setTile(L.id, i, TL.SILK_BURNING, L.props[i] === PR.HELM || L.props[i] === PR.SIGN ? L.props[i] : 0);
+    (L.silkFire = L.silkFire || {})[i] = this.time; L.silkSpread = L.silkSpread || {}; if (!L.fireSfxAt || this.time - L.fireSfxAt > 0.4) { L.fireSfxAt = this.time; this.sfx('whoosh', L.id, i % L.w + 0.5, Math.floor(i / L.w) + 0.5); }
+  }
+  // spiders for a room: as tough as the dungeon makes its own (tier), joined to that room's fight
+  spawnBrood(L, x, y, type, opts) {
+    const room = L.kind === 'dungeon' ? dungeonRoomAt(L, x, y) : null; const key = room ? L.id + ':' + room.id : null; const def = enemyDef(type);
+    const tierMul = L.kind === 'dungeon' ? 1 + (Math.min(10, L.dnum) - 1) * 0.25 : 1;
+    return this.spawnEnemy(type, L.id, x, y, Object.assign({ group: key, bounds: room ? roomBounds(L, room) : null, hp: Math.ceil(def.hp * tierMul), dmgMul: L.kind === 'dungeon' ? Math.ceil(Math.min(9, L.dnum) / 3) : 1 }, opts || {}));
+  }
+  hatchEggs(L, i) { this.setTile(L.id, i, null, 0); const x = i % L.w + 0.5, y = Math.floor(i / L.w) + 0.5; for (let k = 0; k < 3; k++) { const a = k / 3 * TAU; this.spawnBrood(L, x + Math.cos(a) * 0.4, y + Math.sin(a) * 0.4, 'spiderling', { spawnFx: 0.2 }); } this.sfx('hatch', L.id, x, y); }
+  // spiders come down from the ceiling around a hero (a cut strand, the Broodmother's wrap): shadows first, then them
+  dropSpiders(p, n) {
+    const L = this.W.levels[p.lvl]; this.sfx('skitter', p.lvl, p.x, p.y); this.ev({ t: 'shake', lvl: p.lvl, x: p.x, y: p.y });
+    for (let k = 0, tries = 0; k < n && tries < 40; tries++) { const a = Math.random() * TAU, r = 1.6 + Math.random() * 1.6; const x = p.x + Math.cos(a) * r, y = p.y + Math.sin(a) * r; if (L.solidAt(x, y) || TINFO[L.get(Math.floor(x), Math.floor(y))].pit) continue; k++;
+      this.spawnBrood(L, x, y, 'spider_ceiling', { st: 1, tm: 0.6 + k * 0.25, tx: x, ty: y, spawnFx: 0 }); }
+  }
+  cutFree(p) { const w = p.webbed; p.webbed = null; const L = this.W.levels[p.lvl]; if (w.by === 'line' && L.props[w.idx] === PR.WEBLINE) this.setTile(L.id, w.idx, null, 0); this.sfx('webtear', p.lvl, p.x, p.y); this.dropSpiders(p, w.by === 'wrap' ? 2 : 3); }
+  armOn(p, mode) { return !!p.items.silkarm && p.armMode === mode && this.time >= (p.armSwapAt || 0); }
+  // the Silkwood's far way out (world.js genSilkPlaces): opens once the Broodmother is dead
+  openSilkPass() { const D = this.W.levels.d13, m = this.W.silkMouth; if (D && D.passSeal != null && D.tiles[D.passSeal] === TL.WEBSEAL) this.setTile(D.id, D.passSeal, TL.DEXIT); if (m && this.W.levels.ow.tiles[m.idx] === TL.SILKSEAL) this.setTile('ow', m.idx, TL.SILKCAVE); }
   // ---- the first old man (content/wardhold.js) ----
   updateFirstDoor(plist) {
     const W = this.W, C = Content.fallen; if (!C || !W.startCave) return;
@@ -364,13 +389,14 @@ class Sim {
       if (!p.alive) continue;
       const L = this.W.levels[p.lvl];
       // hazard tiles
-      if (p.chill > 0) p.chill -= dt; if (this.ringOn(p, 'ring_rime')) p.chill = 0; this.tickPoison(p);
+      if (p.chill > 0) p.chill -= dt; if (this.ringOn(p, 'ring_rime')) p.chill = 0; this.tickPoison(p); if (p.silk > 0) p.silk -= dt;
+      if (p.armCuts && p.armCuts.length) p.armCuts = p.armCuts.filter(c => { if (this.time < c.at) return true; const e = this.ents.find(o => o.id === c.id && !o.dead); if (e) { this.damageEnemy(e, c.dmg, p, { pid: p.id, ignoreIframes: true, kbMul: 0.3 }); this.sfx('armcut', p.lvl, e.x, e.y); } return false; });
       if (this.ringOn(p, 'ring_mender') && p.hp < p.maxHp && this.time - (p.movedAt || 0) > 3 && this.time - (p.lastHurtAt || -99) > 3 && this.time >= (p.mendNext || 0)) { p.mendNext = this.time + 1.2; this.heal(p, 1); } // Mender's Ring
       this.updateBackswing(p); p.maxBombs = bombCap(p); if (p.bombs > p.maxBombs) p.bombs = p.maxBombs;
       if (p.dbg) { p.arrows = Math.max(p.arrows, p.maxArrows || ARROWS_START); p.bombs = Math.max(p.bombs, p.maxBombs); p.items.bombs = true; p.potions = 2; p.items.potion = true; p.gems = Math.max(p.gems, 999); } // debug: never run out
       const t = L.get(Math.floor(p.x), Math.floor(p.y)); const ti = TINFO[t]; const boots = !!p.items.magmaboots;
       if (ti.heal && p.hp < p.maxHp && this.time >= (p.healNext || 0)) { p.healNext = this.time + 0.35; this.heal(p, 1); if (p.hp >= p.maxHp) this.sfx('heart', p.lvl, p.x, p.y); } // a warm spring (content/grottos.js)
-      if (p.inv <= 0 && !this.flying(p) && ((ti.hurt && !(boots && ti.lava)) || (ti.vent && this.ventPhase() === 2 && !boots))) this.hurtPlayer(p, 1, null, ti.lava || ti.vent ? 'fire' : null); // fliers are above it all
+      if (p.inv <= 0 && !this.flying(p) && ((ti.hurt && !(boots && ti.lava)) || (ti.vent && this.ventPhase() === 2 && !boots))) this.hurtPlayer(p, ti.hurtDmg || 1, null, ti.lava || ti.vent || ti.fire ? 'fire' : null); // fliers are above it all
       p.swordMax = Math.max(p.swordMax || 0, p.sword); p.armorMax = Math.max(p.armorMax || 0, p.armor); // best gear ever owned (the inventory lets you wear less)
       // pickups & shop
       for (const e of this.ents) {
@@ -490,7 +516,7 @@ class Sim {
       // co-op scaling: rescale every enemy's health by the same share when the headcount changes
       if (here && !g.cleared) { const m = partyMul(here); if (m !== g.mul) { for (const e of g.ents) { e.hp = e.hp * m / g.mul; e.maxHp = e.maxHp * m / g.mul; } g.mul = m; } }
       if (!g.cleared) {
-        g.ents = g.ents.filter(e => !e.dead);
+        g.ents = g.ents.filter(e => !e.dead && !enemyDef(e.type).neutral); // a neutral one (the Silkwood's little spider) never holds a room shut
         if (!g.ents.length) this.groupCleared(g, false);
       }
       // shutters for dungeon rooms
@@ -589,7 +615,7 @@ class Sim {
     if ((elite && elite.noContact) || e.sub || e.air || !def.dmg) return; // can't bite you from under the water or in mid-air
     for (const pl of Object.values(this.players)) {
       if (!pl.alive || pl.lvl !== e.lvl || pl.inv > 0) continue;
-      const rr = this.enemyRadius(e) + 0.28; if (dist2(pl.x, pl.y, e.x, e.y) < rr * rr) this.hurtPlayer(pl, def.dmg * (def.boss ? 1 : e.dmgMul), e);
+      const rr = this.enemyRadius(e) + 0.28; if (dist2(pl.x, pl.y, e.x, e.y) < rr * rr) { this.hurtPlayer(pl, def.dmg * (def.boss ? 1 : e.dmgMul), e); if (elite && elite.onHitPlayer) elite.onHitPlayer(this, e, pl); }
     }
   }
   // Tiles hurt grounded enemies too: pits swallow them, lava, spikes and blowing vents burn them.
@@ -602,8 +628,8 @@ class Sim {
     const burn = (ti.hurt && !(def.hot && ti.lava)) || (ti.vent && this.ventPhase() === 2 && !def.hot);
     if (!burn) { e.hazT = 0; return; }
     e.hazT = (e.hazT || 0) - dt; if (e.hazT > 0) return; e.hazT = HAZARD_TICK;
-    if (ti.lava || ti.vent) this.sfx('sizzle', e.lvl, e.x, e.y);
-    this.damageEnemy(e, 1, null, { ignoreIframes: true, pid: e.lastPid });
+    if (ti.lava || ti.vent || ti.fire) this.sfx('sizzle', e.lvl, e.x, e.y);
+    this.damageEnemy(e, ti.hurtDmg || 1, null, { ignoreIframes: true, pid: e.lastPid });
   }
   enemyFalls(e, water) { // gone, with no loot (it fell or sank with it)
     e.dead = true; const p = e.lastPid && this.players[e.lastPid]; if (p) p.kills++; this.onKill(e, e.lastPid);
@@ -613,10 +639,11 @@ class Sim {
   knockFor(e, def, speed) { const L = this.W.levels[e.lvl]; return !def.fly && TINFO[L.get(Math.floor(e.x), Math.floor(e.y))].slippery ? [speed * ICE_KB, 0.3] : [speed, null]; }
   wake(e) { e.dormant = false; e.spawnFx = 0.35; this.sfx('roar', e.lvl, e.x, e.y); this.puff(e, 1); }
   // ---- elites (content/elites.js) ----
+  // Spider-kin (def.spiderkin) only roll the spider elites (elite.only === 'spider'); everything else only the general ones.
   makeElite(e, rnd) {
-    const list = Content.elites; let total = 0; for (const d of list) total += d.weight;
-    const no = enemyDef(e.type).noElites; if (no) { const ok = list.filter(d => !no.includes(d.id)); if (!ok.length) return; total = 0; for (const d of ok) total += d.weight; let r2 = rnd() * total; for (const d of ok) { if (r2 < d.weight) { e.elite = d.idx; if (d.apply) d.apply(e, this); return; } r2 -= d.weight; } return; } // e.g. the poison frog is never a giant
-    let r = rnd() * total; let pick = list[list.length - 1];
+    const def = enemyDef(e.type); const no = def.noElites || [];
+    const list = Content.elites.filter(d => (def.spiderkin ? d.only === 'spider' : !d.only) && !no.includes(d.id)); if (!list.length) return;
+    let total = 0; for (const d of list) total += d.weight; let r = rnd() * total; let pick = list[list.length - 1];
     for (const d of list) { if (r < d.weight) { pick = d; break; } r -= d.weight; }
     e.elite = pick.idx; if (pick.apply) pick.apply(e, this);
   }
@@ -636,6 +663,7 @@ class Sim {
     if (p.inv > 0 || !p.alive || p.god) return;
     elem = elem || this.elemOf(src);
     if (elem === 'fire' && (!src || src.k === 'efire') && this.ringOn(p, 'ring_cinder')) return; // burning ground can't touch a Cinder Ring
+    if (src && src.k === 'en' && this.armOn(p, 'guard')) dmg *= 0.75; // the Silk Arm's guard takes the edge off a bite or a charge
     const amt = Math.max(1, Math.round(dmg * 2 * this.defenseMul(p, elem))); // quarter-hearts (1 dmg = half heart)
     if (src && src.k === 'en' && !src.dead && this.ringOn(p, 'ring_thorn')) this.damageEnemy(src, dmg * 3, p, { pid: p.id, ignoreIframes: true, pierceShield: true }); // the Thorn Ring bites back
     p.hp -= amt; p.inv = 1.0; p.lastHurtAt = this.time; this.clearBeam(p);
@@ -645,7 +673,7 @@ class Sim {
     if (p.hp <= 0) {
       if (this.ringOn(p, 'ring_secondwind') && !p.windUsed) { p.windUsed = true; p.hp = 1; this.sfx('heal', p.lvl); this.ev({ t: 'hint', pid: p.id, text: 'SECOND WIND!' }); return; } // once per life
       if (p.potions > 0) { p.potions--; p.hp = p.maxHp; this.msg(p.name + "'S POTION SAVED THEM!"); this.sfx('heal', p.lvl); return; }
-      p.hp = 0; p.alive = false; p.downAt = this.time; p.revive = 0; p.reviver = null; this.clearBeam(p); p.windUsed = false; this.ev({ t: 'down', pid: p.id }); this.msg(p.name + ' IS DOWN!' + (Object.keys(this.players).length > 1 ? ' GET CLOSE AND HOLD F TO HELP THEM UP.' : ''));
+      p.hp = 0; p.alive = false; p.downAt = this.time; p.revive = 0; p.reviver = null; this.clearBeam(p); p.windUsed = false; p.webbed = null; this.ev({ t: 'down', pid: p.id }); this.msg(p.name + ' IS DOWN!' + (Object.keys(this.players).length > 1 ? ' GET CLOSE AND HOLD F TO HELP THEM UP.' : ''));
     }
   }
   clearBeam(p) { for (const e of this.ents) if (e.k === 'proj' && e.pid === p.id && Content.projectiles[e.type].beam) e.dead = true; }
@@ -706,6 +734,7 @@ class Sim {
   // ---- player actions ----
   playerAttack(p, a) {
     const L = this.W.levels[p.lvl];
+    if (p.webbed) { if (this.time - p.webbed.at >= WEB_HELPLESS) this.cutFree(p); return; } // stuck: a moment of nothing, then a slash cuts you loose (and brings them down)
     const swordDmg = SWORD_DMG[p.sword] || 1;
     if ((a.kind === 'sword' || a.kind === 'pommel' || a.kind === 'slash') && p.sword === 0) return;
     if (a.kind === 'pommel') return this.pommelStrike(p, L);
@@ -723,11 +752,12 @@ class Sim {
         if (p.cls === 'monk' && a.kind === 'punch3' && !def.boss) { const [v, t] = this.knockFor(e, def, 14); e.kb = [Math.cos(p.a) * v, Math.sin(p.a) * v]; e.kbT = t || 0.2; e.stun = 0.5; }
       }
     }
-    this.cutAt(L, p.x + Math.cos(p.a) * 0.75, p.y + Math.sin(p.a) * 0.75); this.cutAt(L, p.x + Math.cos(p.a) * 1.25, p.y + Math.sin(p.a) * 1.25);
+    this.cutAt(L, p.x + Math.cos(p.a) * 0.75, p.y + Math.sin(p.a) * 0.75, p); this.cutAt(L, p.x + Math.cos(p.a) * 1.25, p.y + Math.sin(p.a) * 1.25, p);
     // TODO(monk rework): remove. The martial artist has no pommel strike yet, so his punches split gourds instead (he'd be stuck in Bramble Keep otherwise).
     if (p.cls === 'monk') { for (const d of [0.6, 1.1]) this.breakGourd(L, p.x + Math.cos(p.a) * d, p.y + Math.sin(p.a) * d); }
     else for (const d of [0.6, 1.1]) { const i = L.idx(Math.floor(p.x + Math.cos(p.a) * d), Math.floor(p.y + Math.sin(p.a) * d)); if (Content.breakables[L.props[i]]) { this.sfx('thok', p.lvl, p.x, p.y); break; } } // a swing just bounces off
     if (a.kind === 'sword' && hitAny) this.chainHit(p, hits);
+    if (hitAny && this.armOn(p, 'blade')) for (const e of hits) (p.armCuts = p.armCuts || []).push({ id: e.id, at: this.time + ARM_DELAY, dmg: dmg * ARM_MIRROR }); // the Silk Arm cuts again a beat later
     if (hitAny && p.cls === 'monk') this.ev({ t: 'pow', lvl: p.lvl, x: p.x + Math.cos(p.a) * 0.9, y: p.y + Math.sin(p.a) * 0.9, big: a.kind === 'punch3' });
     // bush cutting / burn? sword cuts nothing; check bombable hint clink
     // sword beams: at full health, one at a time. The Dawnblade's light always flies, at any health, up to 3 at once.
@@ -839,6 +869,7 @@ class Sim {
   equip(p, a) {
     if (a.slot === 'sword') { const lv = a.lv | 0; if (lv >= 1 && lv <= Math.max(p.swordMax || 0, p.sword)) p.sword = lv; }
     else if (a.slot === 'armor') { const lv = a.lv | 0; if (lv >= 0 && lv <= Math.max(p.armorMax || 0, p.armor)) p.armor = lv; }
+    else if (a.slot === 'arm') { if (p.items.silkarm && (a.mode === 'blade' || a.mode === 'guard') && a.mode !== p.armMode) { p.armMode = a.mode; p.armSwapAt = this.time + ARM_SWAP; } } // the Silk Arm's stance (it takes a moment to change)
     else if (a.slot === 'ring') { if (a.id === 'none') p.ring = null; else if (p.items[a.id] && Content.items[a.id] && Content.items[a.id].ring) p.ring = a.id; } // one ring at a time (items/rings.js)
     else if (a.slot === 'wand') p.wandEl = ['plain', 'fire', 'thunder'].includes(a.kind) ? a.kind : 'plain'; // the magic wand's element (items/rod.js)
     else if (a.slot === 'arrows') p.arrowType = ['plain', 'frost', 'silver'].includes(a.kind) ? a.kind : (a.plain ? 'plain' : 'frost');
@@ -900,9 +931,11 @@ class Sim {
           // sword-class shield blocks weak front projectiles when not attacking
           const toP = Math.atan2(e.y - p.y, e.x - p.x);
           if (def.poison) this.poisonPlayer(p); // poison gets through a shield
+          if (def.silk) p.silk = Math.max(p.silk || 0, def.silk); // a web glob: you wade for a moment
+          const guardArm = def.blockable && this.armOn(p, 'guard'); // the Silk Arm's guard blocks from any side
           if (p.cls !== 'monk' && def.blockable && Math.abs(angDiff(p.a, toP)) < 0.7 && this.reflectOpen(p)) { this.reflectProj(e, p); return; }
           if (!def.blockable && Math.abs(angDiff(p.a, toP)) < 0.7 && this.wardReady(p)) { p.wardAt = this.time + WARD_TIME; e.dead = true; this.sfx('ward', e.lvl, p.x, p.y); this.ev({ t: 'block', pid: p.id, reflect: true }); return; } // the shield's ward stops what a shield can't
-          if (p.cls !== 'monk' && def.blockable && Math.abs(angDiff(p.a, toP)) < 0.7) { e.dead = true; this.sfx('clink', e.lvl); this.ev({ t: 'block', pid: p.id }); return; }
+          if (guardArm || (p.cls !== 'monk' && def.blockable && Math.abs(angDiff(p.a, toP)) < 0.7)) { e.dead = true; this.sfx('clink', e.lvl); this.ev({ t: 'block', pid: p.id }); return; }
           if (def.chill && p.inv <= 0 && !p.god) p.chill = Math.max(p.chill || 0, def.chill);
           this.hurtPlayer(p, e.dmg, e); e.dead = true; return;
         }
@@ -927,8 +960,10 @@ class Sim {
     }
   }
   // tiles with cuttable: true (brambles) open when a sword or fist hits them
-  cutAt(L, x, y) {
+  cutAt(L, x, y, p) {
     const i = L.idx(Math.floor(x), Math.floor(y)); const ti = TINFO[L.tiles[i]];
+    if (PR.COCOON != null && L.props[i] === PR.COCOON) { this.setTile(L.id, i, null, PR.HELM); this.spawn({ k: 'fx', lvl: L.id, x: Math.floor(x) + 0.5, y: Math.floor(y) + 0.5, spr: 'puff', life: 0.4, sc: 1 }); this.sfx('hit', L.id); } // cut open: empty armor
+    if (PR.WEBLINE != null && L.props[i] === PR.WEBLINE && p) { this.setTile(L.id, i, null, 0); this.dropSpiders(p, 3); } // a cut strand shakes the whole web
     if (ti && ti.cuttable) { this.setTile(L.id, i, TL[ti.opensTo] != null ? TL[ti.opensTo] : TL.DFLOOR); this.spawn({ k: 'fx', lvl: L.id, x: Math.floor(x) + 0.5, y: Math.floor(y) + 0.5, spr: 'puff', life: 0.3, sc: 0.9 }); this.sfx('hit', L.id); }
   }
   // A HOLLOW TREE (content/grottos.js) burns open on the stair down to its grotto: fire does it (the candle, from the start).
@@ -946,6 +981,8 @@ class Sim {
       const ti = TINFO[L.tiles[i]];
       if (ti && ti.burnable && dist2(bx + 0.5, by + 0.5, x, y) < 1.2) { this.setTile(L.id, i, TL[ti.opensTo] != null ? TL[ti.opensTo] : TL.DFLOOR); this.spawn({ k: 'fx', lvl: L.id, x: bx + 0.5, y: by + 0.5, spr: 'flame', life: 0.6, sc: 0.9 }); }
       if (L.props[i] === PR.HOLLOWTREE && dist2(bx + 0.5, by + 0.5, x, y) < 1.2) this.openHollowTree(L, bx + 0.5, by + 0.5);
+      if (ti && ti.silk && dist2(bx + 0.5, by + 0.5, x, y) < 1.2) this.igniteSilk(L, i); // old silk: the whole room goes up (gimmicks/webs.js)
+      if (PR.EGGSAC != null && (L.props[i] === PR.EGGSAC || L.props[i] === PR.WEBLINE || L.props[i] === PR.COCOON) && dist2(bx + 0.5, by + 0.5, x, y) < 1.2) { const was = L.props[i]; this.setTile(L.id, i, null, was === PR.COCOON ? PR.HELM : 0); this.spawn({ k: 'fx', lvl: L.id, x: bx + 0.5, y: by + 0.5, spr: 'flame', life: 0.6, sc: 0.9 }); this.sfx('fire', L.id); }
       if (PR.TORCH != null && L.props[i] === PR.TORCH && dist2(bx + 0.5, by + 0.5, x, y) < 1.2) { this.setTile(L.id, i, null, PR.FLAME); this.sfx('fire', L.id); }
       if (L.props[i] === PR.BUSH && dist2(bx + 0.5, by + 0.5, x, y) < 0.7) {
         const rev = L.secretReveal[i]; if (L.kind === 'ow') this.addGrudge(2); // a thorn-folk home
@@ -1021,6 +1058,7 @@ class Sim {
       else if (def.backSprite && !e.disarmed && viewer && !e.dormant && Math.abs(angDiff(e.f, Math.atan2(viewer.y - e.y, viewer.x - e.x))) > BACK_ANGLE) spr = def.backSprite; // e.g. a frog's head poking out of the water
       if (e.hurt > 0) fl |= 1; if (e.stun > 0) fl |= 2; if (def.phase) fl |= 4; if (e.spawnFx > 0) { spr = 'puff'; }
       if (def.view) z += def.view(e);
+      const el = e.elite && eliteByIdx(e.elite); if (el && el.hidden && viewer && viewer.sel !== 'candle' && dist2(viewer.x, viewer.y, e.x, e.y) > 9) spr = 'hush_eyes'; // HUSH: only its eyes, until it's close or in candlelight
     }
     if (e.k === 'pick' && !e.perm) z += Math.abs(Math.sin(e.t * 3)) * 0.04;
     if (e.k === 'shop') z += Math.sin(this.time * 2) * 0.03;
@@ -1029,14 +1067,14 @@ class Sim {
     if (e.k === 'en' && enemyDef(e.type).boss) v.push(Math.max(0, e.hp / e.maxHp)); else v.push(-1);
     if (e.k === 'npc') v.push(e.text); else v.push(0);
     v.push(e.k === 'en' && e.elite ? e.elite : 0);
-    v.push(e.k === 'en' && !e.dead ? 1 : 0); // [11]: a foe (the lunge stops at one)
+    v.push(e.k === 'en' && !e.dead && !enemyDef(e.type).neutral ? 1 : 0); // [11]: a foe (the lunge stops at one)
     return v;
   }
   snapshotFor(pid) {
     const p = this.players[pid]; if (!p) return null;
     const en = []; for (const e of this.ents) if (e.lvl === p.lvl) en.push(this.entView(e, p));
     const pl = []; for (const o of Object.values(this.players)) pl.push([o.id, o.lvl, Math.round(o.x * 100) / 100, Math.round(o.y * 100) / 100, Math.round(o.a * 100) / 100, o.color, o.armor, o.cls, o.alive ? 1 : 0, o.atk, o.name, Math.round(o.revive / REVIVE_TIME * 100) / 100, o.hp, o.maxHp, o.reviver || 0, o.z || 0]); // [15] z: feet height (ledges, the cloak's lift)
-    const me = {}; for (const k of ['lvl', 'hp', 'maxHp', 'gems', 'bombs', 'maxBombs', 'arrows', 'maxArrows', 'swordMax', 'armorMax', 'arrowType', 'wandEl', 'sword', 'armor', 'items', 'favs', 'ring', 'potions', 'alive', 'cls', 'sel', 'color', 'name', 'dbg', 'god']) me[k] = p[k]; me.spellCd = Math.max(0, Math.round(((p.spellReady || 0) - this.time) * 10) / 10); me.chill = p.chill > 0 ? 1 : 0; me.mirror = this.reflectOpen(p) ? 1 : 0; me.ward = this.wardReady(p) ? 1 : 0; me.poison = p.poisonTicks > 0 ? p.poisonTicks : 0; me.fly = this.flying(p) ? Math.round((p.flyUntil - this.time) * 10) / 10 : 0; me.respawnIn = p.alive ? 0 : Math.max(0, Math.ceil(RESPAWN_WAIT - (this.time - (p.downAt || 0))));
+    const me = {}; for (const k of ['lvl', 'hp', 'maxHp', 'gems', 'bombs', 'maxBombs', 'arrows', 'maxArrows', 'swordMax', 'armorMax', 'arrowType', 'wandEl', 'sword', 'armor', 'items', 'favs', 'ring', 'armMode', 'potions', 'alive', 'cls', 'sel', 'color', 'name', 'dbg', 'god']) me[k] = p[k]; me.spellCd = Math.max(0, Math.round(((p.spellReady || 0) - this.time) * 10) / 10); me.chill = p.chill > 0 ? 1 : 0; me.mirror = this.reflectOpen(p) ? 1 : 0; me.webbed = p.webbed ? Math.round((this.time - p.webbed.at) * 10) / 10 : -1; me.silk = p.silk > 0 ? 1 : 0; me.armReady = this.time >= (p.armSwapAt || 0) ? 1 : 0; me.ward = this.wardReady(p) ? 1 : 0; me.poison = p.poisonTicks > 0 ? p.poisonTicks : 0; me.fly = this.flying(p) ? Math.round((p.flyUntil - this.time) * 10) / 10 : 0; me.respawnIn = p.alive ? 0 : Math.max(0, Math.ceil(RESPAWN_WAIT - (this.time - (p.downAt || 0))));
     return { t: 's', paused: !!this.paused, pausedBy: this.pausedBy, me, pl, en, team: { keys: this.team.keys, maps: this.team.maps, comps: this.team.comps, shards: this.team.shards, done: this.team.done, relics: this.team.relics, fallen: !!this.team.fallen, grudge: this.team.grudge || 0 }, vp: this.ventPhase(), rg: this.rigCodes(p.lvl), fz: this.frozenList(p.lvl), mv: this.modVer, over: this.over > 0 };
   }
   // ---- save ----
@@ -1055,6 +1093,7 @@ class Sim {
     for (const lvl in this.mods) { const L = this.W.levels[lvl]; if (L && L.gourds) for (const i in this.mods[lvl]) if (L.gourds[i] != null && this.mods[lvl][i][1] !== L.gourds[i]) delete this.mods[lvl][i]; } // split gourds grow back
     for (const lvl in this.mods) { const L = this.W.levels[lvl]; if (!L) continue; for (const i in this.mods[lvl]) { const [t, pr] = this.mods[lvl][i]; L.tiles[i] = t; L.props[i] = pr; } }
     if (this.team.fallen) applyFallen(this.W);
+    if (TL.SILK_BURNING != null) for (const lvl in this.mods) for (const i in this.mods[lvl]) if (this.mods[lvl][i][0] === TL.SILK_BURNING) { this.mods[lvl][i][0] = TL.CHARRED; this.W.levels[lvl].tiles[i] = TL.CHARRED; } // a fire that was burning when you saved has burned out
     for (const L of Object.values(this.W.levels)) for (const r of Object.values(L.rooms || {})) for (const [a, b] of (r && r.legacyTk) || []) if (this.team.taken[L.id + ':' + a]) this.team.taken[L.id + ':' + b] = true; // prizes that moved (the wyrm arena)
     // never restore closed shutters
     for (const lvl in this.mods) for (const i in this.mods[lvl]) if (this.mods[lvl][i][0] === TL.SHUTTER) { this.W.levels[lvl].tiles[i] = TL.OPENDOOR; this.mods[lvl][i][0] = TL.OPENDOOR; }

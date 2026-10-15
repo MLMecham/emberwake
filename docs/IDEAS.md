@@ -16,7 +16,8 @@ Not built yet. Parked here so they don't get lost. Newest at the bottom.
 - **Shield enemy rework.** Shield knights are fine early but too tough later, even in a group. Add a technique that knocks their shield down for 1–2 s. Armored versions can ignore it, for another layer.
 
 ## Enemies
-- **Spider webs and a better spider boss.** Web tiles that slow or stick you (fire burns them away), and a spider boss (Tideglass Halls) that uses them: strings webs across the room, drops from the ceiling, wraps you if you stand still.
+- **Spider webs and a spider boss:** built as the Silkwood (dungeon 13). Maybe reuse webs in a late main dungeon too.
+- **Silk Arm:** switchable for now; pick one stance for good, or keep the switch?
 - **Knight tiers: built** (sword knight, armored knight, champion). Tune where they spawn after playtesting.
 - **Knight tiers (old notes).** (1) Today's knight: a loaded shot stuns it, and a Heavy Pommel strike knocks its shield away (built). (2) Big-shield knight: only a three-arrow loaded shot (the triple-shot scroll) stuns it. (3) Armored knight with a sword: it swings at you, takes less damage, and only a triple bomb arrow stuns it. Later dungeons mix them.
 - **Knight tiers.** A lava monster that pulls you into the lava :

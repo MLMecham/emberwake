@@ -145,6 +145,22 @@ defineDungeon(9, {
   lore: ['HERE THE KING WEARS WHAT HE STOLE.', 'EVEN A HOLLOW CROWN CASTS A SHADOW.'],
 });
 
+// ---- the Silkwood: optional, hard, and a shortcut between two far columns of the Wilds (game/world.js genSilkPlaces) ----
+defineDungeon(13, {
+  name: 'THE SILKWOOD', mapLabel: 'S', item: null, bossDrop: 'silkarm', gimmicks: ['webs'], loops: 0.12,
+  theme: { wall: [72, 66, 80], mortar: [30, 28, 36], hi: [126, 120, 136], floor: [54, 50, 58], edge: [30, 28, 34], fhi: [96, 90, 104], trim: [214, 210, 222] },
+  shape: [ // a web strung across the wood
+    '........',
+    '........',
+    '........',
+    '.H......',
+    '########',
+    '#.#..#.#',
+    '########',
+    'S.......',
+  ],
+  lore: ['WE CAME IN WITH TORCHES. SHE WAS PATIENT. SHE IS ALWAYS PATIENT.'],
+});
 // ---- the optional dungeons: beyond the passes, and the Hearth they unlock ----
 defineDungeon(10, {
   name: 'RIMEFANG HOLLOW', mapLabel: 'R', item: 'frostarrows', bossDrop: 'fang', gimmicks: ['ice'],

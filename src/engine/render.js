@@ -359,6 +359,25 @@ function drawViewmodel(st) {
     if (st.charge > 0) { const r = Math.min(14, 3 + st.charge * 10) | 0; disc(W / 2, H - 48, r + 2, rgb(80, 200, 255), 0.5); disc(W / 2, H - 48, r, rgb(220, 250, 255)); if (st.charge > 0.8) for (let i = 0; i < 12; i++) { const a = Math.random() * TAU; thickLine(W / 2, H - 48, W / 2 + Math.cos(a) * (r + 10), H - 48 + Math.sin(a) * (r + 10), 1, rgb(200, 240, 255)); } }
     return;
   }
+  // THE SILK ARM (items/silkarm.js), behind everything else: a jointed chitin limb from behind your shoulder.
+  // BLADE: from the right, holding a bone blade that cuts a beat after your sword. GUARD: from the upper left, a chitin buckler.
+  if (st.arm) {
+    const CH = rgb(70, 56, 86), CHL = rgb(128, 108, 146), OUT2 = rgb(18, 14, 24); const drop = st.armReady ? 0 : 26; // changing stance: it's tucked away
+    const limb = (pts) => { for (let i = 0; i < pts.length - 1; i++) { thickLine(pts[i][0], pts[i][1] + drop, pts[i + 1][0], pts[i + 1][1] + drop, 9 - i * 2, OUT2); thickLine(pts[i][0], pts[i][1] + drop, pts[i + 1][0], pts[i + 1][1] + drop, 6 - i * 2, CH); } for (const [x, y] of pts.slice(1, -1)) { disc(Math.round(x), Math.round(y + drop), 4, OUT2); disc(Math.round(x), Math.round(y + drop), 2, CHL); } };
+    if (st.arm === 'blade') {
+      const sw2 = st.swing != null ? (st.swing - 0.12) / 0.25 : -1; const swingA = sw2 >= 0 && sw2 < 1 ? lerp(-2.4, -0.5, sw2) : -2.0 + Math.sin(st.bob) * 0.05;
+      const ex = W * 0.9 + bx * 0.5, ey = H * 0.4 + by, hx2 = W * 0.8 + bx * 0.5, hy2 = H * 0.5 + by; limb([[W + 8, H * 0.62], [ex, ey], [hx2, hy2]]);
+      const tx = hx2 + Math.cos(swingA) * 46, ty = hy2 + Math.sin(swingA) * 46; thickLine(hx2, hy2 + drop, tx, ty + drop, (t) => 6 - t * 4, OUT2); thickLine(hx2, hy2 + drop, tx, ty + drop, (t) => 3.5 - t * 2.5, rgb(232, 224, 206));
+      if (sw2 >= 0 && sw2 < 1) for (let i = 0; i < 4; i++) { const a2 = lerp(-2.4, swingA, i / 4); thickLine(hx2 + Math.cos(a2) * 30, hy2 + Math.sin(a2) * 30, hx2 + Math.cos(a2) * 48, hy2 + Math.sin(a2) * 48, 1, rgb(200, 190, 230)); }
+    } else {
+      const ex = W * 0.07 + bx * 0.4, ey = H * 0.28 + by * 0.5, hx2 = W * 0.17 + bx * 0.4, hy2 = H * 0.4 + by * 0.5; limb([[-8, H * 0.5], [ex, ey], [hx2, hy2]]);
+      const bx2 = Math.round(hx2), by2 = Math.round(hy2 + drop); // a ridged chitin plate, like a beetle's wing case
+      for (const [ox, oy, rr2] of [[0, -6, 15], [0, 6, 13], [0, 15, 8]]) disc(bx2 + ox, by2 + oy, rr2 + 2, OUT2);
+      for (const [ox, oy, rr2] of [[0, -6, 15], [0, 6, 13], [0, 15, 8]]) disc(bx2 + ox, by2 + oy, rr2, CH);
+      disc(bx2 - 5, by2 - 10, 5, CHL); thickLine(bx2, by2 - 19, bx2, by2 + 21, 2, OUT2);
+      for (const t of [-8, 2, 11]) { thickLine(bx2 - 12, by2 + t, bx2, by2 + t + 4, 1, OUT2); thickLine(bx2, by2 + t + 4, bx2 + 12, by2 + t, 1, OUT2); }
+    }
+  }
   // sword class: shield on left, sword on right
   const sw = st.swing; const k = sw != null && sw < 0.25 ? sw / 0.25 : -1;
   // shield, seen from behind: the upper arm comes up from the bottom-left, bends at the elbow, and the forearm lies

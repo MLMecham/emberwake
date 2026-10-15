@@ -100,7 +100,7 @@ for (const id in Content.enemies) attempt('enemy "' + id + '"', () => {
   sim.damageEnemy(e, 1, p, { pid: 'p1' }); sim.damageEnemy(e, 1, null, { stunOnly: true }); sim.damageEnemy(e, 1, null, { pierceShield: true, ignoreIframes: true });
   e.hp = 1; e.hurt = 0; e.stun = 0; sim.damageEnemy(e, 5, null, { pid: 'p1', silver: true, pierceShield: true, ignoreIframes: true });
   run(sim, 1);
-  __ok(e.dead, 'enemy "' + id + '" did not die from a silver hit');
+  if (enemyDef(id).neutral) __ok(!e.dead, 'neutral "' + id + '" cannot be killed'); else __ok(e.dead, 'enemy "' + id + '" did not die from a silver hit');
 });
 // every elite: spawn on a skeleton, act, die, drop loot
 for (const el of Content.elites) attempt('elite "' + el.id + '"', () => {
@@ -896,6 +896,49 @@ attempt('sealed rooms are one-way', () => {
   __ok(!D.solidAt(dx + 0.5, dy + 0.5, { mx: outX, my: outY }) && !D.solidAt(dx + 0.5, dy + 0.5, { mx: dx + 0.5, my: dy + 0.5 }), 'from outside or the doorway, you can still come in');
   const edgeX = dx === x0 ? x0 + 1.23 : dx === x0 + DSX ? x0 + DSX - 0.23 : dx + 0.5, edgeY = dy === y0 ? y0 + 1.23 : dy === y0 + DSY ? y0 + DSY - 0.23 : dy + 0.5;
   __ok(D.solidAt(dx + 0.5, dy + 0.5, { mx: edgeX, my: edgeY }), 'pressed right up against it from inside, still a wall');
+});
+attempt('the Silkwood', () => {
+  const sim = freshSim(); const p = sim.players.p1; p.god = false; p.hp = p.maxHp = 400; const W = sim.W; const D = W.levels.d13, O = W.levels.ow;
+  __ok(!!W.dungeons[13] && !!W.silkMouth && O.tiles[W.silkMouth.idx] === TL.SILKSEAL && D.tiles[D.passSeal] === TL.WEBSEAL && D.exits.length === 2, 'a gate, a sealed far mouth, and a sealed way out beyond the boss');
+  const ga = owRegionAt(O, W.dungeons[13].x, W.dungeons[13].y), gb = owRegionAt(O, W.silkMouth.x, W.silkMouth.y); __ok(Math.abs(ga.rx - gb.rx) >= 3, 'the two ends are at least three columns apart');
+  sim.teleport(p, 'ow', W.silkMouth.x, W.silkMouth.y, -Math.PI / 2); sim.tryEnter(p, W.silkMouth.idx); __ok(p.lvl === 'ow', 'the far mouth is shut while she lives');
+  // silk burns, spreads, and hurts whoever stands on it (not a Cinder Ring wearer)
+  sim.teleport(p, 'dbg', 22.5, 19.5, 0); const T = sim.W.levels.dbg; T.gimmicks = (T.gimmicks || []).concat(['webs']); const cells = []; for (let x = 20; x <= 24; x++) { const i = T.idx(x, 19); T.tiles[i] = TL.SILK; cells.push(i); }
+  sim.burnAt(T, 20.5, 19.5); for (let k = 0; k < 75; k++) sim.tick(1 / 60); __ok(cells.every(i => T.tiles[i] === TL.SILK_BURNING), 'one spark and the whole strip burns'); __ok(p.hp < 400, 'standing on it hurts');
+  for (let k = 0; k < 200; k++) sim.tick(1 / 60); __ok(cells.every(i => T.tiles[i] === TL.CHARRED), 'and it burns out to char');
+  for (const i of cells) T.tiles[i] = TL.SILK; p.items.ring_cinder = true; p.ring = 'ring_cinder'; p.hp = 400; p.inv = 0; sim.burnAt(T, 20.5, 19.5); for (let k = 0; k < 60; k++) sim.tick(1 / 60); __ok(p.hp === 400, 'a Cinder Ring walks through it'); p.ring = null;
+  for (let k = 0; k < 200; k++) sim.tick(1 / 60);
+  // a strand: stuck, helpless a moment, then a slash frees you and they come down
+  const wi = T.idx(26, 19); T.props[wi] = PR.WEBLINE; sim.teleport(p, 'dbg', 26.5, 19.5, 0); sim.onAction('p1', { t: 'webline', idx: wi }); __ok(!!p.webbed, 'walking into a strand: stuck');
+  const before = sim.ents.filter(e => e.k === 'en' && !e.dead).length; sim.playerAttack(p, { kind: 'sword' }); __ok(!!p.webbed, 'for a moment nothing works');
+  sim.time += 1.1; sim.playerAttack(p, { kind: 'sword' }); __ok(!p.webbed && !T.props[wi] && sim.ents.filter(e => e.k === 'en' && !e.dead && e.type === 'spider_ceiling').length >= 2, 'then a slash cuts free, and spiders drop');
+  for (const e of sim.ents) if (e.k === 'en') e.dead = true; sim.tick(1 / 60);
+  // egg sacs hatch when you come close; a burned one never does
+  const ei = T.idx(28, 17); T.props[ei] = PR.EGGSAC; sim.teleport(p, 'dbg', 28.5, 18.6, 0); sim.tick(1 / 60); __ok(!T.props[ei] && sim.ents.filter(e => e.type === 'spiderling' && !e.dead).length === 3, 'an egg sac hatches three spiderlings');
+  for (const e of sim.ents) if (e.k === 'en') e.dead = true; const e2 = T.idx(31, 17); T.props[e2] = PR.EGGSAC; sim.burnAt(T, 31.5, 17.5); sim.teleport(p, 'dbg', 31.5, 18.6, 0); sim.tick(1 / 60); __ok(!sim.ents.some(e => e.type === 'spiderling' && !e.dead), 'a burned one never hatches');
+  // a cocoon cut open: empty armor
+  const ci = T.idx(23, 17); T.props[ci] = PR.COCOON; sim.cutAt(T, 23.5, 17.5, p); __ok(T.props[ci] === PR.HELM, 'a cocoon holds an empty helmet');
+  // web bridges burn into the pit and grow back
+  T.webBridges = [T.idx(20, 21)]; T.tiles[T.webBridges[0]] = TL.WEBBRIDGE; sim.burnAt(T, 20.5, 21.5); __ok(T.tiles[T.webBridges[0]] === TL.PIT, 'fire drops a web bridge'); sim.tick(1 / 60); sim.time += 21; sim.tick(1 / 60); __ok(T.tiles[T.webBridges[0]] === TL.WEBBRIDGE, 'and it grows back');
+  // the Silk Arm
+  sim.teleport(p, 'dbg', 22.5, 19.5, 0); p.items.silkarm = true; p.armMode = 'blade'; p.armSwapAt = 0; const dm = sim.spawn({ k: 'en', type: 'slime', lvl: 'dbg', x: 23.4, y: 19.5, hp: 100, maxHp: 100, f: 0, st: 0, tm: 9, stun: 9, hurt: 0, spawnFx: 0, dmgMul: 1 });
+  p.sword = 2; p.hp = p.maxHp - 4; sim.playerAttack(p, { kind: 'sword' }); // (not at full health: no sword beam) const after1 = dm.hp; for (let k = 0; k < 12; k++) sim.tick(1 / 60); __ok(Math.abs((after1 - dm.hp) - (100 - after1) * 0.25) < 0.01, 'BLADE: a quarter-strength cut a beat later (' + (100 - after1) + ' then ' + (after1 - dm.hp) + ')');
+  sim.onAction('p1', { t: 'equip', slot: 'arm', mode: 'guard' }); __ok(p.armMode === 'guard' && !sim.armOn(p, 'guard'), 'changing stance takes a moment'); sim.time += ARM_SWAP + 0.1;
+  p.hp = 400; p.maxHp = 400; p.inv = 0; p.a = 0; const sp = sim.fireProj('spear', 'dbg', 19.5, 19.5, 0, 'e', null, { dmg: 2 }); for (let k = 0; k < 60 && !sp.dead; k++) sim.tick(1 / 60); __ok(p.hp === 400, 'GUARD: a spear from behind is blocked');
+  // Pip: plays dead, never dies, never holds a room shut, takes a gem
+  const pip = sim.spawn({ k: 'en', type: 'spider_pip', lvl: 'dbg', x: 24.5, y: 19.5, hp: 99, maxHp: 99, f: 0, st: 0, tm: 0, stun: 0, hurt: 0, spawnFx: 0, dmgMul: 1 });
+  sim.damageEnemy(pip, 50, p, { pid: 'p1', ignoreIframes: true }); __ok(!pip.dead && pip.hp === 99 && pip.deadT > 0 && sim.team.pipHit, 'Pip plays dead (and remembers you swung)');
+  // spider elites only for spiders
+  const sk = sim.spawn({ k: 'en', type: 'skeleton', lvl: 'dbg', x: 20, y: 18, hp: 3, maxHp: 3, f: 0, st: 0, tm: 9, stun: 9, hurt: 0, spawnFx: 0, dmgMul: 1 }); const cr = sim.spawn({ k: 'en', type: 'spider_crawler', lvl: 'dbg', x: 20, y: 18, hp: 3, maxHp: 3, f: 0, st: 0, tm: 9, stun: 9, hurt: 0, spawnFx: 0, dmgMul: 1 });
+  const rr = mulberry32(3); let okS = true, okC = true; for (let k = 0; k < 40; k++) { sk.elite = 0; sim.makeElite(sk, rr); if (eliteByIdx(sk.elite).only) okS = false; cr.elite = 0; sim.makeElite(cr, rr); if (eliteByIdx(cr.elite).only !== 'spider') okC = false; } __ok(okS && okC, 'spider elites only on spiders, and only those');
+  // the Broodmother runs, wraps a still hero, and her death opens the pass
+  for (const e of sim.ents) if (e.k === 'en') e.dead = true; sim.tick(1 / 60);
+  const bm = sim.spawn({ k: 'en', type: 'broodmother', lvl: 'dbg', x: 18.5, y: 18.5, hp: 300, maxHp: 300, f: 0, st: 0, tm: 0, stun: 0, hurt: 0, spawnFx: 0, dmgMul: 1, b: { x0: 12, y0: 16, x1: 26, y1: 22 } });
+  p.god = true; p.webbed = null; p.movedAt = sim.time; for (let k = 0; k < 60 * 10; k++) sim.tick(1 / 60); __ok(!bm.dead, 'she fights for ten seconds without trouble'); __ok(!!p.webbed && p.webbed.by === 'wrap', 'and wraps whoever stands still');
+  sim.teleport(p, 'd13', D.spawn.x, D.spawn.y, 0); __ok(!p.webbed, 'leaving the room frees you'); sim.giveItem(p, 'silkarm', false);
+  __ok(D.tiles[D.passSeal] === TL.DEXIT && O.tiles[W.silkMouth.idx] === TL.SILKCAVE && sim.team.done.includes(13), 'her prize opens the far way out, and the far mouth');
+  const sx = D.passSeal % D.w, sy = Math.floor(D.passSeal / D.w); p.x = D.passIn.x; p.y = D.passIn.y; sim.tryExit(p); __ok(p.lvl === 'ow' && Math.abs(p.x - W.silkMouth.x) < 0.01, 'the far exit leads out by the far mouth');
+  sim.tryEnter(p, W.silkMouth.idx); __ok(p.lvl === 'd13' && Math.abs(p.x - D.passIn.x) < 0.01, 'and the far mouth leads back in: a shortcut');
 });
 attempt('favorites per save', () => {
   const sim = freshSim(); const p = sim.players.p1; p.items.bow = true; p.items.bombs = true;

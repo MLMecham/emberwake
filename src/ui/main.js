@@ -141,6 +141,8 @@ function updateLocal(dt, inp) {
   const monk = me.cls === 'monk'; let spd = monk ? 4.0 : 3.6; IN.spaceDash = monk; // Space is the martial artist's dash
   const flying = me.fly > 0; // Gale Cloak: over water, lava, pits and vents like a bat
   if (Lc.charge > 0.3 || Lc.gripT > 0.2) spd *= 0.5;
+  if (me.webbed >= 0) { spd = 0; Lc.dashT = 0; Lc.kx = Lc.ky = 0; } // stuck in a web (gimmicks/webs.js): slash free
+  if (!flying && TINFO[L.get(Math.floor(Lc.x), Math.floor(Lc.y))].sticky) spd *= 0.5; if (me.silk) spd *= 0.45; // wading through web
   if (me.chill) spd *= 0.55; // frozen by ice breath
   if (TINFO[L.get(Math.floor(Lc.x), Math.floor(Lc.y))].shallow && !(me.fly > 0)) spd *= 0.75; // wading
   if (Lc.dashCd > 0) Lc.dashCd -= dt;
@@ -187,11 +189,13 @@ function updateLocal(dt, inp) {
     const fx = Math.floor(Lc.x + Math.sign(mvx) * (blockedX ? 0.5 : 0)), fy = Math.floor(Lc.y + Math.sign(mvy) * (blockedY ? 0.5 : 0));
     for (const [tx, ty] of [[fx, fy], [Math.floor(Lc.x + Math.cos(Lc.a) * 0.6), Math.floor(Lc.y + Math.sin(Lc.a) * 0.6)]]) {
       const idx = ty * L.w + tx; const t = L.get(tx, ty); const ti = TINFO[t];
-      if (ti.portal || ti.shardGate) { sendAction({ t: 'enter', idx }); Lc.bumpT = 0.8; break; }
+      if (ti.portal || ti.shardGate || ti.sealedMsg) { sendAction({ t: 'enter', idx }); Lc.bumpT = 0.8; break; }
       if (ti.locked) { sendAction({ t: 'unlock', idx }); Lc.bumpT = 0.6; break; }
       if (ti.exitWall) { sendAction({ t: 'exit' }); Lc.bumpT = 0.8; break; }
     }
   }
+  // walking into a strand across the way (gimmicks/webs.js): the host decides you're stuck
+  { const wi = L.idx(Math.floor(Lc.x), Math.floor(Lc.y)); if (PR.WEBLINE != null && L.props[wi] === PR.WEBLINE && !flying && me.webbed < 0 && R.time - (Lc.webSentAt || -9) > 0.5) { Lc.webSentAt = R.time; sendAction({ t: 'webline', idx: wi }); } }
   // step-on tiles
   const ct = L.get(Math.floor(Lc.x), Math.floor(Lc.y)); const cti = TINFO[ct];
   if ((cti.exit) && Lc.bumpT <= 0) { sendAction({ t: 'exit' }); Lc.bumpT = 0.8; }
@@ -271,7 +275,7 @@ function updateLocal(dt, inp) {
   // low hp beep
   if (me.hp <= 4 && me.hp > 0) { Lc.lowT -= dt; if (Lc.lowT <= 0) { Lc.lowT = 0.5; sfx('lowhp'); } }
   // music
-  let track = L.kind === 'ow' ? 'ow' : L.kind === 'cave' ? (L.fallen || L.caveKind === 'g_psalm' ? 'dread' : 'cave') : L.kind === 'tunnel' ? (((dungeonRoomAt(L, Lc.x, Lc.y) || {}).miniboss && snap.en.some(e => e[8] >= 0)) ? 'boss' : L.tunnelBiome === 'snow' ? 'tunnel_cold' : 'tunnel_ember') : L.dnum === 10 ? 'frost' : L.dnum === 11 ? 'fire' : L.dnum === 12 ? 'hearth' : (L.dnum >= 5 && L.dnum <= 8 ? 'deep' : 'dungeon');
+  let track = me && me.webbed >= 0 ? 'dread' : L.kind === 'ow' ? 'ow' : L.kind === 'cave' ? (L.fallen || L.caveKind === 'g_psalm' ? 'dread' : 'cave') : L.dnum === 13 ? 'deep' : L.kind === 'tunnel' ? (((dungeonRoomAt(L, Lc.x, Lc.y) || {}).miniboss && snap.en.some(e => e[8] >= 0)) ? 'boss' : L.tunnelBiome === 'snow' ? 'tunnel_cold' : 'tunnel_ember') : L.dnum === 10 ? 'frost' : L.dnum === 11 ? 'fire' : L.dnum === 12 ? 'hearth' : (L.dnum >= 5 && L.dnum <= 8 ? 'deep' : 'dungeon');
   if (L.kind === 'ow') { const rg = owRegionAt(L, Lc.x, Lc.y); if (rg.biome === 'snow') track = 'frost'; else if (rg.biome === 'ash') track = 'fire'; }
   if (L.kind === 'dungeon') { const r = dungeonRoomAt(L, Lc.x, Lc.y); if (r && r.boss && snap.en.some(e => e[8] >= 0)) track = L.dnum === 9 ? 'final' : L.dnum >= 10 ? 'dragon' : 'boss'; }
   musicPlay(track);
@@ -361,11 +365,16 @@ function draw(dt) {
   // pow words
   for (const p of Lc.pow) { const sc = projectPt(cam, p.x, p.y); if (sc) { const c = p.big ? rgb(255, 230, 60) : rgb(255, 255, 255); text(p.word, sc.x - p.word.length * 3, sc.y - 30 - p.t * (p.num ? 45 : 30), p.num ? rgb(255, 236, 120) : Math.floor(p.t * 20) & 1 ? c : rgb(255, 80, 40)); } }
   const bossE = ents.find(e => e[8] >= 0);
-  const st = { me, bob: Lc.bob, moveK: Lc.moveK || 0, readyK: Lc.readyK || 0, blockT: Lc.blockT || 0, mirror: !!(me && me.mirror), wardShield: !!(me && me.items.wardshield && me.cls !== 'monk'), ward: !!(me && me.ward), swing: Lc.swing, swingDir: Lc.swingDir || 1, grip: Lc.gripT || 0, pommelT: Lc.pommelT, lungeReady: !!(Lc.gripT >= LUNGE_HOLD && me && me.items.lunge), punch: Lc.punch, charge: Lc.charge, useFlash: Lc.useFlash, useSpr: Lc.useSpr, level: L, cam, players: snap ? snap.pl : [], myId: G.myId, team: snap ? snap.team : { keys: {}, maps: {}, comps: {}, shards: [], done: [] }, seen: G.seen[L.id] || new Uint8Array(L.w * L.h), seenOW: G.seen.ow || new Uint8Array(1), seenRooms: G.seenRooms, selItem: Lc.sel, pitch: Lc.pitch, lvlKind: L.kind, bossHp: bossE ? bossE[8] : -1, bossName: bossE ? ((bossDefFor(bossE[1]) || {}).title || null) : null, world: G.world };
+  const st = { me, bob: Lc.bob, moveK: Lc.moveK || 0, readyK: Lc.readyK || 0, blockT: Lc.blockT || 0, mirror: !!(me && me.mirror), arm: me && me.items.silkarm ? (me.armMode || 'blade') : null, armReady: !!(me && me.armReady), wardShield: !!(me && me.items.wardshield && me.cls !== 'monk'), ward: !!(me && me.ward), swing: Lc.swing, swingDir: Lc.swingDir || 1, grip: Lc.gripT || 0, pommelT: Lc.pommelT, lungeReady: !!(Lc.gripT >= LUNGE_HOLD && me && me.items.lunge), punch: Lc.punch, charge: Lc.charge, useFlash: Lc.useFlash, useSpr: Lc.useSpr, level: L, cam, players: snap ? snap.pl : [], myId: G.myId, team: snap ? snap.team : { keys: {}, maps: {}, comps: {}, shards: [], done: [] }, seen: G.seen[L.id] || new Uint8Array(L.w * L.h), seenOW: G.seen.ow || new Uint8Array(1), seenRooms: G.seenRooms, selItem: Lc.sel, pitch: Lc.pitch, lvlKind: L.kind, bossHp: bossE ? bossE[8] : -1, bossName: bossE ? ((bossDefFor(bossE[1]) || {}).title || null) : null, world: G.world };
   if (me && !down) drawViewmodel(st);
   if (me && me.cls === 'monk' && me.armor > 0 && !down) { const ac = me.armor === 2 ? rgb(255, 248, 200) : rgb(100, 190, 255); for (let i = 0; i < 18; i++) { const side = Math.random() < 0.5; const x = side ? (Math.random() < 0.5 ? Math.random() * 10 : R.W - Math.random() * 10) : Math.random() * R.W; const y = side ? Math.random() * R.H : R.H - Math.random() * 8; px(x, y, ac); } }
   if (Lc.dashT > 0) rectA(0, 0, R.W, R.H, rgb(200, 240, 255), 0.15);
   if (me && me.poison > 0 && !down) { const a = 0.1 + 0.05 * Math.sin(R.time * 6); rectA(0, 0, R.W, 6, rgb(120, 200, 60), a * 3); rectA(0, R.H - 6, R.W, 6, rgb(120, 200, 60), a * 3); rectA(0, 0, 6, R.H, rgb(150, 70, 210), a * 3); rectA(R.W - 6, 0, 6, R.H, rgb(150, 70, 210), a * 3); } // poisoned: a sickly green and purple edge
+  if (me && me.webbed >= 0 && !down) { // stuck in a web: silk closes in from the edges; after a moment, the words
+    const k = Math.min(1, me.webbed / 0.6); for (let i = 0; i < 40; i++) { const t = (i * 37 % 40) / 40; const side = i & 3; const len = (10 + (i * 13 % 30)) * k;
+      if (side === 0) rectA(Math.round(t * R.W), 0, 1, len, rgb(235, 232, 240), 0.8); else if (side === 1) rectA(Math.round(t * R.W), R.H - len, 1, len, rgb(235, 232, 240), 0.8); else if (side === 2) rectA(0, Math.round(t * R.H), len, 1, rgb(235, 232, 240), 0.8); else rectA(R.W - len, Math.round(t * R.H), len, 1, rgb(235, 232, 240), 0.8); }
+    if (me.webbed >= 1) { textC('YOU ARE STUCK!', R.W / 2, R.H / 2 - 30, rgb(255, 240, 240)); if (Math.floor(R.time * 3) & 1) textC('SLASH TO CUT FREE', R.W / 2, R.H / 2 - 18, rgb(255, 200, 200)); }
+  }
   if (me && me.fly > 0 && !down) { // aloft: wind streaks at the edges and a bar for the time left (it blinks near the end)
     for (let i = 0; i < 26; i++) { const y = (i * 37 + R.time * 260) % R.H, x = i % 2 ? (i * 13) % 40 : R.W - 1 - (i * 13) % 40; rectA(x, y, 1, 8, rgb(230, 245, 255), 0.5); }
     const k = Math.min(1, me.fly / FLY_TIME); if (me.fly > 1 || Math.floor(R.time * 8) & 1) { rect(R.W / 2 - 30, R.H - 34, 60, 3, rgb(40, 50, 70)); rect(R.W / 2 - 30, R.H - 34, Math.round(60 * k), 3, rgb(220, 240, 255)); }
@@ -479,6 +488,9 @@ function renderBag() {
   if (page === 'gear') { // what your tunic stops: all of a physical hit, half as much of an elemental one (game/sim.js defenseMul)
     const phys = me.armor === 2 ? 0.25 : me.armor === 1 ? 0.5 : 1, el = 1 - (1 - phys) / 2; const n = document.createElement('small'); n.className = 'favnote';
     n.textContent = 'ARMOR STOPS ' + Math.round((1 - phys) * 100) + '% OF A BLOW, ' + Math.round((1 - el) * 100) + '% OF FIRE, FROST OR MAGIC'; body.appendChild(n); }
+  if (page === 'gear' && me.items.silkarm) { const cur = me.armMode || 'blade'; const r = sec('SILK ARM - TAKES A MOMENT TO CHANGE'); // items/silkarm.js
+    btn(r, 'silkarm', 'BLADE', 'CUTS AGAIN A BEAT AFTER YOUR SWORD (25%)', cur === 'blade', () => sendAction({ t: 'equip', slot: 'arm', mode: 'blade' }));
+    btn(r, 'silkarm', 'GUARD', 'BLOCKS SHOTS FROM ANY SIDE. BITES LAND 25% SOFTER', cur === 'guard', () => sendAction({ t: 'equip', slot: 'arm', mode: 'guard' })); }
   const rings = (Content.rings || []).filter(r => me.items[r.id]);
   if (page === 'rings' && !rings.length) { const n = document.createElement('small'); n.className = 'favnote'; n.textContent = 'NO RINGS YET.'; body.appendChild(n); }
   if (page === 'rings' && rings.length) { const cur = rings.find(rg => rg.id === me.ring); const r = sec('RING - ONE AT A TIME' + (cur ? ': ' + cur.desc : '')); r.classList.add('compact'); btn(r, null, 'NONE', null, !me.ring, () => sendAction({ t: 'equip', slot: 'ring', id: 'none' })); for (const rg of rings) { btn(r, rg.id, rg.name, null, me.ring === rg.id, () => sendAction({ t: 'equip', slot: 'ring', id: rg.id })); r.lastChild.title = rg.desc; } } // a compact grid (no scrolling); the worn ring's effect in the heading, each one's on hover
@@ -497,7 +509,7 @@ function renderBag() {
   if (me.items.cloakslam) ups.push(['scroll', itemName('galeslam', me.cls), 'END A FLIGHT EARLY TO SLAM DOWN']);
   if (me.items.bombbag2) ups.push(['bomb', itemName('bombbag2', me.cls), 'CARRY 16 BOMBS']); else if (me.items.bombbag) ups.push(['bomb', itemName('bombbag', me.cls), 'CARRY 8 BOMBS']);
   if (me.items.bombarrow) ups.push(['scroll', itemName('bombarrows', me.cls), 'SHIFT + BOW: COSTS AN ARROW AND A BOMB']);
-  for (const k of Object.keys(me.items)) { if (!me.items[k] || owned.includes(k) || /^ring_/.test(k) || ['loaded', 'loaded2', 'lunge', 'heavypommel', 'wardshield', 'cloakslam', 'bombbag', 'bombbag2', 'frostarrows', 'silver', 'potion', 'bombarrow'].includes(k)) continue; const d = Content.items[k]; if (!d || d.slot === 'b') continue; ups.push([itemSprite(k, me.cls), itemName(k, me.cls), k === 'skeletonkey' ? 'OPENS EVERY LOCK' : k === 'silver' ? 'ONLY THEY CAN FINISH THE HOLLOW KING' : k === 'magmaboots' ? 'WALK ON LAVA AND VENTS' : k === 'raft' ? 'OPEN WATER ONLY' : null]); }
+  for (const k of Object.keys(me.items)) { if (!me.items[k] || owned.includes(k) || /^ring_/.test(k) || k === 'silkarm' || ['loaded', 'loaded2', 'lunge', 'heavypommel', 'wardshield', 'cloakslam', 'bombbag', 'bombbag2', 'frostarrows', 'silver', 'potion', 'bombarrow'].includes(k)) continue; const d = Content.items[k]; if (!d || d.slot === 'b') continue; ups.push([itemSprite(k, me.cls), itemName(k, me.cls), k === 'skeletonkey' ? 'OPENS EVERY LOCK' : k === 'silver' ? 'ONLY THEY CAN FINISH THE HOLLOW KING' : k === 'magmaboots' ? 'WALK ON LAVA AND VENTS' : k === 'raft' ? 'OPEN WATER ONLY' : null]); }
   if (page === 'upgrades' && me.dbg) { // debug: every upgrade and scroll, switched on and off with a click
     const all = sec('DEBUG: CLICK TO SWITCH ON OR OFF'); btn(all, 'scroll', 'ALL ON', 'AND THE BOW, BOOMERANG, CLOAK AND BOMBS', false, () => sendAction({ t: 'dbgup', all: true })); btn(all, 'scroll', 'ALL OFF', null, false, () => sendAction({ t: 'dbgup', all: false }));
     // one compact grid (no scrolling): name and ON/OFF on each button, the description on hover

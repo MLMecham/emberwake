@@ -60,6 +60,13 @@ function sfx(name, vol) {
     case 'reflect': seq([1568, 2093, 2637], 0.04, 'square', 0.13 * v); noise(0.05, 0.08 * v, 3000); break; // a perfect block sends it back
     case 'ward': tone(330, 0.25, 'triangle', 0.14 * v, 660); tone(495, 0.3, 'sine', 0.1 * v, 990); noise(0.08, 0.06 * v, 2500); break; // the Wardhold shield's ward stops a shot
     case 'rustle': noise(0.35, 0.12 * v, 1800); noise(0.2, 0.08 * v, 900, AU.ctx.currentTime + 0.15); break; // something in the bushes
+    case 'webstick': noise(0.25, 0.1 * v, 600); tone(180, 0.35, 'sine', 0.08 * v, 120); break; // caught in web
+    case 'webtear': noise(0.18, 0.16 * v, 2400); tone(400, 0.1, 'triangle', 0.06 * v, 250); break; // web torn free
+    case 'skitter': for (let i = 0; i < 6; i++) noise(0.03, 0.09 * v, 3500 + i * 300, AU.ctx.currentTime + i * 0.06); break; // many small legs, overhead
+    case 'hatch': noise(0.2, 0.12 * v, 900); tone(240, 0.12, 'square', 0.05 * v, 420); break; // an egg sac splits
+    case 'whoosh': noise(0.5, 0.22 * v, 700); tone(90, 0.5, 'sawtooth', 0.08 * v, 160); break; // silk catching fire
+    case 'armcut': tone(1200, 0.05, 'square', 0.05 * v, 700); noise(0.05, 0.06 * v, 5000); break; // the Silk Arm's echo cut
+    case 'pipsqueak': seq([1568, 1175, 880], 0.05, 'square', 0.07 * v); break; // the little spider playing dead
     case 'growl': tone(70, 0.7, 'sawtooth', 0.12 * v, 55); noise(0.6, 0.06 * v, 300); break; // a low warning rumble (the wyrm arena's bait)
     case 'rage': tone(140, 0.8, 'sawtooth', 0.22 * v, 50); tone(95, 0.9, 'square', 0.12 * v, 40); noise(0.8, 0.2 * v, 500); break; // both wyrms enraged
     case 'whistle': seq([1047, 1175, 1319, 1568, 1319, 1568, 2093], 0.1, 'sine', 0.16 * v); break;

@@ -33,3 +33,6 @@ defineProjectile({ id: 'thunder', spr: 'beam', spd: 14, dmg: 3, sc: 0.9, player:
 // the Thornseer's seed (enemies/thornling.js): slow, and it HOMES: it turns toward the nearest hero (homing: radians a second)
 // after a short delay. Outrun it around a corner, let it hit a wall, or block it with your shield.
 defineProjectile({ id: 'seed', spr: 'seedwisp', spd: 3.3, dmg: 1, sc: 0.55, blockable: true, range: 15, homing: 1.9, homeDelay: 0.25 });
+// the Silkwood's spitters (enemies/spiders_silk.js): a glob of web. Blockable; if it hits you, you wade for a moment (silk: seconds)
+defineSprite('webglob', ['................', '................', '................', '................', '................', '.......ww.......', '.....wwzww......', '....wzwwzww.....', '....wwzwwzw.....', '.....wwzww......', '......www.......', '................', '................', '................', '................', '................']);
+defineProjectile({ id: 'webglob', spr: 'webglob', spd: 5, dmg: 1, sc: 0.6, blockable: true, silk: 1.6 });
