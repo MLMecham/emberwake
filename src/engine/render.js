@@ -359,23 +359,34 @@ function drawViewmodel(st) {
     if (st.charge > 0) { const r = Math.min(14, 3 + st.charge * 10) | 0; disc(W / 2, H - 48, r + 2, rgb(80, 200, 255), 0.5); disc(W / 2, H - 48, r, rgb(220, 250, 255)); if (st.charge > 0.8) for (let i = 0; i < 12; i++) { const a = Math.random() * TAU; thickLine(W / 2, H - 48, W / 2 + Math.cos(a) * (r + 10), H - 48 + Math.sin(a) * (r + 10), 1, rgb(200, 240, 255)); } }
     return;
   }
-  // THE SILK ARM (items/silkarm.js), behind everything else: a jointed chitin limb from behind your shoulder.
-  // BLADE: from the right, holding a bone blade that cuts a beat after your sword. GUARD: from the upper left, a chitin buckler.
+  // THE SILK ARM (items/silkarm.js), behind everything else: a jointed limb from behind your right shoulder, sleeved in
+  // your tunic's color. BLADE: it holds a blade of your sword's color and swings exactly as your sword does (backswings
+  // too), ARM_DELAY behind it and a little higher. GUARD: from the upper left, a ridged plate.
   if (st.arm) {
-    const CH = rgb(70, 56, 86), CHL = rgb(128, 108, 146), OUT2 = rgb(18, 14, 24); const drop = st.armReady ? 0 : 26; // changing stance: it's tucked away
-    const limb = (pts) => { for (let i = 0; i < pts.length - 1; i++) { thickLine(pts[i][0], pts[i][1] + drop, pts[i + 1][0], pts[i + 1][1] + drop, 9 - i * 2, OUT2); thickLine(pts[i][0], pts[i][1] + drop, pts[i + 1][0], pts[i + 1][1] + drop, 6 - i * 2, CH); } for (const [x, y] of pts.slice(1, -1)) { disc(Math.round(x), Math.round(y + drop), 4, OUT2); disc(Math.round(x), Math.round(y + drop), 2, CHL); } };
+    const cp = tunicPal(c32ToHex(col), 0), CH = c32(cp.T), CHD = c32(cp.t), OUT2 = rgb(18, 14, 24); const drop = st.armReady ? 0 : 40; // changing stance: it's tucked away
+    const limb = (S, E, Hd) => { const seg = (A, B, w0, w1) => { thickLine(A[0], A[1] + drop, B[0], B[1] + drop, (t) => lerp(w0, w1, t) + 3, OUT2); thickLine(A[0], A[1] + drop, B[0], B[1] + drop, (t) => lerp(w0, w1, t), CH); thickLine(A[0], A[1] + drop - lerp(w0, w1, 0.5) * 0.3, B[0], B[1] + drop - lerp(w0, w1, 0.5) * 0.3, (t) => lerp(w0, w1, t) * 0.35, CHD); };
+      seg(S, E, 13, 10); seg(E, Hd, 10, 7); disc(Math.round(E[0]), Math.round(E[1] + drop), 6, OUT2); disc(Math.round(E[0]), Math.round(E[1] + drop), 4, CHD); disc(Math.round(Hd[0]), Math.round(Hd[1] + drop), 6, OUT2); disc(Math.round(Hd[0]), Math.round(Hd[1] + drop), 4, CHD); };
     if (st.arm === 'blade') {
-      const sw2 = st.swing != null ? (st.swing - 0.12) / 0.25 : -1; const swingA = sw2 >= 0 && sw2 < 1 ? lerp(-2.4, -0.5, sw2) : -2.0 + Math.sin(st.bob) * 0.05;
-      const ex = W * 0.9 + bx * 0.5, ey = H * 0.4 + by, hx2 = W * 0.8 + bx * 0.5, hy2 = H * 0.5 + by; limb([[W + 8, H * 0.62], [ex, ey], [hx2, hy2]]);
-      const tx = hx2 + Math.cos(swingA) * 46, ty = hy2 + Math.sin(swingA) * 46; thickLine(hx2, hy2 + drop, tx, ty + drop, (t) => 6 - t * 4, OUT2); thickLine(hx2, hy2 + drop, tx, ty + drop, (t) => 3.5 - t * 2.5, rgb(232, 224, 206));
-      if (sw2 >= 0 && sw2 < 1) for (let i = 0; i < 4; i++) { const a2 = lerp(-2.4, swingA, i / 4); thickLine(hx2 + Math.cos(a2) * 30, hy2 + Math.sin(a2) * 30, hx2 + Math.cos(a2) * 48, hy2 + Math.sin(a2) * 48, 1, rgb(200, 190, 230)); }
+      const ka = st.armSwing != null ? st.armSwing / 0.25 : -1; const rev = st.armDir === -1; let ang, hx2, hy2;
+      if (ka >= 0 && ka < 1) { const kk = rev ? 1 - ka : ka; ang = lerp(-0.4, -2.6, kk); hx2 = lerp(W * 0.86, W * 0.5, kk) + bx; hy2 = lerp(H - 70, H - 92, Math.sin(kk * Math.PI)) + by; }
+      else { ang = -1.3; hx2 = W * 0.85 + bx; hy2 = H - 80 + by; } // held ready, above and behind the sword
+      const S = [W + 14, H * 0.3 + by * 0.5], Hd = [hx2, hy2]; const mx = (S[0] + Hd[0]) / 2, my = (S[1] + Hd[1]) / 2, L2 = Math.hypot(Hd[0] - S[0], Hd[1] - S[1]) || 1;
+      const bend = Math.max(10, 70 - L2 * 0.25); const E = [mx + (Hd[1] - S[1]) / L2 * bend, my - (Hd[0] - S[0]) / L2 * bend]; // the elbow bows up and out
+      const sw2 = me.sword || 0; const bl = sw2 === 1 ? rgb(170, 120, 60) : sw2 === 2 ? rgb(220, 226, 240) : sw2 === 3 ? rgb(130, 240, 255) : sw2 >= 4 ? rgb(255, 236, 150) : rgb(232, 224, 206);
+      const blD = sw2 === 1 ? rgb(110, 70, 30) : sw2 === 2 ? rgb(130, 136, 160) : sw2 === 3 ? rgb(40, 150, 200) : sw2 >= 4 ? rgb(230, 140, 40) : rgb(150, 140, 120);
+      const len = 58, tx = hx2 + Math.cos(ang) * len, ty = hy2 + Math.sin(ang) * len, hook = ang + 0.5 * (rev ? -1 : 1); // a slight hook at the tip
+      const hx3 = tx + Math.cos(hook) * 10, hy3 = ty + Math.sin(hook) * 10;
+      thickLine(hx2, hy2 + drop, tx, ty + drop, (t) => 7 - t * 3, OUT2); thickLine(tx, ty + drop, hx3, hy3 + drop, (t) => 4 - t * 3, OUT2);
+      thickLine(hx2, hy2 + drop, tx, ty + drop, (t) => 4.5 - t * 2.5, blD); thickLine(hx2, hy2 + drop, tx, ty + drop, (t) => 2.5 - t * 1.5, bl); thickLine(tx, ty + drop, hx3, hy3 + drop, (t) => 2 - t * 1.5, bl);
+      if (ka >= 0 && ka < 1) for (let i = 0; i < 4; i++) { const a2 = lerp(rev ? -2.6 : -0.4, ang, i / 4); thickLine(hx2 + Math.cos(a2) * 34, hy2 + Math.sin(a2) * 34, hx2 + Math.cos(a2) * 56, hy2 + Math.sin(a2) * 56, 1, bl); }
+      limb(S, E, Hd);
     } else {
-      const ex = W * 0.07 + bx * 0.4, ey = H * 0.28 + by * 0.5, hx2 = W * 0.17 + bx * 0.4, hy2 = H * 0.4 + by * 0.5; limb([[-8, H * 0.5], [ex, ey], [hx2, hy2]]);
-      const bx2 = Math.round(hx2), by2 = Math.round(hy2 + drop); // a ridged chitin plate, like a beetle's wing case
+      const ex = W * 0.07 + bx * 0.4, ey = H * 0.28 + by * 0.5, hx2 = W * 0.17 + bx * 0.4, hy2 = H * 0.4 + by * 0.5; limb([-8, H * 0.5], [ex, ey], [hx2, hy2]);
+      const bx2 = Math.round(hx2), by2 = Math.round(hy2 + drop); // a ridged plate, like a beetle's wing case
       for (const [ox, oy, rr2] of [[0, -6, 15], [0, 6, 13], [0, 15, 8]]) disc(bx2 + ox, by2 + oy, rr2 + 2, OUT2);
       for (const [ox, oy, rr2] of [[0, -6, 15], [0, 6, 13], [0, 15, 8]]) disc(bx2 + ox, by2 + oy, rr2, CH);
-      disc(bx2 - 5, by2 - 10, 5, CHL); thickLine(bx2, by2 - 19, bx2, by2 + 21, 2, OUT2);
-      for (const t of [-8, 2, 11]) { thickLine(bx2 - 12, by2 + t, bx2, by2 + t + 4, 1, OUT2); thickLine(bx2, by2 + t + 4, bx2 + 12, by2 + t, 1, OUT2); }
+      disc(bx2 - 5, by2 - 10, 5, c32(cp.h)); thickLine(bx2, by2 - 19, bx2, by2 + 21, 2, OUT2);
+      for (const t of [-8, 2, 11]) { thickLine(bx2 - 12, by2 + t, bx2, by2 + t + 4, 1, CHD); thickLine(bx2, by2 + t + 4, bx2 + 12, by2 + t, 1, CHD); }
     }
   }
   // sword class: shield on left, sword on right

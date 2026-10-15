@@ -12,6 +12,7 @@
 //              eggs (burn them), and wraps anyone who stands still (game/sim.js webbed).
 // All are spiderkin: they roll only the spider elites (content/elites.js).
 'use strict';
+const HANG_Z = 1.55; // how high a dropper hangs (the Silkwood is two tiles tall, gimmicks/webs.js)
 const SPIDER_ROWS = enemyDef('spider').sprite; // the old cave spider's body, recolored for each
 const legs = { fps: 9, frames: (s, kit) => [s, kit.shearRows(kit.shearRows(s, 2, 5, 1), 10, 13, -1), kit.shearRows(kit.shearRows(s, 2, 5, -1), 10, 13, 1)] };
 const kin = (o) => defineEnemy(Object.assign({ spiderkin: true, anim: legs, spawns: { dungeons: [13] } }, o));
@@ -23,10 +24,10 @@ kin({ id: 'spider_ceiling', title: 'DROPPER', hp: 3, spd: 3.0, dmg: 2, r: 0.42, 
   view: (e) => e.hz || 0,
   ai(sim, e, dt, ctx) {
     const { p } = ctx;
-    if (e.st === 0) { e.air = true; e.hz = 1.25; if (p && dist2(p.x, p.y, e.x, e.y) < 2.2 * 2.2) { e.st = 1; e.tm = 0.7; e.tx = p.x; e.ty = p.y; } return; }
+    if (e.st === 0) { e.air = true; e.hz = HANG_Z; if (p && dist2(p.x, p.y, e.x, e.y) < 2.6 * 2.6) { e.st = 1; e.tm = 0.8; e.tx = p.x; e.ty = p.y; } return; }
     if (e.st === 1) { // the shadow first, then down
       e.air = true; if (!e.shadow) { e.shadow = true; sim.spawn({ k: 'fx', lvl: e.lvl, x: e.tx, y: e.ty, spr: 'shadowring', life: Math.max(0.3, e.tm), sc: 1.0, z: -0.35 }); sim.sfx('skitter', e.lvl, e.tx, e.ty); }
-      e.x += (e.tx - e.x) * Math.min(1, dt * 6); e.y += (e.ty - e.y) * Math.min(1, dt * 6); e.hz = 1.25 * Math.max(0, Math.min(1, e.tm / 0.6));
+      e.x += (e.tx - e.x) * Math.min(1, dt * 6); e.y += (e.ty - e.y) * Math.min(1, dt * 6); e.hz = HANG_Z * Math.max(0, Math.min(1, e.tm / 0.7));
       if (e.tm > 0) return; e.st = 2; e.air = false; e.hz = 0; sim.ev({ t: 'shake', lvl: e.lvl, x: e.x, y: e.y });
       for (const pl of Object.values(sim.players)) if (pl.alive && pl.lvl === e.lvl && dist2(pl.x, pl.y, e.x, e.y) < 0.9) sim.hurtPlayer(pl, 2 * e.dmgMul, e);
       return;

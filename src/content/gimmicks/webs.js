@@ -85,6 +85,7 @@ defineGimmick('webs', {
   arena(L, r, { rnd, set }) { for (let i = 0; i < 6; i++) { const x = 1 + rnd.int(11), y = 1 + rnd.int(7); if (L.get(r.rx * DSX + x, r.ry * DSY + y) === TL.DFLOOR) set(x, y, 'WEB'); } },
   // a little spider hides in three rooms (enemies/silk.js PIP); and the way out beyond the boss, sealed until she's dead
   level(L, { rnd }) {
+    L.ceilH = 2; // the Silkwood is two tiles tall: the droppers hang well over your head (and the Gale Cloak lifts you a level)
     const rooms = Object.values(L.rooms).filter(r => !r.boss && !r.hidden && r !== L.startRoom); for (const r of rnd.shuffle(rooms).slice(0, 3)) r.enemies.push('spider_pip');
     const boss = Object.values(L.rooms).find(r => r.boss); if (!boss) return; const x0 = boss.rx * DSX, y0 = boss.ry * DSY;
     const free = (dx, dy) => !L.rooms[(boss.ry + dy) * DGW + boss.rx + dx] && boss.rx + dx >= 0 && boss.ry + dy >= 0 && boss.rx + dx < DGW && boss.ry + dy < DGH;

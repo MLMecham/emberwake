@@ -8,6 +8,7 @@ Content.upgrades = [
   Object.assign({ id: 'heavypommel', group: 'SWORD', desc: 'POMMEL STRIKES KNOCK ARMOR OFF (ONCE PER FOE)' }, flag('heavypommel')),
   Object.assign({ id: 'wardshield', group: 'SHIELD', desc: 'REFLECTS FOR 1 S AFTER IT COMES UP; ITS WARD STOPS ONE UNBLOCKABLE SHOT EVERY 8 S' }, flag('wardshield')),
   Object.assign({ id: 'mirrorguard', group: 'SHIELD', desc: 'REFLECTED SHOTS HIT THREE TIMES AS HARD (NEEDS THE WARDHOLD SHIELD)' }, flag('mirrorguard')),
+  Object.assign({ id: 'silkarm', group: 'SILK ARM', desc: 'A THIRD ARM: BLADE CUTS AGAIN AFTER YOUR SWORD, GUARD BLOCKS FROM ANY SIDE (STANCE ON THE GEAR PAGE)' }, flag('silkarm')),
   Object.assign({ id: 'loadedshot', group: 'BOW', desc: 'HOLD TO NOCK ONE MORE ARROW' }, flag('loaded')),
   Object.assign({ id: 'tripleshot', group: 'BOW', desc: 'HOLD LONGER TO NOCK ONE MORE ARROW' }, flag('loaded2')),
   Object.assign({ id: 'bombarrows', group: 'BOW', desc: 'SHIFT + BOW: AN ARROW WITH A BOMB TIED ON' }, flag('bombarrow')),

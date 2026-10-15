@@ -3250,6 +3250,7 @@ defineGimmick('webs', {
   arena(L, r, { rnd, set }) { for (let i = 0; i < 6; i++) { const x = 1 + rnd.int(11), y = 1 + rnd.int(7); if (L.get(r.rx * DSX + x, r.ry * DSY + y) === TL.DFLOOR) set(x, y, 'WEB'); } },
   // a little spider hides in three rooms (enemies/silk.js PIP); and the way out beyond the boss, sealed until she's dead
   level(L, { rnd }) {
+    L.ceilH = 2; // the Silkwood is two tiles tall: the droppers hang well over your head (and the Gale Cloak lifts you a level)
     const rooms = Object.values(L.rooms).filter(r => !r.boss && !r.hidden && r !== L.startRoom); for (const r of rnd.shuffle(rooms).slice(0, 3)) r.enemies.push('spider_pip');
     const boss = Object.values(L.rooms).find(r => r.boss); if (!boss) return; const x0 = boss.rx * DSX, y0 = boss.ry * DSY;
     const free = (dx, dy) => !L.rooms[(boss.ry + dy) * DGW + boss.rx + dx] && boss.rx + dx >= 0 && boss.ry + dy >= 0 && boss.rx + dx < DGW && boss.ry + dy < DGH;
@@ -4080,6 +4081,7 @@ defineEnemy({
 //              eggs (burn them), and wraps anyone who stands still (game/sim.js webbed).
 // All are spiderkin: they roll only the spider elites (content/elites.js).
 'use strict';
+const HANG_Z = 1.55; // how high a dropper hangs (the Silkwood is two tiles tall, gimmicks/webs.js)
 const SPIDER_ROWS = enemyDef('spider').sprite; // the old cave spider's body, recolored for each
 const legs = { fps: 9, frames: (s, kit) => [s, kit.shearRows(kit.shearRows(s, 2, 5, 1), 10, 13, -1), kit.shearRows(kit.shearRows(s, 2, 5, -1), 10, 13, 1)] };
 const kin = (o) => defineEnemy(Object.assign({ spiderkin: true, anim: legs, spawns: { dungeons: [13] } }, o));
@@ -4091,10 +4093,10 @@ kin({ id: 'spider_ceiling', title: 'DROPPER', hp: 3, spd: 3.0, dmg: 2, r: 0.42, 
   view: (e) => e.hz || 0,
   ai(sim, e, dt, ctx) {
     const { p } = ctx;
-    if (e.st === 0) { e.air = true; e.hz = 1.25; if (p && dist2(p.x, p.y, e.x, e.y) < 2.2 * 2.2) { e.st = 1; e.tm = 0.7; e.tx = p.x; e.ty = p.y; } return; }
+    if (e.st === 0) { e.air = true; e.hz = HANG_Z; if (p && dist2(p.x, p.y, e.x, e.y) < 2.6 * 2.6) { e.st = 1; e.tm = 0.8; e.tx = p.x; e.ty = p.y; } return; }
     if (e.st === 1) { // the shadow first, then down
       e.air = true; if (!e.shadow) { e.shadow = true; sim.spawn({ k: 'fx', lvl: e.lvl, x: e.tx, y: e.ty, spr: 'shadowring', life: Math.max(0.3, e.tm), sc: 1.0, z: -0.35 }); sim.sfx('skitter', e.lvl, e.tx, e.ty); }
-      e.x += (e.tx - e.x) * Math.min(1, dt * 6); e.y += (e.ty - e.y) * Math.min(1, dt * 6); e.hz = 1.25 * Math.max(0, Math.min(1, e.tm / 0.6));
+      e.x += (e.tx - e.x) * Math.min(1, dt * 6); e.y += (e.ty - e.y) * Math.min(1, dt * 6); e.hz = HANG_Z * Math.max(0, Math.min(1, e.tm / 0.7));
       if (e.tm > 0) return; e.st = 2; e.air = false; e.hz = 0; sim.ev({ t: 'shake', lvl: e.lvl, x: e.x, y: e.y });
       for (const pl of Object.values(sim.players)) if (pl.alive && pl.lvl === e.lvl && dist2(pl.x, pl.y, e.x, e.y) < 0.9) sim.hurtPlayer(pl, 2 * e.dmgMul, e);
       return;
@@ -5181,6 +5183,7 @@ Content.upgrades = [
   Object.assign({ id: 'heavypommel', group: 'SWORD', desc: 'POMMEL STRIKES KNOCK ARMOR OFF (ONCE PER FOE)' }, flag('heavypommel')),
   Object.assign({ id: 'wardshield', group: 'SHIELD', desc: 'REFLECTS FOR 1 S AFTER IT COMES UP; ITS WARD STOPS ONE UNBLOCKABLE SHOT EVERY 8 S' }, flag('wardshield')),
   Object.assign({ id: 'mirrorguard', group: 'SHIELD', desc: 'REFLECTED SHOTS HIT THREE TIMES AS HARD (NEEDS THE WARDHOLD SHIELD)' }, flag('mirrorguard')),
+  Object.assign({ id: 'silkarm', group: 'SILK ARM', desc: 'A THIRD ARM: BLADE CUTS AGAIN AFTER YOUR SWORD, GUARD BLOCKS FROM ANY SIDE (STANCE ON THE GEAR PAGE)' }, flag('silkarm')),
   Object.assign({ id: 'loadedshot', group: 'BOW', desc: 'HOLD TO NOCK ONE MORE ARROW' }, flag('loaded')),
   Object.assign({ id: 'tripleshot', group: 'BOW', desc: 'HOLD LONGER TO NOCK ONE MORE ARROW' }, flag('loaded2')),
   Object.assign({ id: 'bombarrows', group: 'BOW', desc: 'SHIFT + BOW: AN ARROW WITH A BOMB TIED ON' }, flag('bombarrow')),
@@ -7518,23 +7521,34 @@ function drawViewmodel(st) {
     if (st.charge > 0) { const r = Math.min(14, 3 + st.charge * 10) | 0; disc(W / 2, H - 48, r + 2, rgb(80, 200, 255), 0.5); disc(W / 2, H - 48, r, rgb(220, 250, 255)); if (st.charge > 0.8) for (let i = 0; i < 12; i++) { const a = Math.random() * TAU; thickLine(W / 2, H - 48, W / 2 + Math.cos(a) * (r + 10), H - 48 + Math.sin(a) * (r + 10), 1, rgb(200, 240, 255)); } }
     return;
   }
-  // THE SILK ARM (items/silkarm.js), behind everything else: a jointed chitin limb from behind your shoulder.
-  // BLADE: from the right, holding a bone blade that cuts a beat after your sword. GUARD: from the upper left, a chitin buckler.
+  // THE SILK ARM (items/silkarm.js), behind everything else: a jointed limb from behind your right shoulder, sleeved in
+  // your tunic's color. BLADE: it holds a blade of your sword's color and swings exactly as your sword does (backswings
+  // too), ARM_DELAY behind it and a little higher. GUARD: from the upper left, a ridged plate.
   if (st.arm) {
-    const CH = rgb(70, 56, 86), CHL = rgb(128, 108, 146), OUT2 = rgb(18, 14, 24); const drop = st.armReady ? 0 : 26; // changing stance: it's tucked away
-    const limb = (pts) => { for (let i = 0; i < pts.length - 1; i++) { thickLine(pts[i][0], pts[i][1] + drop, pts[i + 1][0], pts[i + 1][1] + drop, 9 - i * 2, OUT2); thickLine(pts[i][0], pts[i][1] + drop, pts[i + 1][0], pts[i + 1][1] + drop, 6 - i * 2, CH); } for (const [x, y] of pts.slice(1, -1)) { disc(Math.round(x), Math.round(y + drop), 4, OUT2); disc(Math.round(x), Math.round(y + drop), 2, CHL); } };
+    const cp = tunicPal(c32ToHex(col), 0), CH = c32(cp.T), CHD = c32(cp.t), OUT2 = rgb(18, 14, 24); const drop = st.armReady ? 0 : 40; // changing stance: it's tucked away
+    const limb = (S, E, Hd) => { const seg = (A, B, w0, w1) => { thickLine(A[0], A[1] + drop, B[0], B[1] + drop, (t) => lerp(w0, w1, t) + 3, OUT2); thickLine(A[0], A[1] + drop, B[0], B[1] + drop, (t) => lerp(w0, w1, t), CH); thickLine(A[0], A[1] + drop - lerp(w0, w1, 0.5) * 0.3, B[0], B[1] + drop - lerp(w0, w1, 0.5) * 0.3, (t) => lerp(w0, w1, t) * 0.35, CHD); };
+      seg(S, E, 13, 10); seg(E, Hd, 10, 7); disc(Math.round(E[0]), Math.round(E[1] + drop), 6, OUT2); disc(Math.round(E[0]), Math.round(E[1] + drop), 4, CHD); disc(Math.round(Hd[0]), Math.round(Hd[1] + drop), 6, OUT2); disc(Math.round(Hd[0]), Math.round(Hd[1] + drop), 4, CHD); };
     if (st.arm === 'blade') {
-      const sw2 = st.swing != null ? (st.swing - 0.12) / 0.25 : -1; const swingA = sw2 >= 0 && sw2 < 1 ? lerp(-2.4, -0.5, sw2) : -2.0 + Math.sin(st.bob) * 0.05;
-      const ex = W * 0.9 + bx * 0.5, ey = H * 0.4 + by, hx2 = W * 0.8 + bx * 0.5, hy2 = H * 0.5 + by; limb([[W + 8, H * 0.62], [ex, ey], [hx2, hy2]]);
-      const tx = hx2 + Math.cos(swingA) * 46, ty = hy2 + Math.sin(swingA) * 46; thickLine(hx2, hy2 + drop, tx, ty + drop, (t) => 6 - t * 4, OUT2); thickLine(hx2, hy2 + drop, tx, ty + drop, (t) => 3.5 - t * 2.5, rgb(232, 224, 206));
-      if (sw2 >= 0 && sw2 < 1) for (let i = 0; i < 4; i++) { const a2 = lerp(-2.4, swingA, i / 4); thickLine(hx2 + Math.cos(a2) * 30, hy2 + Math.sin(a2) * 30, hx2 + Math.cos(a2) * 48, hy2 + Math.sin(a2) * 48, 1, rgb(200, 190, 230)); }
+      const ka = st.armSwing != null ? st.armSwing / 0.25 : -1; const rev = st.armDir === -1; let ang, hx2, hy2;
+      if (ka >= 0 && ka < 1) { const kk = rev ? 1 - ka : ka; ang = lerp(-0.4, -2.6, kk); hx2 = lerp(W * 0.86, W * 0.5, kk) + bx; hy2 = lerp(H - 70, H - 92, Math.sin(kk * Math.PI)) + by; }
+      else { ang = -1.3; hx2 = W * 0.85 + bx; hy2 = H - 80 + by; } // held ready, above and behind the sword
+      const S = [W + 14, H * 0.3 + by * 0.5], Hd = [hx2, hy2]; const mx = (S[0] + Hd[0]) / 2, my = (S[1] + Hd[1]) / 2, L2 = Math.hypot(Hd[0] - S[0], Hd[1] - S[1]) || 1;
+      const bend = Math.max(10, 70 - L2 * 0.25); const E = [mx + (Hd[1] - S[1]) / L2 * bend, my - (Hd[0] - S[0]) / L2 * bend]; // the elbow bows up and out
+      const sw2 = me.sword || 0; const bl = sw2 === 1 ? rgb(170, 120, 60) : sw2 === 2 ? rgb(220, 226, 240) : sw2 === 3 ? rgb(130, 240, 255) : sw2 >= 4 ? rgb(255, 236, 150) : rgb(232, 224, 206);
+      const blD = sw2 === 1 ? rgb(110, 70, 30) : sw2 === 2 ? rgb(130, 136, 160) : sw2 === 3 ? rgb(40, 150, 200) : sw2 >= 4 ? rgb(230, 140, 40) : rgb(150, 140, 120);
+      const len = 58, tx = hx2 + Math.cos(ang) * len, ty = hy2 + Math.sin(ang) * len, hook = ang + 0.5 * (rev ? -1 : 1); // a slight hook at the tip
+      const hx3 = tx + Math.cos(hook) * 10, hy3 = ty + Math.sin(hook) * 10;
+      thickLine(hx2, hy2 + drop, tx, ty + drop, (t) => 7 - t * 3, OUT2); thickLine(tx, ty + drop, hx3, hy3 + drop, (t) => 4 - t * 3, OUT2);
+      thickLine(hx2, hy2 + drop, tx, ty + drop, (t) => 4.5 - t * 2.5, blD); thickLine(hx2, hy2 + drop, tx, ty + drop, (t) => 2.5 - t * 1.5, bl); thickLine(tx, ty + drop, hx3, hy3 + drop, (t) => 2 - t * 1.5, bl);
+      if (ka >= 0 && ka < 1) for (let i = 0; i < 4; i++) { const a2 = lerp(rev ? -2.6 : -0.4, ang, i / 4); thickLine(hx2 + Math.cos(a2) * 34, hy2 + Math.sin(a2) * 34, hx2 + Math.cos(a2) * 56, hy2 + Math.sin(a2) * 56, 1, bl); }
+      limb(S, E, Hd);
     } else {
-      const ex = W * 0.07 + bx * 0.4, ey = H * 0.28 + by * 0.5, hx2 = W * 0.17 + bx * 0.4, hy2 = H * 0.4 + by * 0.5; limb([[-8, H * 0.5], [ex, ey], [hx2, hy2]]);
-      const bx2 = Math.round(hx2), by2 = Math.round(hy2 + drop); // a ridged chitin plate, like a beetle's wing case
+      const ex = W * 0.07 + bx * 0.4, ey = H * 0.28 + by * 0.5, hx2 = W * 0.17 + bx * 0.4, hy2 = H * 0.4 + by * 0.5; limb([-8, H * 0.5], [ex, ey], [hx2, hy2]);
+      const bx2 = Math.round(hx2), by2 = Math.round(hy2 + drop); // a ridged plate, like a beetle's wing case
       for (const [ox, oy, rr2] of [[0, -6, 15], [0, 6, 13], [0, 15, 8]]) disc(bx2 + ox, by2 + oy, rr2 + 2, OUT2);
       for (const [ox, oy, rr2] of [[0, -6, 15], [0, 6, 13], [0, 15, 8]]) disc(bx2 + ox, by2 + oy, rr2, CH);
-      disc(bx2 - 5, by2 - 10, 5, CHL); thickLine(bx2, by2 - 19, bx2, by2 + 21, 2, OUT2);
-      for (const t of [-8, 2, 11]) { thickLine(bx2 - 12, by2 + t, bx2, by2 + t + 4, 1, OUT2); thickLine(bx2, by2 + t + 4, bx2 + 12, by2 + t, 1, OUT2); }
+      disc(bx2 - 5, by2 - 10, 5, c32(cp.h)); thickLine(bx2, by2 - 19, bx2, by2 + 21, 2, OUT2);
+      for (const t of [-8, 2, 11]) { thickLine(bx2 - 12, by2 + t, bx2, by2 + t + 4, 1, CHD); thickLine(bx2, by2 + t + 4, bx2 + 12, by2 + t, 1, CHD); }
     }
   }
   // sword class: shield on left, sword on right
@@ -8456,6 +8470,9 @@ function updateLocal(dt, inp) {
   if (inp.interact && Lc.reviveTarget) { const nw = performance.now(); if (nw - (Lc.reviveSent || 0) > 100) { Lc.reviveSent = nw; sendAction({ t: 'revive' }); } }
   // attack
   Lc.atkCd -= dt; Lc.comboT -= dt; if (Lc.swing != null) { Lc.swing += dt * (Lc.swingFast ? 2.3 : 1); if (Lc.swing > 0.3) { Lc.swing = null; if (Lc.backQueued) { Lc.backQueued = false; Lc.swing = 0; Lc.swingDir = -1; sfx('swing'); Lc.atkVis = 0.2; } else if (!Lc.lunge) Lc.swingFast = false; } } if (Lc.punch) { Lc.punch.t += dt; if (Lc.punch.t > 0.25) Lc.punch = null; }
+  // the Silk Arm (items/silkarm.js) repeats each swing ARM_DELAY later, in the same direction (engine/render.js)
+  if (Lc.swing != null && (Lc.prevSwing == null || Lc.swing < Lc.prevSwing)) { Lc.armT = -ARM_DELAY; Lc.armDir = Lc.swingDir || 1; Lc.armFast = !!Lc.swingFast; } Lc.prevSwing = Lc.swing;
+  if (Lc.armT != null) { Lc.armT += dt * (Lc.armFast && Lc.armT >= 0 ? 2.3 : 1); if (Lc.armT > 0.3) Lc.armT = null; }
   if (Lc.atkVis > 0) Lc.atkVis -= dt;
   if (monk) {
     if (inp.atkP && Lc.atkCd <= 0) {
@@ -8590,7 +8607,7 @@ function draw(dt) {
   // pow words
   for (const p of Lc.pow) { const sc = projectPt(cam, p.x, p.y); if (sc) { const c = p.big ? rgb(255, 230, 60) : rgb(255, 255, 255); text(p.word, sc.x - p.word.length * 3, sc.y - 30 - p.t * (p.num ? 45 : 30), p.num ? rgb(255, 236, 120) : Math.floor(p.t * 20) & 1 ? c : rgb(255, 80, 40)); } }
   const bossE = ents.find(e => e[8] >= 0);
-  const st = { me, bob: Lc.bob, moveK: Lc.moveK || 0, readyK: Lc.readyK || 0, blockT: Lc.blockT || 0, mirror: !!(me && me.mirror), arm: me && me.items.silkarm ? (me.armMode || 'blade') : null, armReady: !!(me && me.armReady), wardShield: !!(me && me.items.wardshield && me.cls !== 'monk'), ward: !!(me && me.ward), swing: Lc.swing, swingDir: Lc.swingDir || 1, grip: Lc.gripT || 0, pommelT: Lc.pommelT, lungeReady: !!(Lc.gripT >= LUNGE_HOLD && me && me.items.lunge), punch: Lc.punch, charge: Lc.charge, useFlash: Lc.useFlash, useSpr: Lc.useSpr, level: L, cam, players: snap ? snap.pl : [], myId: G.myId, team: snap ? snap.team : { keys: {}, maps: {}, comps: {}, shards: [], done: [] }, seen: G.seen[L.id] || new Uint8Array(L.w * L.h), seenOW: G.seen.ow || new Uint8Array(1), seenRooms: G.seenRooms, selItem: Lc.sel, pitch: Lc.pitch, lvlKind: L.kind, bossHp: bossE ? bossE[8] : -1, bossName: bossE ? ((bossDefFor(bossE[1]) || {}).title || null) : null, world: G.world };
+  const st = { me, bob: Lc.bob, moveK: Lc.moveK || 0, readyK: Lc.readyK || 0, blockT: Lc.blockT || 0, mirror: !!(me && me.mirror), arm: me && me.items.silkarm ? (me.armMode || 'blade') : null, armSwing: Lc.armT != null && Lc.armT >= 0 ? Lc.armT : null, armDir: Lc.armDir || 1, armReady: !!(me && me.armReady), wardShield: !!(me && me.items.wardshield && me.cls !== 'monk'), ward: !!(me && me.ward), swing: Lc.swing, swingDir: Lc.swingDir || 1, grip: Lc.gripT || 0, pommelT: Lc.pommelT, lungeReady: !!(Lc.gripT >= LUNGE_HOLD && me && me.items.lunge), punch: Lc.punch, charge: Lc.charge, useFlash: Lc.useFlash, useSpr: Lc.useSpr, level: L, cam, players: snap ? snap.pl : [], myId: G.myId, team: snap ? snap.team : { keys: {}, maps: {}, comps: {}, shards: [], done: [] }, seen: G.seen[L.id] || new Uint8Array(L.w * L.h), seenOW: G.seen.ow || new Uint8Array(1), seenRooms: G.seenRooms, selItem: Lc.sel, pitch: Lc.pitch, lvlKind: L.kind, bossHp: bossE ? bossE[8] : -1, bossName: bossE ? ((bossDefFor(bossE[1]) || {}).title || null) : null, world: G.world };
   if (me && !down) drawViewmodel(st);
   if (me && me.cls === 'monk' && me.armor > 0 && !down) { const ac = me.armor === 2 ? rgb(255, 248, 200) : rgb(100, 190, 255); for (let i = 0; i < 18; i++) { const side = Math.random() < 0.5; const x = side ? (Math.random() < 0.5 ? Math.random() * 10 : R.W - Math.random() * 10) : Math.random() * R.W; const y = side ? Math.random() * R.H : R.H - Math.random() * 8; px(x, y, ac); } }
   if (Lc.dashT > 0) rectA(0, 0, R.W, R.H, rgb(200, 240, 255), 0.15);
