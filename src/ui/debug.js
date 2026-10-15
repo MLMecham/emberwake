@@ -16,7 +16,7 @@ function fillDebugUI() {
 }
 function readDebugUI() {
   const n = (id, lo, hi) => clamp(parseInt($(id).value, 10) || 0, lo, hi);
-  G.profile.dbg = { on: $('dbgOn').checked, sword: n('dbgSword', 0, 4), armor: n('dbgArmor', 0, 2), hearts: n('dbgHearts', 3, 16), gems: n('dbgGems', 0, 999), bombs: n('dbgBombs', 0, 16), arrows: n('dbgArrows', 0, 30), potions: n('dbgPotions', 0, 2), shards: n('dbgShards', 0, 8), items: debugItems().map(i => i[0]).filter(id => $('dbgI_' + id) && $('dbgI_' + id).checked), start: $('dbgStart').value, god: $('dbgGod').checked };
+  G.profile.dbg = { on: $('dbgOn').checked, sword: n('dbgSword', 0, 4), armor: n('dbgArmor', 0, 2), hearts: n('dbgHearts', 3, MAX_HEARTS), gems: n('dbgGems', 0, 999), bombs: n('dbgBombs', 0, 16), arrows: n('dbgArrows', 0, 30), potions: n('dbgPotions', 0, 2), shards: n('dbgShards', 0, 8), items: debugItems().map(i => i[0]).filter(id => $('dbgI_' + id) && $('dbgI_' + id).checked), start: $('dbgStart').value, god: $('dbgGod').checked };
   saveProfile();
 }
 // fresh=true: replace the starting loadout. Always: debug flag, god mode, start location.

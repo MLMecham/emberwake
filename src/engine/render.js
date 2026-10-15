@@ -511,7 +511,7 @@ function drawHUD(st) {
   drawMinimap(st, 4, 4, 72, 44);
   // hearts
   const hx = W - 86; drawHearts(hx, 5, me.hp, me.maxHp, me.poison > 0);
-  if (me.hp <= 4 && me.alive && Math.floor(R.time * 4) & 1) frame(hx - 2, 3, 84, 10, rgb(255, 60, 60));
+  if (me.hp <= 4 && me.alive && Math.floor(R.time * 4) & 1) frame(hx - 2, 3, 84, Math.ceil(Math.ceil(me.maxHp / 4) / 10) * 8 + 2, rgb(255, 60, 60));
   // counters
   let cy = 5 + Math.ceil(Math.ceil(me.maxHp / 4) / 10) * 8 + 2;
   const counter = (spr, v, c) => { blit(SPR[spr], hx - 4, cy - 5, 1); text('X' + v, hx + 10, cy, c || rgb(255, 255, 255)); cy += 9; };

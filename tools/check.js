@@ -823,6 +823,7 @@ attempt('the first old man and the Wardhold shield', () => {
   // a wooden shield only blocks
   sim.onPlayerState('p1', { lvl: 'dbg', x: 22.5, y: 19.5, a: -Math.PI / 2, sh: 1 }); const s0 = shoot(); for (let k = 0; k < 40 && !s0.dead; k++) sim.tick(1 / 60); __ok(s0.dead && s0.owner === 'e' && p.hp === 40, 'the wooden shield just blocks');
   // the old man falls once someone has 8 hearts and nobody is in his cave
+  { const m0 = p.maxHp, h0 = p.hp; p.maxHp = MAX_HEARTS * 4 - 4; sim.giveItem(p, 'hcont', false); sim.giveItem(p, 'hcont', false); __ok(p.maxHp === 80, 'heart containers stop at 20 hearts'); p.maxHp = m0; p.hp = h0; }
   p.maxHp = 32; sim.tick(1 / 60); __ok(sim.team.fallen && C.dark && C.tiles[C.idx(6, 1)] === TL.HATCH_CAVED && C.props[C.idx(6, 1)] === PR.RUBBLE, 'at 8 hearts: the passage is caved in and the cave is dark');
   __ok(C.props[C.idx(3, 2)] === 0 && C.npcs[0].spr === 'oldman_fallen' && C.npcs[0].text === Content.fallen.text, 'the torches are out and he lies there');
   const O = W.levels.ow; __ok(O.props.some(pr => pr === PR.HELM), 'a dented helmet outside');

@@ -632,8 +632,8 @@ function bindUI() {
   on('pDbgBossSpawn', () => { sendAction({ t: 'dbgspawn', type: $('pDbgBoss').value, elite: null }); resume(); });
   on('pDbgMap', () => { sendAction({ t: 'dbgmap', what: 'map' }); resume(); }); on('pDbgComp', () => { sendAction({ t: 'dbgmap', what: 'comp' }); resume(); });
   on('pGodToggle', () => { const now = !(G.snap && G.snap.me && G.snap.me.god); G.profile.dbg = Object.assign(defaultDebug(), G.profile.dbg || {}, { god: now }); saveProfile(); sendAction({ t: 'god', on: now }); setTimeout(updatePauseInfo, 150); showToast(now ? 'GOD MODE ON' : 'GOD MODE OFF'); });
-  // EVERYTHING: best sword (the Dawnblade), plate, 16 hearts, every item and relic, all shards, god mode
-  on('dbgAll', () => { G.profile.dbg = Object.assign(defaultDebug(), { on: true, sword: 4, armor: 2, hearts: 16, gems: 999, bombs: 16, arrows: 30, potions: 2, shards: 8, items: debugItems().map(i => i[0]), god: true }); fillDebugUI(); });
+  // EVERYTHING: best sword (the Dawnblade), plate, 20 hearts, every item and relic, all shards, god mode
+  on('dbgAll', () => { G.profile.dbg = Object.assign(defaultDebug(), { on: true, sword: 4, armor: 2, hearts: MAX_HEARTS, gems: 999, bombs: 16, arrows: 30, potions: 2, shards: 8, items: debugItems().map(i => i[0]), god: true }); fillDebugUI(); });
   on('dbgNone', () => { G.profile.dbg = Object.assign(defaultDebug(), { on: true }); fillDebugUI(); });
   on('dbgMonk', () => { unlockMonk(); buildClassPicker(); showToast('SECRET CLASS UNLOCKED'); });
   $('dbgOn').onchange = () => { $('dbgBody').classList.toggle('off', !$('dbgOn').checked); };

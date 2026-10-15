@@ -51,6 +51,7 @@ const DISARM_STAGGER = 1.2;
 const KNIGHT_WINDUP = 0.45; // seconds a sword knight raises its blade before the counter lands (your cue to back off) // seconds a disarmed foe reels
 const WEB_HELPLESS = 1, ARM_DELAY = 0.12, ARM_MIRROR = 0.25, ARM_SWAP = 1.5; // stuck in a web: seconds before a slash frees you; the Silk Arm's mirror cut: delay, share of the hit; stance change time
 const GRUDGE_COOL = 180, THORN_RING_GRUDGE = 12; // the thorn-folk's grudge: seconds per point it cools; the most the root merchant forgives
+const MAX_HEARTS = 20; // heart containers and pieces stop here (the HUD shows two rows of 10)
 const REFLECT_TIME = 1, WARD_TIME = 8; // the Wardhold shield (content/wardhold.js): reflect window after it comes up; seconds between wards
 const TWIN_EYE_TIME = 0.55; // seconds a twin-eye gate's eye stays shut (content/gimmicks/twingate.js)
 const GOURD_REGROW = 40; // seconds before a split gourd can grow back (and only with nobody within 6 tiles)
@@ -213,7 +214,7 @@ class Sim {
   grantLoadout(p, d) {
     const n = (v, hi) => clamp(v | 0, 0, hi);
     p.sword = Math.max(p.sword, n(d.sword, 4)); p.armor = Math.max(p.armor, n(d.armor, 2));
-    const mh = clamp(d.hearts | 0, 3, 16) * 4; if (mh > p.maxHp) p.maxHp = mh; p.hp = p.maxHp;
+    const mh = clamp(d.hearts | 0, 3, MAX_HEARTS) * 4; if (mh > p.maxHp) p.maxHp = mh; p.hp = p.maxHp;
     p.gems = Math.max(p.gems, n(d.gems, 999)); p.potions = Math.max(p.potions, n(d.potions, 2)); if (p.potions) p.items.potion = true;
     for (const id of d.items || []) { const it = itemDef(id); if (!it || !it.debug) continue; if (it.debugGrant) it.debugGrant(p, this); else p.items[id] = true; }
     p.arrows = Math.max(p.arrows, Math.min(p.maxArrows || ARROWS_START, n(d.arrows, 50)));

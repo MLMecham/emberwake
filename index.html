@@ -127,7 +127,7 @@ summary:hover { color:var(--gold); }
       <div class="grid2">
         <div><label for="dbgSword">SWORD</label><select id="dbgSword"><option value="0">NONE</option><option value="1">WOODEN</option><option value="2">SILVER</option><option value="3">MYTHRIL</option><option value="4">DAWNBLADE</option></select></div>
         <div><label for="dbgArmor">TUNIC</label><select id="dbgArmor"><option value="0">CLOTH</option><option value="1">CHAIN</option><option value="2">PLATE</option></select></div>
-        <div><label for="dbgHearts">HEARTS</label><input id="dbgHearts" type="number" min="3" max="16" value="3"></div>
+        <div><label for="dbgHearts">HEARTS</label><input id="dbgHearts" type="number" min="3" max="20" value="3"></div>
         <div><label for="dbgShards">EMBER SHARDS</label><input id="dbgShards" type="number" min="0" max="8" value="0"></div>
         <div><label for="dbgGems">GEMS</label><input id="dbgGems" type="number" min="0" max="999" value="0"></div>
         <div><label for="dbgBombs">BOMBS</label><input id="dbgBombs" type="number" min="0" max="16" value="0"></div>
@@ -4863,13 +4863,13 @@ defineItem({ id: 'gembag', name: 'YOUR GEMS', sprite: 'gembag',
 defineItem({ id: 'heart', name: 'HEART', sprite: 'heart', full: (p) => p.hp >= p.maxHp, give(sim, p, ctx) { sim.heal(p, sim.heartHeal(p, 4)); sim.sfx('heart', p.lvl); if (ctx.fromShop) ctx.banner(); sim.shepherd(p, 4); } }); // rings change how much a heart heals (items/rings.js)
 defineItem({ id: 'fairy', name: 'FAIRY', sprite: 'fairy', pickup: { sc: 0.6, z: 0.3, float: true }, give(sim, p) { sim.heal(p, p.maxHp); sim.sfx('heal', p.lvl); } });
 // +1 heart for the whole party
-defineItem({ id: 'hcont', name: 'HEART CONTAINER', sprite: 'hcont', team: true, give(sim, p, ctx) { p.maxHp = Math.min(64, p.maxHp + 4); sim.heal(p, p.maxHp); ctx.banner(); } });
+defineItem({ id: 'hcont', name: 'HEART CONTAINER', sprite: 'hcont', team: true, give(sim, p, ctx) { p.maxHp = Math.min(MAX_HEARTS * 4, p.maxHp + 4); sim.heal(p, p.maxHp); ctx.banner(); } });
 // found in hidden dungeon rooms: every 4 pieces the party gains a heart
 defineItem({
   id: 'hpiece', name: 'HEART PIECE', sprite: 'hpiece',
   give(sim, p, ctx) {
     const t = sim.team; t.hpieces = (t.hpieces || 0) + 1;
-    if (t.hpieces % 4 === 0) { ctx.banner('HEART PIECE 4/4 - A NEW HEART!', true); for (const o of Object.values(sim.players)) { o.maxHp = Math.min(64, o.maxHp + 4); sim.heal(o, o.maxHp); } }
+    if (t.hpieces % 4 === 0) { ctx.banner('HEART PIECE 4/4 - A NEW HEART!', true); for (const o of Object.values(sim.players)) { o.maxHp = Math.min(MAX_HEARTS * 4, o.maxHp + 4); sim.heal(o, o.maxHp); } }
     else ctx.banner('HEART PIECE ' + (t.hpieces % 4) + '/4', true);
   },
 });
@@ -6106,6 +6106,7 @@ const DISARM_STAGGER = 1.2;
 const KNIGHT_WINDUP = 0.45; // seconds a sword knight raises its blade before the counter lands (your cue to back off) // seconds a disarmed foe reels
 const WEB_HELPLESS = 1, ARM_DELAY = 0.12, ARM_MIRROR = 0.25, ARM_SWAP = 1.5; // stuck in a web: seconds before a slash frees you; the Silk Arm's mirror cut: delay, share of the hit; stance change time
 const GRUDGE_COOL = 180, THORN_RING_GRUDGE = 12; // the thorn-folk's grudge: seconds per point it cools; the most the root merchant forgives
+const MAX_HEARTS = 20; // heart containers and pieces stop here (the HUD shows two rows of 10)
 const REFLECT_TIME = 1, WARD_TIME = 8; // the Wardhold shield (content/wardhold.js): reflect window after it comes up; seconds between wards
 const TWIN_EYE_TIME = 0.55; // seconds a twin-eye gate's eye stays shut (content/gimmicks/twingate.js)
 const GOURD_REGROW = 40; // seconds before a split gourd can grow back (and only with nobody within 6 tiles)
@@ -6268,7 +6269,7 @@ class Sim {
   grantLoadout(p, d) {
     const n = (v, hi) => clamp(v | 0, 0, hi);
     p.sword = Math.max(p.sword, n(d.sword, 4)); p.armor = Math.max(p.armor, n(d.armor, 2));
-    const mh = clamp(d.hearts | 0, 3, 16) * 4; if (mh > p.maxHp) p.maxHp = mh; p.hp = p.maxHp;
+    const mh = clamp(d.hearts | 0, 3, MAX_HEARTS) * 4; if (mh > p.maxHp) p.maxHp = mh; p.hp = p.maxHp;
     p.gems = Math.max(p.gems, n(d.gems, 999)); p.potions = Math.max(p.potions, n(d.potions, 2)); if (p.potions) p.items.potion = true;
     for (const id of d.items || []) { const it = itemDef(id); if (!it || !it.debug) continue; if (it.debugGrant) it.debugGrant(p, this); else p.items[id] = true; }
     p.arrows = Math.max(p.arrows, Math.min(p.maxArrows || ARROWS_START, n(d.arrows, 50)));
@@ -7669,7 +7670,7 @@ function drawHUD(st) {
   drawMinimap(st, 4, 4, 72, 44);
   // hearts
   const hx = W - 86; drawHearts(hx, 5, me.hp, me.maxHp, me.poison > 0);
-  if (me.hp <= 4 && me.alive && Math.floor(R.time * 4) & 1) frame(hx - 2, 3, 84, 10, rgb(255, 60, 60));
+  if (me.hp <= 4 && me.alive && Math.floor(R.time * 4) & 1) frame(hx - 2, 3, 84, Math.ceil(Math.ceil(me.maxHp / 4) / 10) * 8 + 2, rgb(255, 60, 60));
   // counters
   let cy = 5 + Math.ceil(Math.ceil(me.maxHp / 4) / 10) * 8 + 2;
   const counter = (spr, v, c) => { blit(SPR[spr], hx - 4, cy - 5, 1); text('X' + v, hx + 10, cy, c || rgb(255, 255, 255)); cy += 9; };
@@ -8204,7 +8205,7 @@ function fillDebugUI() {
 }
 function readDebugUI() {
   const n = (id, lo, hi) => clamp(parseInt($(id).value, 10) || 0, lo, hi);
-  G.profile.dbg = { on: $('dbgOn').checked, sword: n('dbgSword', 0, 4), armor: n('dbgArmor', 0, 2), hearts: n('dbgHearts', 3, 16), gems: n('dbgGems', 0, 999), bombs: n('dbgBombs', 0, 16), arrows: n('dbgArrows', 0, 30), potions: n('dbgPotions', 0, 2), shards: n('dbgShards', 0, 8), items: debugItems().map(i => i[0]).filter(id => $('dbgI_' + id) && $('dbgI_' + id).checked), start: $('dbgStart').value, god: $('dbgGod').checked };
+  G.profile.dbg = { on: $('dbgOn').checked, sword: n('dbgSword', 0, 4), armor: n('dbgArmor', 0, 2), hearts: n('dbgHearts', 3, MAX_HEARTS), gems: n('dbgGems', 0, 999), bombs: n('dbgBombs', 0, 16), arrows: n('dbgArrows', 0, 30), potions: n('dbgPotions', 0, 2), shards: n('dbgShards', 0, 8), items: debugItems().map(i => i[0]).filter(id => $('dbgI_' + id) && $('dbgI_' + id).checked), start: $('dbgStart').value, god: $('dbgGod').checked };
   saveProfile();
 }
 // fresh=true: replace the starting loadout. Always: debug flag, god mode, start location.
@@ -8856,8 +8857,8 @@ function bindUI() {
   on('pDbgBossSpawn', () => { sendAction({ t: 'dbgspawn', type: $('pDbgBoss').value, elite: null }); resume(); });
   on('pDbgMap', () => { sendAction({ t: 'dbgmap', what: 'map' }); resume(); }); on('pDbgComp', () => { sendAction({ t: 'dbgmap', what: 'comp' }); resume(); });
   on('pGodToggle', () => { const now = !(G.snap && G.snap.me && G.snap.me.god); G.profile.dbg = Object.assign(defaultDebug(), G.profile.dbg || {}, { god: now }); saveProfile(); sendAction({ t: 'god', on: now }); setTimeout(updatePauseInfo, 150); showToast(now ? 'GOD MODE ON' : 'GOD MODE OFF'); });
-  // EVERYTHING: best sword (the Dawnblade), plate, 16 hearts, every item and relic, all shards, god mode
-  on('dbgAll', () => { G.profile.dbg = Object.assign(defaultDebug(), { on: true, sword: 4, armor: 2, hearts: 16, gems: 999, bombs: 16, arrows: 30, potions: 2, shards: 8, items: debugItems().map(i => i[0]), god: true }); fillDebugUI(); });
+  // EVERYTHING: best sword (the Dawnblade), plate, 20 hearts, every item and relic, all shards, god mode
+  on('dbgAll', () => { G.profile.dbg = Object.assign(defaultDebug(), { on: true, sword: 4, armor: 2, hearts: MAX_HEARTS, gems: 999, bombs: 16, arrows: 30, potions: 2, shards: 8, items: debugItems().map(i => i[0]), god: true }); fillDebugUI(); });
   on('dbgNone', () => { G.profile.dbg = Object.assign(defaultDebug(), { on: true }); fillDebugUI(); });
   on('dbgMonk', () => { unlockMonk(); buildClassPicker(); showToast('SECRET CLASS UNLOCKED'); });
   $('dbgOn').onchange = () => { $('dbgBody').classList.toggle('off', !$('dbgOn').checked); };
