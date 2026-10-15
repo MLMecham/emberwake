@@ -843,6 +843,60 @@ attempt('the first old man and the Wardhold shield', () => {
   const other = Object.values(W.levels).find(L => L.kind === 'cave' && L.caveKind === 'hint'); sim.teleport(p, other.id, 6.5, 4.8, -Math.PI / 2); sim.tick(1 / 60); sim.tick(1 / 60);
   const npc = sim.ents.find(e => e.k === 'npc' && e.lvl === other.id); __ok(npc && npc.text === Content.wardLine && sim.team.wardLine, 'the next old man knows that shield');
 });
+attempt('defense split and rings', () => {
+  const sim = freshSim(); const p = sim.players.p1; p.god = false; p.armor = 2; const hit = (dmg, src, elem) => { p.inv = 0; p.hp = p.maxHp = 400; sim.hurtPlayer(p, dmg, src, elem); return 400 - p.hp; };
+  __ok(hit(4) === 2 && hit(4, null, 'fire') === 5, 'plate: a blow loses 75%, fire only 37.5% (' + hit(4) + ' / ' + hit(4, null, 'fire') + ')');
+  __ok(sim.elemOf({ k: 'proj', type: 'magic' }) === 'magic' && sim.elemOf({ k: 'proj', type: 'icebreath' }) === 'ice' && !sim.elemOf({ k: 'proj', type: 'spear' }), 'shots carry their element');
+  const wear = (id) => { p.items[id] = true; sim.onAction('p1', { t: 'equip', slot: 'ring', id }); };
+  wear('ring_cinder'); __ok(p.ring === 'ring_cinder' && hit(4, null, 'fire') === 0 && hit(4, { k: 'proj', type: 'fire', x: 0, y: 0 }) === 3, 'Cinder: burning ground does nothing, a fireball half');
+  wear('ring_rime'); p.chill = 2; sim.tick(1 / 60); __ok(p.chill === 0 && hit(4, null, 'ice') === 3, 'Rime: no chill, frost halved');
+  wear('ring_glass'); __ok(hit(4) === 4, 'Glass: double damage taken');
+  const dummy = sim.spawn({ k: 'en', type: 'slime', lvl: p.lvl, x: p.x + 5, y: p.y, hp: 50, maxHp: 50, f: 0, st: 0, tm: 9, stun: 9, hurt: 0, spawnFx: 0, dmgMul: 1 }); sim.damageEnemy(dummy, 2, null, { pid: 'p1' }); __ok(dummy.hp === 46, 'Glass: and double dealt');
+  wear('ring_thorn'); const biter = sim.spawn({ k: 'en', type: 'slime', lvl: p.lvl, x: p.x + 0.3, y: p.y, hp: 50, maxHp: 50, f: 0, st: 0, tm: 9, stun: 0, hurt: 0, spawnFx: 0, dmgMul: 1 }); hit(2, biter); __ok(biter.hp === 44, 'Thorn: a bite comes back three times over');
+  wear('ring_secondwind'); p.inv = 0; p.hp = 2; p.potions = 0; sim.hurtPlayer(p, 10, null); __ok(p.alive && p.hp === 1, 'Second Wind: a fatal hit leaves a quarter heart');
+  p.inv = 0; sim.hurtPlayer(p, 10, null); __ok(!p.alive, 'but only once'); __ok(p.windUsed === false, 'and it comes back when you fall');
+  p.alive = true; p.hp = 4; p.maxHp = 40; wear('ring_hollow'); sim.giveItem(p, 'heart'); __ok(p.hp === 4, 'Hollow: hearts do nothing'); sim.onKill({ lvl: p.lvl, type: 'slime' }, 'p1'); __ok(p.hp === 5, 'every kill heals a little');
+  wear('ring_miser'); sim.giveItem(p, 'heart'); __ok(p.hp === 7, 'Miser: hearts heal half'); const g0 = p.gems; const gem = sim.spawn({ k: 'pick', lvl: p.lvl, x: p.x, y: p.y, item: 'gem5' }); sim.pickup(p, gem); __ok(p.gems - g0 === 10, 'Miser: dropped gems count twice');
+  wear('ring_mender'); p.hp = 4; p.lastHurtAt = -99; p.movedAt = sim.time - 5; run(sim, 3); __ok(p.hp > 4, 'Mender: standing still heals');
+  // Shepherd: only between two wearers
+  const q = sim.players.p2; q.lvl = p.lvl; q.x = p.x + 1; q.y = p.y; q.hp = 4; q.maxHp = 40; wear('ring_shepherd'); sim.giveItem(p, 'heart'); __ok(q.hp === 4, 'Shepherd: a friend without one gets nothing');
+  q.items.ring_shepherd = true; q.ring = 'ring_shepherd'; sim.giveItem(p, 'heart'); __ok(q.hp === 8, 'Shepherd: a friend wearing one heals too');
+  wear('ring_signet'); sim.teleport(p, 'dbg', 22.5, 19.5, 0); const k = sim.spawn({ k: 'en', type: 'knight', lvl: 'dbg', x: 24.0, y: 19.5, hp: 9, maxHp: 9, f: Math.PI, st: 0, tm: 0, stun: 0, hurt: 0, spawnFx: 0, dmgMul: 1 }); p.inv = 0; p.hp = 40; sim.updateEnemy(k, 1 / 60); __ok(k.hesitate > sim.time, 'Signet: a knight hesitates');
+  wear('ring_echo'); const bm = sim.fireProj('beam', 'dbg', 33.5, 19.5, 0, 'p', 'p1', {}); for (let i = 0; i < 20 && !bm.dead; i++) sim.tick(1 / 60); __ok(!bm.dead && bm.bounced && bm.vx < 0, 'Echo: a beam bounces off the wall');
+  wear('ring_lodestone'); const d1 = sim.spawn({ k: 'pick', lvl: 'dbg', x: p.x + 2.5, y: p.y, item: 'gem1' }); const dx0 = d1.x; sim.tick(0.1); __ok(d1.x < dx0, 'Lodestone: drops drift toward you');
+  wear('ring_gale'); p.items.galecloak = true; sim.useItem(p, 'galecloak', {}); __ok(Math.abs((p.flyReady - p.flyUntil) - FLY_COOLDOWN / 2) < 1e-6, 'Gale: the cloak rests half as long');
+  sim.onAction('p1', { t: 'equip', slot: 'ring', id: 'none' }); __ok(!p.ring, 'and you can take a ring off');
+  __ok(sim.makeSave().players[p.color].ring === null || sim.makeSave().players[p.color].ring === undefined, 'the ring is saved');
+});
+attempt('the thorn-folk grudge', () => {
+  const sim = freshSim(); const p = sim.players.p1; const rnd = mulberry32(5); const kin = () => { const c = {}; for (let i = 0; i < 300; i++) { const t = sim.thornKin(rnd); c[t] = (c[t] || 0) + 1; } return c; };
+  __ok(Object.keys(kin()).join() === 'thornling', 'no grudge: only thornlings');
+  sim.addGrudge(30); const c = kin(); __ok(c.thornling_briar > 0 && c.thornling_nettle > 0 && !c.thornling_seer, 'grudge 30: briarbacks and nettlings, no seers');
+  sim.addGrudge(50); __ok(kin().thornling_seer > 0, 'grudge 80: seers too');
+  // it cools, but not below half its peak
+  for (let i = 0; i < 200; i++) sim.coolGrudge(180); __ok(sim.team.grudge === 40, 'it cools to half its peak (' + sim.team.grudge + ')');
+  // burning a bush on the overworld feeds it; killing thorn-folk in a dungeon doesn't
+  const L = sim.W.levels.ow; let bi = -1; for (let i = 0; i < L.props.length; i++) if (L.props[i] === PR.BUSH) { bi = i; break; } const g0 = sim.team.grudge; sim.burnAt(L, bi % L.w + 0.5, Math.floor(bi / L.w) + 0.5); __ok(sim.team.grudge === g0 + 2, 'a burned bush: +2');
+  sim.onKill({ lvl: 'd2', type: 'thornling' }, 'p1'); __ok(sim.team.grudge === g0 + 2, 'a thornling killed in a dungeon: nothing'); sim.onKill({ lvl: 'ow', type: 'thornling_briar' }, 'p1'); __ok(sim.team.grudge === g0 + 3, 'out in the wilds: +1');
+  // the root merchant sells the Thorn Ring only while the grudge is low
+  const root = Object.values(sim.W.levels).find(l => l.caveKind === 'g_roots'); sim.teleport(p, root.id, 6.5, 6.5, 0); sim.tick(1 / 60);
+  __ok(!sim.ents.some(e => e.k === 'shop' && e.item === 'ring_thorn' && e.lvl === root.id), 'an angry wood: no Thorn Ring for sale');
+  const sim2 = freshSim(); const root2 = Object.values(sim2.W.levels).find(l => l.caveKind === 'g_roots'); sim2.teleport(sim2.players.p1, root2.id, 6.5, 6.5, 0); sim2.tick(1 / 60);
+  __ok(sim2.ents.some(e => e.k === 'shop' && e.item === 'ring_thorn' && e.lvl === root2.id), 'a gentle one: the Thorn Ring is on the counter');
+  __ok(sim.makeSave().team.grudge === sim.team.grudge, 'the grudge is saved');
+});
+attempt('sealed rooms are one-way', () => {
+  const sim = freshSim(); let D = null, r = null, door = null;
+  for (let d = 1; d <= 9 && door == null; d++) { const L = sim.W.levels['d' + d]; for (const rr of Object.values(L.rooms)) { if (!rr.shutter) continue; const x0 = rr.rx * DSX, y0 = rr.ry * DSY; for (const [x, y] of [[x0 + 6, y0], [x0 + 6, y0 + DSY], [x0, y0 + 4], [x0 + DSX, y0 + 4]]) if (L.get(x, y) === TL.OPENDOOR) { door = L.idx(x, y); r = rr; D = L; break; } if (door != null) break; } }
+  __ok(door != null, 'there is a sealed room');
+  const x0 = r.rx * DSX, y0 = r.ry * DSY, dx = door % D.w, dy = Math.floor(door / D.w); sim.setTile(D.id, door, TL.SHUTTER, null, r.id);
+  const inX = dx === x0 ? x0 + 1.5 : dx === x0 + DSX ? x0 + DSX - 0.5 : dx + 0.5, inY = dy === y0 ? y0 + 1.5 : dy === y0 + DSY ? y0 + DSY - 0.5 : dy + 0.5;
+  __ok(D.solidAt(dx + 0.5, dy + 0.5, { mx: inX, my: inY }), 'from inside, the shutter is a wall');
+  const outX = dx === x0 ? x0 - 0.5 : dx === x0 + DSX ? x0 + DSX + 0.5 : dx + 0.5, outY = dy === y0 ? y0 - 0.5 : dy === y0 + DSY ? y0 + DSY + 0.5 : dy + 0.5;
+  __ok(!D.solidAt(dx + 0.5, dy + 0.5, { mx: outX, my: outY }) && !D.solidAt(dx + 0.5, dy + 0.5, { mx: dx + 0.5, my: dy + 0.5 }), 'from outside or the doorway, you can still come in');
+  const edgeX = dx === x0 ? x0 + 1.23 : dx === x0 + DSX ? x0 + DSX - 0.23 : dx + 0.5, edgeY = dy === y0 ? y0 + 1.23 : dy === y0 + DSY ? y0 + DSY - 0.23 : dy + 0.5;
+  __ok(D.solidAt(dx + 0.5, dy + 0.5, { mx: edgeX, my: edgeY }), 'pressed right up against it from inside, still a wall');
+});
 attempt('favorites per save', () => {
   const sim = freshSim(); const p = sim.players.p1; p.items.bow = true; p.items.bombs = true;
   sim.onAction('p1', { t: 'fav', item: 'bow', on: true }); sim.onAction('p1', { t: 'fav', item: 'bombs', on: true }); sim.onAction('p1', { t: 'fav', item: 'bombs', on: false });

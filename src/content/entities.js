@@ -6,6 +6,7 @@ defineEntity('pick', {                                                          
   update(sim, e, dt) {
     if (!e.perm && e.t > 12) e.dead = true;
     if (e.float) { e.x += Math.cos(e.t * 2.3) * dt * 0.8; e.y += Math.sin(e.t * 1.7) * dt * 0.8; }
+    if (!e.perm) for (const pl of Object.values(sim.players)) if (pl.alive && pl.lvl === e.lvl && sim.ringOn(pl, 'ring_lodestone')) { const d = Math.sqrt(dist2(pl.x, pl.y, e.x, e.y)); if (d < 3.5 && d > 0.05) { e.x += (pl.x - e.x) / d * 3 * dt; e.y += (pl.y - e.y) / d * 3 * dt; break; } } // a Lodestone pulls drops in
   },
 });
 defineEntity('fire', { update(sim, e) { if (e.t > e.life) e.dead = true; else sim.fireHits(e); } }); // hero fire: hurts enemies, burns bushes

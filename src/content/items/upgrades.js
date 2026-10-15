@@ -25,5 +25,6 @@ Content.upgrades = [
   Object.assign({ id: 'bombbag', group: 'BOMBS', desc: 'CARRY 8 BOMBS' }, flag('bombbag')),
   Object.assign({ id: 'bombbag2', group: 'BOMBS', desc: 'CARRY 16 BOMBS' }, flag('bombbag2')),
 ];
+for (const r of Content.rings || []) Content.upgrades.push(Object.assign({ id: r.id, group: 'RINGS', desc: r.desc }, flag(r.id))); // every ring (items/rings.js)
 // the items those upgrades need, handed over by ALL ON
 Content.upgradeBase = ['bow', 'boomerang', 'galecloak', 'bombs', 'rod'];

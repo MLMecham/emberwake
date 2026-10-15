@@ -24,7 +24,7 @@ class Level {
     // sealed-room doors are one-way: teammates can come in, nobody leaves until the room is clear
     if (t === TL.SHUTTER && opts && opts.mx != null && this.kind === 'dungeon') {
       const rid = this.sealRoom && this.sealRoom[y * this.w + x];
-      if (rid != null) { const r = this.rooms[rid]; const x0 = r.rx * DSX, y0 = r.ry * DSY; const m = 0.23; /* just over the player's 0.22 radius: you're 'inside' only once fully clear of the doorway */ const inside = opts.mx > x0 + 1 + m && opts.mx < x0 + DSX - m && opts.my > y0 + 1 + m && opts.my < y0 + DSY - m; if (!inside) return false; }
+      if (rid != null) { const r = this.rooms[rid]; const x0 = r.rx * DSX, y0 = r.ry * DSY; const inside = opts.mx > x0 + 1 && opts.mx < x0 + DSX && opts.my > y0 + 1 && opts.my < y0 + DSY; if (!inside) return false; } // inside = your center is past the doorway: from in there the shutter is a wall (your body can't push your center back into the doorway), while someone still standing in the doorway can step either way
     }
     // high in the air on the Gale Cloak (opts.high): over everything a tile tall (hedges, rocks, trees); the tall walls still stop you
     if (opts && opts.high && ((ti.wall && !ti.tall && this.kind === 'ow') || ti.raised || ti.low)) return false; // (indoors the walls reach the ceiling)
@@ -624,7 +624,7 @@ function genCave(W, id, kind, exit, rnd) {
   }
   for (const s of c.stock) {
     const item = Array.isArray(s.item) ? rnd.pick(s.item) : s.item; // a list means "one of these, chosen per world"
-    L.shop.push({ x: s.x + 0.5, y: 4.5, item, price: s.price, gift: s.gift, needHearts: s.needHearts, unique: s.unique, choose: s.choose ? 'h' + id : undefined });
+    L.shop.push({ x: s.x + 0.5, y: 4.5, item, price: s.price, gift: s.gift, needHearts: s.needHearts, unique: s.unique, cond: s.cond, choose: s.choose ? 'h' + id : undefined });
   }
   if (c.npc) L.npcs.push({ x: 6.5, y: 2.5, spr: c.npc, text: c.text || rnd.pick(c.lore && Content.lore ? Content.lore : Content.hints) }); // lore: a line of the land's passing talk (content/grottos.js)
 }

@@ -10,7 +10,7 @@ defineEnemy({
   spawns: { biomes: ['mountain'], dungeons: [5, 6, 7, 8, 9] },
   ai: AI.chase,
   anim: { fps: 4, frames: (s, kit) => [s, kit.step(s, 12, -1, 0), s, kit.step(s, 12, 0, -1)] },
-  shield: true, backSprite: 'knight_back',
+  shield: true, backSprite: 'knight_back', hollow: true, // hollow: the King's dead (a Wardhold Signet makes them hesitate)
   // a Heavy Pommel strike knocks the shield away (game/sim.js disarmEnemy): no more blocking, and it charges in recklessly
   disarm: 'shield_drop', disarmedSprite: 'knight_bare', disarmText: 'THE SHIELD GOES FLYING!',
   disarmedAi(sim, e, dt, ctx) { AI.chase(sim, e, dt, Object.assign({}, ctx, { spd: ctx.spd * 1.35 })); },

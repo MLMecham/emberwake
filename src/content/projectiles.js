@@ -1,4 +1,5 @@
 // ===== content/projectiles.js : everything that flies =====
+// elem: 'fire' | 'ice' | 'magic' for elemental shots (armor only half counts against them, game/sim.js hurtPlayer); none = physical.
 // spd in tiles/sec, dmg in half-hearts (enemy) or hit points (hero), range in tiles (default: 3 seconds of flight).
 // blockable: a hero's shield stops it from the front.  pierce: passes through enemies.  fire: burns bushes and leaves flames.
 // pierceShield: goes through knight shields.  endFx: sprite shown where it stops.
@@ -6,15 +7,15 @@
 // enemy shots
 defineProjectile({ id: 'rock', spr: 'rock', spd: 5, dmg: 1, sc: 0.6, blockable: true });
 defineProjectile({ id: 'spear', spr: 'arrow', spd: 6, dmg: 1, z: 0.1, blockable: true });
-defineProjectile({ id: 'magic', spr: 'magic', spd: 4.5, dmg: 2, sc: 0.6 });
-defineProjectile({ id: 'fire', spr: 'fireball', spd: 4.5, dmg: 2 });
+defineProjectile({ id: 'magic', elem: 'magic', spr: 'magic', spd: 4.5, dmg: 2, sc: 0.6 });
+defineProjectile({ id: 'fire', elem: 'fire', spr: 'fireball', spd: 4.5, dmg: 2 });
 // chill: seconds the hero is slowed when it hits
-defineProjectile({ id: 'icebolt', spr: 'icebolt', spd: 5, dmg: 1, sc: 0.7, chill: 1.5 });
-defineProjectile({ id: 'icebreath', spr: 'icebolt', spd: 6.5, dmg: 2, sc: 0.75, chill: 2.5 });
+defineProjectile({ id: 'icebolt', elem: 'ice', spr: 'icebolt', spd: 5, dmg: 1, sc: 0.7, chill: 1.5 });
+defineProjectile({ id: 'icebreath', elem: 'ice', spr: 'icebolt', spd: 6.5, dmg: 2, sc: 0.75, chill: 2.5 });
 // frogs (enemies/frog.js): a slow bubble; the poison one poisons even when a shield stops it (game/sim.js poisonPlayer)
 defineProjectile({ id: 'bubble', spr: 'bubble', spd: 3.4, dmg: 1, sc: 0.7, blockable: true, range: 7 });
 defineProjectile({ id: 'poisonbubble', spr: 'bubble_p', spd: 3.4, dmg: 1, sc: 0.7, blockable: true, range: 7, poison: true });
-defineProjectile({ id: 'firebreath', spr: 'fireball', spd: 6.5, dmg: 2, sc: 0.85 });
+defineProjectile({ id: 'firebreath', elem: 'fire', spr: 'fireball', spd: 6.5, dmg: 2, sc: 0.85 });
 // hero shots
 defineProjectile({ id: 'beam', spr: 'beam', spd: 9, dmg: 1, sc: 0.8, player: true, range: 7, beam: true });
 defineProjectile({ id: 'ki', spr: 'ki', spd: 10, dmg: 1, sc: 0.6, player: true, range: 7, beam: true });

@@ -49,6 +49,7 @@ const DUMMY_RESET = 3; // a training dummy heals (and gets its armor back) after
 const fmtDmg = (n) => String(Math.round(n * 100) / 100);
 const DISARM_STAGGER = 1.2;
 const KNIGHT_WINDUP = 0.45; // seconds a sword knight raises its blade before the counter lands (your cue to back off) // seconds a disarmed foe reels
+const GRUDGE_COOL = 180, THORN_RING_GRUDGE = 12; // the thorn-folk's grudge: seconds per point it cools; the most the root merchant forgives
 const REFLECT_TIME = 1, WARD_TIME = 8; // the Wardhold shield (content/wardhold.js): reflect window after it comes up; seconds between wards
 const TWIN_EYE_TIME = 0.55; // seconds a twin-eye gate's eye stays shut (content/gimmicks/twingate.js)
 const GOURD_REGROW = 40; // seconds before a split gourd can grow back (and only with nobody within 6 tiles)
@@ -100,7 +101,7 @@ class Sim {
     return p;
   }
   removePlayer(id) { const p = this.players[id]; if (!p) return; this.savedPlayers = this.savedPlayers || {}; this.savedPlayers[p.color] = this.playerSaveData(p); delete this.players[id]; this.ev({ t: 'msg', text: p.name + ' LEFT.' }); }
-  playerSaveData(p) { const o = {}; for (const k of ['cls', 'lvl', 'x', 'y', 'a', 'hp', 'maxHp', 'gems', 'bombs', 'maxBombs', 'arrows', 'maxArrows', 'swordMax', 'armorMax', 'arrowType', 'wandEl', 'sword', 'armor', 'items', 'favs', 'potions', 'sel']) o[k] = p[k]; o.alive = true; if (o.hp <= 0) o.hp = 12; return o; }
+  playerSaveData(p) { const o = {}; for (const k of ['cls', 'lvl', 'x', 'y', 'a', 'hp', 'maxHp', 'gems', 'bombs', 'maxBombs', 'arrows', 'maxArrows', 'swordMax', 'armorMax', 'arrowType', 'wandEl', 'sword', 'armor', 'items', 'favs', 'ring', 'potions', 'sel']) o[k] = p[k]; o.alive = true; if (o.hp <= 0) o.hp = 12; return o; }
   ev(e) { this.events.push(e); }
   sfx(s, lvl, x, y) { this.ev({ t: 'sfx', s, lvl, x, y }); }
   msg(text, pid) { this.ev({ t: 'msg', text, pid }); }
@@ -164,6 +165,7 @@ class Sim {
     const p = this.players[id]; if (!p) return;
     if (s.lvl !== p.lvl) return; // ignore stale states after teleport
     if (s.sh && !p.shUp) p.shieldAt = this.time; p.shUp = !!s.sh; // the shield just came up: the perfect-block window starts
+    if (Math.abs(s.x - p.x) + Math.abs(s.y - p.y) > 0.01) p.movedAt = this.time; // (the Mender's Ring heals only the still)
     p.x = s.x; p.y = s.y; p.z = +s.z || 0; p.a = s.a; p.atk = s.atk || 0; p.lastSeen = this.time; p.sel = s.sel || p.sel;
   }
   onAction(id, a) {
@@ -276,12 +278,32 @@ class Sim {
     const W = this.W, C = Content.fallen; if (!C || !W.startCave) return;
     if (!this.team.fallen && plist.some(p => p.maxHp >= C.hearts * 4) && !plist.some(p => p.lvl === W.startCave)) this.fallOldMan();
     // the first old man anyone meets after taking his shield says one line, once
-    if (!this.team.wardLine) for (const p of plist) {
-      if (!p.alive || !p.items.wardshield || this.W.levels[p.lvl].kind !== 'cave') continue;
-      const e = this.ents.find(o => o.k === 'npc' && o.lvl === p.lvl && Content.oldMen.includes(o.spr) && dist2(o.x, o.y, p.x, p.y) < 9);
-      if (e) { this.team.wardLine = true; e.textOrig = e.text; e.text = Content.wardLine; e.restoreAt = this.time + 30; break; }
-    }
+    // ...and the old men have heard what the thorn-folk are saying (the grudge), once each step
+    const said = this.team.said = this.team.said || {}; const gr = this.team.grudge || 0;
+    const lines = [[!this.team.wardLine, (p) => p.items.wardshield, () => { this.team.wardLine = true; }, Content.wardLine]];
+    for (const [k, at] of [['g25', 25], ['g70', 70]]) lines.push([!said[k] && gr >= at, () => true, () => { said[k] = true; }, Content.grudgeLines[k]]);
+    for (const [want, who, mark, text] of lines) { if (!want || !text) continue; let done = false;
+      for (const p of plist) { if (!p.alive || !who(p) || this.W.levels[p.lvl].kind !== 'cave') continue;
+        const e = this.ents.find(o => o.k === 'npc' && o.lvl === p.lvl && Content.oldMen.includes(o.spr) && !o.restoreAt && dist2(o.x, o.y, p.x, p.y) < 9);
+        if (e) { mark(); e.textOrig = e.text; e.text = text; e.restoreAt = this.time + 30; done = true; break; } }
+      if (done) break; }
     for (const e of this.ents) if (e.k === 'npc' && e.restoreAt && this.time > e.restoreAt) { e.text = e.textOrig; delete e.restoreAt; }
+  }
+  // ---- THE THORN-FOLK'S GRUDGE (enemies/thornling.js): every bush or hollow tree burned on the overworld (+2) and every
+  // thorn-folk killed out there (+1; not in dungeons) feeds it. It cools 1 point every GRUDGE_COOL seconds of play, but
+  // never below half its peak. It picks which kin come (thornKin) and, high enough, brings more and sets ambushes.
+  addGrudge(n) { this.team.grudge = (this.team.grudge || 0) + n; this.team.grudgePeak = Math.max(this.team.grudgePeak || 0, this.team.grudge); }
+  coolGrudge(dt) { this.team.grudgeT = (this.team.grudgeT || 0) + dt; if (this.team.grudgeT < GRUDGE_COOL) return; this.team.grudgeT = 0; if ((this.team.grudge || 0) > Math.floor((this.team.grudgePeak || 0) / 2)) this.team.grudge--; }
+  thornKin(rnd) {
+    const g = this.team.grudge || 0; const w = g >= 70 ? [20, 25, 30, 25] : g >= 45 ? [30, 25, 25, 20] : g >= 25 ? [45, 30, 25, 0] : g >= 10 ? [70, 30, 0, 0] : [1, 0, 0, 0];
+    const ids = ['thornling', 'thornling_nettle', 'thornling_briar', 'thornling_seer']; let r = rnd() * w.reduce((a, b) => a + b, 0);
+    for (let i = 0; i < 4; i++) { if (r < w[i]) return ids[i]; r -= w[i]; } return 'thornling';
+  }
+  shopCond(c) { if (c === 'kindToThorns') return (this.team.grudge || 0) <= THORN_RING_GRUDGE; return true; }
+  onKill(e, pid) {
+    const L = this.W.levels[e.lvl]; const p = pid && this.players[pid];
+    if (L && L.kind === 'ow' && /^thornling/.test(e.type)) this.addGrudge(1);
+    if (p && p.alive && this.ringOn(p, 'ring_hollow')) this.heal(p, 1); // the Hollow Ring feeds on the fallen
   }
   fallOldMan() {
     const W = this.W, L = W.levels[W.startCave]; this.team.fallen = true;
@@ -300,8 +322,8 @@ class Sim {
     for (const n of L.npcs) this.spawn({ k: 'npc', lvl: id, x: n.x, y: n.y, spr: n.spr, text: n.text, sc: 0.95 });
     if (id === this.W.startCave && this.team.fallen) this.layWardShield(L);
     L.shop.forEach((s, i) => {
-      const tk = id + ':shop' + i; if (this.team.taken[tk] || (s.choose && this.team.taken[s.choose])) return;
-      this.spawn({ k: 'shop', lvl: id, x: s.x, y: s.y, item: s.item, price: s.price, gift: s.gift, need: s.needHearts, choose: s.choose, unique: s.unique, tk, spr: itemSprite(s.item), sc: 0.55, z: 0.12 });
+      const tk = id + ':shop' + i; if (this.team.taken[tk] || (s.choose && this.team.taken[s.choose])) return; if (s.cond && !this.shopCond(s.cond)) return; // e.g. the Thorn Ring: only while the thorn-folk aren't angry
+      this.spawn({ k: 'shop', lvl: id, x: s.x, y: s.y, item: s.item, price: s.price, gift: s.gift, need: s.needHearts, choose: s.choose, unique: s.unique, cond: s.cond, tk, spr: itemSprite(s.item), sc: 0.55, z: 0.12 });
     });
   }
   spawn(e) { e.id = uid(); e.t = e.t || 0; this.ents.push(e); return e; }
@@ -332,7 +354,7 @@ class Sim {
     // groups activation
     for (const p of plist) if (p.alive) this.activateGroupFor(p);
     this.updateGroups(dt, plist);
-    this.updateFirstDoor(plist);
+    this.updateFirstDoor(plist); this.coolGrudge(dt);
     // entities
     for (const e of this.ents) { if (!active.has(e.lvl)) continue; this.updateEnt(e, dt); }
     this.ents = this.ents.filter(e => !e.dead);
@@ -342,12 +364,13 @@ class Sim {
       if (!p.alive) continue;
       const L = this.W.levels[p.lvl];
       // hazard tiles
-      if (p.chill > 0) p.chill -= dt; this.tickPoison(p);
+      if (p.chill > 0) p.chill -= dt; if (this.ringOn(p, 'ring_rime')) p.chill = 0; this.tickPoison(p);
+      if (this.ringOn(p, 'ring_mender') && p.hp < p.maxHp && this.time - (p.movedAt || 0) > 3 && this.time - (p.lastHurtAt || -99) > 3 && this.time >= (p.mendNext || 0)) { p.mendNext = this.time + 1.2; this.heal(p, 1); } // Mender's Ring
       this.updateBackswing(p); p.maxBombs = bombCap(p); if (p.bombs > p.maxBombs) p.bombs = p.maxBombs;
       if (p.dbg) { p.arrows = Math.max(p.arrows, p.maxArrows || ARROWS_START); p.bombs = Math.max(p.bombs, p.maxBombs); p.items.bombs = true; p.potions = 2; p.items.potion = true; p.gems = Math.max(p.gems, 999); } // debug: never run out
       const t = L.get(Math.floor(p.x), Math.floor(p.y)); const ti = TINFO[t]; const boots = !!p.items.magmaboots;
       if (ti.heal && p.hp < p.maxHp && this.time >= (p.healNext || 0)) { p.healNext = this.time + 0.35; this.heal(p, 1); if (p.hp >= p.maxHp) this.sfx('heart', p.lvl, p.x, p.y); } // a warm spring (content/grottos.js)
-      if (p.inv <= 0 && !this.flying(p) && ((ti.hurt && !(boots && ti.lava)) || (ti.vent && this.ventPhase() === 2 && !boots))) this.hurtPlayer(p, 1, null); // fliers are above it all
+      if (p.inv <= 0 && !this.flying(p) && ((ti.hurt && !(boots && ti.lava)) || (ti.vent && this.ventPhase() === 2 && !boots))) this.hurtPlayer(p, 1, null, ti.lava || ti.vent ? 'fire' : null); // fliers are above it all
       p.swordMax = Math.max(p.swordMax || 0, p.sword); p.armorMax = Math.max(p.armorMax || 0, p.armor); // best gear ever owned (the inventory lets you wear less)
       // pickups & shop
       for (const e of this.ents) {
@@ -405,7 +428,10 @@ class Sim {
     const rnd = mulberry32(hashStr(key) + Math.floor(this.time * 1000));
     const tierMul = L.kind === 'dungeon' ? 1 + (Math.min(10, L.dnum) - 1) * 0.25 : 1 + room.tier * 0.4;
     let dryRoom = null; // frogs only appear where there's water to hide in
-    room.enemies.forEach((type, ei) => {
+    // outdoors the thorn-folk's GRUDGE decides which kin come and how many (thornKin); at its worst they spring out of the bushes
+    let list = room.enemies, ambush = new Set();
+    if (L.kind === 'ow' && list.some(t => /^thornling/.test(t))) { const gr = this.team.grudge || 0; list = list.map(t => /^thornling/.test(t) ? this.thornKin(rnd) : t); for (let k = 0; k < (gr >= 70 ? 2 : gr >= 45 ? 1 : 0); k++) { list.push(this.thornKin(rnd)); if (gr >= 70) ambush.add(list.length - 1); } }
+    list.forEach((type, ei) => {
       if (enemyDef(type) && enemyDef(type).swim && !enemyDef(type).boss) {
         if (dryRoom == null) { dryRoom = true; for (let y = b.y0; y < b.y1 && dryRoom; y++) for (let x = b.x0; x < b.x1; x++) { const ti = TINFO[L.get(x, y)]; if (ti.water && !ti.ocean) { dryRoom = false; break; } } }
         if (dryRoom) { const alt = room.enemies.filter(t => enemyDef(t) && !enemyDef(t).swim); type = alt.length ? alt[ei % alt.length] : 'slime'; }
@@ -421,6 +447,8 @@ class Sim {
       } while (tries < 40 && (L.solidAt(x, y) || TINFO[L.get(Math.floor(x), Math.floor(y))].hurt || TINFO[L.get(Math.floor(x), Math.floor(y))].pit || dist2(x, y, p.x, p.y) < 9));
       let hp = Math.ceil(def.hp * (def.boss ? 1 + (L.dnum || 1) * 0.35 : tierMul));
       if (def.fixedHp) hp = def.hp;
+      if (ambush.has(ei)) { const bushes = []; for (let yy = b.y0; yy < b.y1; yy++) for (let xx = b.x0; xx < b.x1; xx++) if (L.props[L.idx(xx, yy)] === PR.BUSH) { const d = dist2(xx + 0.5, yy + 0.5, p.x, p.y); if (d > 9 && d < 64) bushes.push([xx + 0.5, yy + 0.5]); }
+        if (bushes.length) { const [bx2, by2] = bushes[Math.floor(rnd() * bushes.length)]; const a = Math.atan2(p.y - by2, p.x - bx2); const ax = bx2 + Math.cos(a) * 0.7, ay = by2 + Math.sin(a) * 0.7; if (!L.solidAt(ax, ay)) { x = ax; y = ay; this.sfx('rustle', L.id, ax, ay); } } } // out of the bushes
       const e = this.spawn({ k: 'en', type, lvl: L.id, x, y, hp, maxHp: hp, f: rnd() * TAU, b, g: key, st: 0, tm: rnd() * 2, stun: 0, hurt: 0, spawnFx: 0.5, dmgMul: L.kind === 'dungeon' ? Math.ceil(Math.min(9, L.dnum) / 3) : 1 + Math.floor(room.tier / 2) });
       if (!def.boss) { const ch = L.kind === 'dungeon' ? 0.05 + Math.min(9, L.dnum) * 0.015 : 0.06 + room.tier * 0.03; if (rnd() < ch) this.makeElite(e, rnd); }
       g.ents.push(e);
@@ -552,6 +580,8 @@ class Sim {
     e.tm -= dt;
     const ctx = { p, spd: def.spd * (e.rage ? 1.5 : 1) * (e.spdMul || 1), def };
     const elite = e.elite && eliteByIdx(e.elite);
+    if (def.hollow && !e.signetSeen) for (const pl of Object.values(this.players)) if (pl.alive && pl.lvl === e.lvl && this.ringOn(pl, 'ring_signet') && dist2(pl.x, pl.y, e.x, e.y) < 7) { e.signetSeen = true; e.hesitate = this.time + 1.1; e.f = Math.atan2(pl.y - e.y, pl.x - e.x); break; } // a knight sees the Wardhold Signet... and remembers
+    if (e.hesitate && this.time < e.hesitate) return;
     const skipAi = elite && elite.update && elite.update(this, e, dt, ctx);
     if (e.dead) return;
     if (!skipAi) (e.disarmed && def.disarmedAi ? def.disarmedAi : def.ai)(this, e, dt, ctx);
@@ -576,7 +606,7 @@ class Sim {
     this.damageEnemy(e, 1, null, { ignoreIframes: true, pid: e.lastPid });
   }
   enemyFalls(e, water) { // gone, with no loot (it fell or sank with it)
-    e.dead = true; const p = e.lastPid && this.players[e.lastPid]; if (p) p.kills++;
+    e.dead = true; const p = e.lastPid && this.players[e.lastPid]; if (p) p.kills++; this.onKill(e, e.lastPid);
     this.spawn({ k: 'fx', lvl: e.lvl, x: e.x, y: e.y, spr: 'puff', life: 0.35, sc: 0.6, z: -0.3 }); this.sfx(water ? 'splash' : 'pitfall', e.lvl, e.x, e.y);
   }
   // Knockback speed for a hit. Grounded enemies on ice slide much further.
@@ -591,17 +621,31 @@ class Sim {
     e.elite = pick.idx; if (pick.apply) pick.apply(e, this);
   }
   spawnMinion(boss, type) { return this.spawnEnemy(type, boss.lvl, boss.x + (Math.random() - 0.5), boss.y + (Math.random() - 0.5), { group: boss.g, bounds: boss.b }); }
-  hurtPlayer(p, dmg, src) {
+  // DEFENSE: the tunic counts fully against physical hits and only half as much against elemental ones (elem: 'fire',
+  // 'ice', 'magic'; from the projectile def, burning entities, hazard tiles or the enemy def). Rings: items/rings.js.
+  elemOf(src) { if (!src) return null; if (src.k === 'proj') return (Content.projectiles[src.type] || {}).elem || null; if (src.k === 'efire' || src.k === 'emberblob') return 'fire'; if (src.k === 'en') return (enemyDef(src.type) || {}).elem || null; return src.elem || null; }
+  defenseMul(p, elem) {
+    const phys = p.armor === 2 ? 0.25 : p.armor === 1 ? 0.5 : 1; let m = elem ? 1 - (1 - phys) / 2 : phys;
+    if ((elem === 'fire' && this.ringOn(p, 'ring_cinder')) || (elem === 'ice' && this.ringOn(p, 'ring_rime')) || (elem === 'magic' && this.ringOn(p, 'ring_hollowsilver'))) m *= 0.5;
+    if (this.ringOn(p, 'ring_glass')) m *= 2; return m;
+  }
+  ringOn(p, id) { return !!p && p.ring === id && !!p.items[id]; }
+  heartHeal(p, amt) { return this.ringOn(p, 'ring_hollow') ? 0 : this.ringOn(p, 'ring_miser') ? Math.ceil(amt / 2) : amt; }
+  shepherd(p, amt) { if (!this.ringOn(p, 'ring_shepherd')) return; for (const o of Object.values(this.players)) if (o !== p && o.alive && o.lvl === p.lvl && this.ringOn(o, 'ring_shepherd') && dist2(o.x, o.y, p.x, p.y) < 36) { this.heal(o, this.heartHeal(o, amt)); this.sfx('heart', o.lvl, o.x, o.y); } }
+  hurtPlayer(p, dmg, src, elem) {
     if (p.inv > 0 || !p.alive || p.god) return;
-    const red = p.armor === 2 ? 0.25 : p.armor === 1 ? 0.5 : 1;
-    const amt = Math.max(1, Math.round(dmg * 2 * red)); // quarter-hearts (1 dmg = half heart)
-    p.hp -= amt; p.inv = 1.0; this.clearBeam(p);
+    elem = elem || this.elemOf(src);
+    if (elem === 'fire' && (!src || src.k === 'efire') && this.ringOn(p, 'ring_cinder')) return; // burning ground can't touch a Cinder Ring
+    const amt = Math.max(1, Math.round(dmg * 2 * this.defenseMul(p, elem))); // quarter-hearts (1 dmg = half heart)
+    if (src && src.k === 'en' && !src.dead && this.ringOn(p, 'ring_thorn')) this.damageEnemy(src, dmg * 3, p, { pid: p.id, ignoreIframes: true, pierceShield: true }); // the Thorn Ring bites back
+    p.hp -= amt; p.inv = 1.0; p.lastHurtAt = this.time; this.clearBeam(p);
     for (const o of Object.values(this.players)) if (!o.alive && o.reviver === p.id && o.revive > 0) { o.revive = 0; o.reviver = null; this.ev({ t: 'hint', pid: p.id, text: 'HIT! HELP-UP RESET.' }); }
     let kx = 0, ky = 0; if (src) { const a = Math.atan2(p.y - src.y, p.x - src.x); kx = Math.cos(a) * 7; ky = Math.sin(a) * 7; }
     this.ev({ t: 'hurt', pid: p.id, kx, ky });
     if (p.hp <= 0) {
+      if (this.ringOn(p, 'ring_secondwind') && !p.windUsed) { p.windUsed = true; p.hp = 1; this.sfx('heal', p.lvl); this.ev({ t: 'hint', pid: p.id, text: 'SECOND WIND!' }); return; } // once per life
       if (p.potions > 0) { p.potions--; p.hp = p.maxHp; this.msg(p.name + "'S POTION SAVED THEM!"); this.sfx('heal', p.lvl); return; }
-      p.hp = 0; p.alive = false; p.downAt = this.time; p.revive = 0; p.reviver = null; this.clearBeam(p); this.ev({ t: 'down', pid: p.id }); this.msg(p.name + ' IS DOWN!' + (Object.keys(this.players).length > 1 ? ' GET CLOSE AND HOLD F TO HELP THEM UP.' : ''));
+      p.hp = 0; p.alive = false; p.downAt = this.time; p.revive = 0; p.reviver = null; this.clearBeam(p); p.windUsed = false; this.ev({ t: 'down', pid: p.id }); this.msg(p.name + ' IS DOWN!' + (Object.keys(this.players).length > 1 ? ' GET CLOSE AND HOLD F TO HELP THEM UP.' : ''));
     }
   }
   clearBeam(p) { for (const e of this.ents) if (e.k === 'proj' && e.pid === p.id && Content.projectiles[e.type].beam) e.dead = true; }
@@ -610,7 +654,7 @@ class Sim {
   damageEnemy(e, dmg, src, opt) {
     const def = enemyDef(e.type); opt = opt || {}; if (e.dead || e.spawnFx > 0) return false;
     if (e.sub || e.air) return false; // under the water, or mid-leap: out of reach
-    const atk = opt.pid && this.players[opt.pid]; if (atk && atk.god) dmg *= 3; // god mode hits three times as hard
+    const atk = opt.pid && this.players[opt.pid]; if (atk && atk.god) dmg *= 3; if (atk && this.ringOn(atk, 'ring_glass')) dmg *= 2; // god mode hits three times as hard
     if (e.dormant) { this.sfx('clink', e.lvl, e.x, e.y); this.wake(e); return false; }
     if (e.hurt > 0 && !opt.ignoreIframes) return false;
     if (def.shield && !e.disarmed && src && !opt.pierceShield && !(e.reelUntil > this.time)) { // blocks hits from the front (not while reeling from a loaded shot)
@@ -642,6 +686,7 @@ class Sim {
     this.spawn({ k: 'fx', lvl: e.lvl, x: e.x, y: e.y, spr: def.boss ? 'boom' : 'puff', life: def.boss ? 0.8 : 0.35, sc: def.boss ? 2 : 0.8 });
     this.sfx(def.boss ? 'bossdie' : 'die', e.lvl, e.x, e.y);
     if (pid && this.players[pid]) this.players[pid].kills++;
+    this.onKill(e, pid);
     if (def.onDeath && def.onDeath(this, e) === 'win') { this.win(); return; }
     if (def.boss) return;
     const elite = e.elite && eliteByIdx(e.elite);
@@ -794,6 +839,7 @@ class Sim {
   equip(p, a) {
     if (a.slot === 'sword') { const lv = a.lv | 0; if (lv >= 1 && lv <= Math.max(p.swordMax || 0, p.sword)) p.sword = lv; }
     else if (a.slot === 'armor') { const lv = a.lv | 0; if (lv >= 0 && lv <= Math.max(p.armorMax || 0, p.armor)) p.armor = lv; }
+    else if (a.slot === 'ring') { if (a.id === 'none') p.ring = null; else if (p.items[a.id] && Content.items[a.id] && Content.items[a.id].ring) p.ring = a.id; } // one ring at a time (items/rings.js)
     else if (a.slot === 'wand') p.wandEl = ['plain', 'fire', 'thunder'].includes(a.kind) ? a.kind : 'plain'; // the magic wand's element (items/rod.js)
     else if (a.slot === 'arrows') p.arrowType = ['plain', 'frost', 'silver'].includes(a.kind) ? a.kind : (a.plain ? 'plain' : 'frost');
   }
@@ -817,6 +863,7 @@ class Sim {
   updateProj(e, dt) {
     const L = this.W.levels[e.lvl]; const def = Content.projectiles[e.type];
     if (def.homing && e.t >= (def.homeDelay || 0)) this.steerProj(e, def, dt);
+    if (e.owner === 'e' && def.elem === 'magic' && !e.slowed) for (const pl of Object.values(this.players)) if (pl.alive && pl.lvl === e.lvl && this.ringOn(pl, 'ring_hollowsilver') && dist2(pl.x, pl.y, e.x, e.y) < 6.25) { e.slowed = true; e.vx *= 0.5; e.vy *= 0.5; e.life *= 2; break; } // Hollow Silver
     let nx = e.x + e.vx * dt, ny = e.y + e.vy * dt; e.life -= dt;
     // sword beams and arrows glance off a door frame instead of breaking on it: if only one axis is blocked and the
     // shot is mostly travelling along the other, it straightens out and carries on through the doorway
@@ -832,6 +879,10 @@ class Sim {
     const t = L.get(Math.floor(nx), Math.floor(ny)); const ti = TINFO[t]; const pr = L.props[L.idx(Math.floor(nx), Math.floor(ny))];
     if (def.fire) { // candle flame: burn bushes
       this.burnAt(L, nx, ny);
+    }
+    if (def.beam && e.owner !== 'e' && !e.bounced && e.life > 0 && ti.solid && !ti.low && this.ringOn(this.players[e.pid], 'ring_echo')) { // the Echo Ring: a sword beam bounces off one wall
+      const sol = (x, y) => { const t2 = TINFO[L.get(Math.floor(x), Math.floor(y))]; return t2.solid && !t2.low; }; const bx = sol(nx, e.y), by = sol(e.x, ny);
+      if (bx || !by) e.vx = -e.vx; if (by || !bx) e.vy = -e.vy; e.bounced = true; e.hitSet = {}; e.life = Math.max(e.life, 0.6); this.sfx('clink', e.lvl, e.x, e.y); return;
     }
     if (e.life <= 0 || (ti.solid && !ti.low) || (pr && PROP_INFO[pr] && PROP_INFO[pr].solid && pr !== PR.PEDESTAL)) {
       if (ti.eye && def.eyeHit && e.life > 0) this.hitEye(L, L.idx(Math.floor(nx), Math.floor(ny)), e.bomb);
@@ -883,7 +934,7 @@ class Sim {
   // A HOLLOW TREE (content/grottos.js) burns open on the stair down to its grotto: fire does it (the candle, from the start).
   openHollowTree(L, x, y) {
     const i = L.idx(Math.floor(x), Math.floor(y)); if (PR.HOLLOWTREE == null || L.props[i] !== PR.HOLLOWTREE) return false;
-    const rev = L.secretReveal[i]; this.setTile(L.id, i, rev ? rev.tile : null, 0);
+    const rev = L.secretReveal[i]; this.setTile(L.id, i, rev ? rev.tile : null, 0); if (L.kind === 'ow') this.addGrudge(2);
     for (const [dx, dz] of [[0, 0.2], [-0.25, 0.6], [0.25, 0.6], [0, 1]]) this.spawn({ k: 'fx', lvl: L.id, x: Math.floor(x) + 0.5 + dx, y: Math.floor(y) + 0.5, spr: 'flame', life: 0.9, sc: 1.1, z: dz }); this.sfx('fire', L.id); this.sfx('secret', L.id);
     return true;
   }
@@ -897,7 +948,7 @@ class Sim {
       if (L.props[i] === PR.HOLLOWTREE && dist2(bx + 0.5, by + 0.5, x, y) < 1.2) this.openHollowTree(L, bx + 0.5, by + 0.5);
       if (PR.TORCH != null && L.props[i] === PR.TORCH && dist2(bx + 0.5, by + 0.5, x, y) < 1.2) { this.setTile(L.id, i, null, PR.FLAME); this.sfx('fire', L.id); }
       if (L.props[i] === PR.BUSH && dist2(bx + 0.5, by + 0.5, x, y) < 0.7) {
-        const rev = L.secretReveal[i];
+        const rev = L.secretReveal[i]; if (L.kind === 'ow') this.addGrudge(2); // a thorn-folk home
         this.setTile(L.id, i, rev ? rev.tile : null, 0);
         this.spawn({ k: 'fx', lvl: L.id, x: bx + 0.5, y: by + 0.5, spr: 'flame', life: 0.6, sc: 0.9 });
         if (rev) this.sfx('secret', L.id);
@@ -914,6 +965,7 @@ class Sim {
     if (d.takeFrom) { if (d.takeFrom(this, p, e) !== false) e.dead = true; return; } // items that need the ground entity (like a dropped gem bag)
     if (e.k === 'shop') {
       const nag = (t, text) => { if (!e.warned || this.time - e.warned > 3) { e.warned = this.time; this.ev({ t, pid: p.id, text }); } };
+      if (e.cond && !this.shopCond(e.cond)) { nag('dialog', 'THE ROOTS DON\'T TRUST YOU ANYMORE. NOT THAT ONE.'); return; }
       if (e.need && p.maxHp / 4 < e.need) return nag('dialog', 'MASTER USING IT AND YOU CAN HAVE THIS... COME BACK WITH ' + e.need + ' HEARTS.');
       if (!e.gift && p.gems < e.price) return nag('hint', 'YOU NEED ' + e.price + ' GEMS.');
       if (e.unique && p.cls === 'monk') return nag('dialog', 'YOUR HANDS ALREADY KNOW THE WAY.');
@@ -927,6 +979,7 @@ class Sim {
     if (e.tk) this.team.taken[e.tk] = true;
     e.dead = true;
     this.giveItem(p, e.item, false);
+    if (!e.tk && (e.item === 'gem1' || e.item === 'gem5') && this.ringOn(p, 'ring_miser')) this.giveItem(p, e.item, false); // the Miser's Ring
     if (e.bait) this.baitTaken(e);
   }
   // THE WYRM ARENA'S BAIT (world.js genTunnel): gems and a heart at each end. Take from BOTH ends while the pair lives and they
@@ -983,8 +1036,8 @@ class Sim {
     const p = this.players[pid]; if (!p) return null;
     const en = []; for (const e of this.ents) if (e.lvl === p.lvl) en.push(this.entView(e, p));
     const pl = []; for (const o of Object.values(this.players)) pl.push([o.id, o.lvl, Math.round(o.x * 100) / 100, Math.round(o.y * 100) / 100, Math.round(o.a * 100) / 100, o.color, o.armor, o.cls, o.alive ? 1 : 0, o.atk, o.name, Math.round(o.revive / REVIVE_TIME * 100) / 100, o.hp, o.maxHp, o.reviver || 0, o.z || 0]); // [15] z: feet height (ledges, the cloak's lift)
-    const me = {}; for (const k of ['lvl', 'hp', 'maxHp', 'gems', 'bombs', 'maxBombs', 'arrows', 'maxArrows', 'swordMax', 'armorMax', 'arrowType', 'wandEl', 'sword', 'armor', 'items', 'favs', 'potions', 'alive', 'cls', 'sel', 'color', 'name', 'dbg', 'god']) me[k] = p[k]; me.spellCd = Math.max(0, Math.round(((p.spellReady || 0) - this.time) * 10) / 10); me.chill = p.chill > 0 ? 1 : 0; me.mirror = this.reflectOpen(p) ? 1 : 0; me.ward = this.wardReady(p) ? 1 : 0; me.poison = p.poisonTicks > 0 ? p.poisonTicks : 0; me.fly = this.flying(p) ? Math.round((p.flyUntil - this.time) * 10) / 10 : 0; me.respawnIn = p.alive ? 0 : Math.max(0, Math.ceil(RESPAWN_WAIT - (this.time - (p.downAt || 0))));
-    return { t: 's', paused: !!this.paused, pausedBy: this.pausedBy, me, pl, en, team: { keys: this.team.keys, maps: this.team.maps, comps: this.team.comps, shards: this.team.shards, done: this.team.done, relics: this.team.relics, fallen: !!this.team.fallen }, vp: this.ventPhase(), rg: this.rigCodes(p.lvl), fz: this.frozenList(p.lvl), mv: this.modVer, over: this.over > 0 };
+    const me = {}; for (const k of ['lvl', 'hp', 'maxHp', 'gems', 'bombs', 'maxBombs', 'arrows', 'maxArrows', 'swordMax', 'armorMax', 'arrowType', 'wandEl', 'sword', 'armor', 'items', 'favs', 'ring', 'potions', 'alive', 'cls', 'sel', 'color', 'name', 'dbg', 'god']) me[k] = p[k]; me.spellCd = Math.max(0, Math.round(((p.spellReady || 0) - this.time) * 10) / 10); me.chill = p.chill > 0 ? 1 : 0; me.mirror = this.reflectOpen(p) ? 1 : 0; me.ward = this.wardReady(p) ? 1 : 0; me.poison = p.poisonTicks > 0 ? p.poisonTicks : 0; me.fly = this.flying(p) ? Math.round((p.flyUntil - this.time) * 10) / 10 : 0; me.respawnIn = p.alive ? 0 : Math.max(0, Math.ceil(RESPAWN_WAIT - (this.time - (p.downAt || 0))));
+    return { t: 's', paused: !!this.paused, pausedBy: this.pausedBy, me, pl, en, team: { keys: this.team.keys, maps: this.team.maps, comps: this.team.comps, shards: this.team.shards, done: this.team.done, relics: this.team.relics, fallen: !!this.team.fallen, grudge: this.team.grudge || 0 }, vp: this.ventPhase(), rg: this.rigCodes(p.lvl), fz: this.frozenList(p.lvl), mv: this.modVer, over: this.over > 0 };
   }
   // ---- save ----
   makeSave() {
@@ -994,7 +1047,7 @@ class Sim {
     const tileNames = []; for (const k in TL) tileNames[TL[k]] = k;
     let mods = this.mods; if (this.tempTiles.length) { mods = JSON.parse(JSON.stringify(this.mods)); for (const t of this.tempTiles) if (mods[t.lvl] && mods[t.lvl][t.i]) mods[t.lvl][t.i][0] = t.orig; } // temporary tiles are saved as they'll end up
     const propNames = PROPS.slice();
-    return { v: SAVE_VERSION, tileNames, propNames, seed: this.W.seed, mode: this.W.mode, team: { keys: this.team.keys, maps: this.team.maps, comps: this.team.comps, shards: this.team.shards, done: this.team.done, relics: this.team.relics, taken: this.team.taken, cleared: cl, fallen: !!this.team.fallen, wardLine: !!this.team.wardLine }, mods, players, time: Date.now() };
+    return { v: SAVE_VERSION, tileNames, propNames, seed: this.W.seed, mode: this.W.mode, team: { keys: this.team.keys, maps: this.team.maps, comps: this.team.comps, shards: this.team.shards, done: this.team.done, relics: this.team.relics, taken: this.team.taken, cleared: cl, fallen: !!this.team.fallen, wardLine: !!this.team.wardLine, grudge: this.team.grudge || 0, grudgePeak: this.team.grudgePeak || 0, said: this.team.said || {} }, mods, players, time: Date.now() };
   }
   loadSave(s) {
     s = migrateSave(s);

@@ -144,7 +144,8 @@ function updateLocal(dt, inp) {
   if (me.chill) spd *= 0.55; // frozen by ice breath
   if (TINFO[L.get(Math.floor(Lc.x), Math.floor(Lc.y))].shallow && !(me.fly > 0)) spd *= 0.75; // wading
   if (Lc.dashCd > 0) Lc.dashCd -= dt;
-  if (inp.dash && monk && Lc.dashCd <= 0) { Lc.dashT = 0.16; Lc.dashCd = 0.7; sfx('dash'); Lc.dashDir = Math.atan2(inp.str, inp.fwd || (inp.str ? 0 : 1)); }
+  const galeRing = me.ring === 'ring_gale' && me.items.ring_gale; // the Gale Ring: further and sooner
+  if (inp.dash && monk && Lc.dashCd <= 0) { Lc.dashT = galeRing ? 0.24 : 0.16; Lc.dashCd = galeRing ? 0.4 : 0.7; sfx('dash'); Lc.dashDir = Math.atan2(inp.str, inp.fwd || (inp.str ? 0 : 1)); }
   let mvx = (Math.cos(Lc.a) * inp.fwd + Math.cos(Lc.a + Math.PI / 2) * inp.str) * spd, mvy = (Math.sin(Lc.a) * inp.fwd + Math.sin(Lc.a + Math.PI / 2) * inp.str) * spd;
   if (Lc.lunge && Lc.lunge.t < LUNGE_DUR && !Lc.lunge.stop) { // the lunge: a burst forward that stops at the edge of anything that would hurt
     const da = Lc.lunge.dir, ax = Lc.x + Math.cos(da) * 0.55, ay = Lc.y + Math.sin(da) * 0.55; const ta = TINFO[L.get(Math.floor(ax), Math.floor(ay))];
@@ -255,6 +256,7 @@ function updateLocal(dt, inp) {
   }
   // Item button. Shift (or LB) held = the item's technique. The bow draws while held and fires on release; with the
   // Loaded Shot scroll, holding past LOAD_TIME nocks a second arrow ("hold = power").
+  R.moth = me.ring === 'ring_moth' && !!me.items.ring_moth;
   R.heldLight = Lc.sel === 'candle'; // holding the candle lights up dark rooms; lit braziers do it hands-free
   if (Lc.sel === 'bow') {
     const most = Math.min(me.arrows, 1 + (me.items.loaded ? 1 : 0) + (me.items.loaded2 ? 1 : 0)); const nocked = () => Math.min(most, 1 + Math.floor(Lc.loadT / LOAD_TIME)); // one more arrow each LOAD_TIME, up to what your scrolls allow
@@ -454,10 +456,10 @@ function renderBag() {
   const tag = (row, spr, name, sub) => { const d = document.createElement('div'); d.className = 'tag'; if (spr) d.appendChild(spriteCanvas(spr)); const t = document.createElement('span'); t.textContent = name; if (sub) { const s = document.createElement('small'); s.style.display = 'block'; s.style.color = 'var(--dim)'; s.textContent = sub; t.appendChild(s); } d.appendChild(t); row.appendChild(d); };
   // pages instead of one long scrolling list: GEAR / ITEMS / UPGRADES
   const page = G.bagPage || 'gear'; const tabs = document.createElement('div'); tabs.className = 'tabs';
-  for (const [id, label] of [['gear', 'GEAR'], ['items', 'ITEMS'], ['upgrades', 'UPGRADES']]) { const b = document.createElement('button'); b.textContent = label; if (id === page) b.classList.add('on'); b.onclick = () => { G.bagPage = id; sfx('menu'); renderBag(); }; tabs.appendChild(b); }
+  for (const [id, label] of [['gear', 'GEAR'], ['items', 'ITEMS'], ['rings', 'RINGS'], ['upgrades', 'UPGRADES']]) { const b = document.createElement('button'); b.textContent = label; if (id === page) b.classList.add('on'); b.onclick = () => { G.bagPage = id; sfx('menu'); renderBag(); }; tabs.appendChild(b); }
   body.appendChild(tabs);
   const c = document.createElement('div'); c.className = 'counts';
-  c.textContent = 'GEMS ' + me.gems + '   ARROWS ' + me.arrows + '/' + (me.maxArrows || ARROWS_START) + '   BOMBS ' + me.bombs + '/' + me.maxBombs + '   POTIONS ' + (me.potions || 0) + '   HEARTS ' + (me.maxHp / 4);
+  c.textContent = 'GEMS ' + me.gems + '   ARROWS ' + me.arrows + '/' + (me.maxArrows || ARROWS_START) + '   BOMBS ' + me.bombs + '/' + me.maxBombs + '   POTIONS ' + (me.potions || 0) + '   HEARTS ' + (me.maxHp / 4) + (me.dbg && G.snap.team ? '   GRUDGE ' + (G.snap.team.grudge || 0) : ''); // debug: the thorn-folk's grudge
   body.appendChild(c);
   const smax = Math.max(me.swordMax || 0, me.sword), amax = Math.max(me.armorMax || 0, me.armor);
   if (page === 'gear' && smax > 0) { const r = sec(monk ? 'FISTS - PICK ANY YOU HAVE EARNED' : 'SWORD - PICK ANY YOU HAVE EARNED'); for (let lv = 1; lv <= smax; lv++) btn(r, monk ? 'ki' : 'sword', (monk ? FIST_NAMES : SWORD_NAMES)[lv], null, me.sword === lv, () => sendAction({ t: 'equip', slot: 'sword', lv })); }
@@ -474,6 +476,12 @@ function renderBag() {
     if (me.items.wandfire) btn(r, 'orb_fire', 'FIRE', me.items.flamewall ? 'BURNS. SPELL: FLAME WALL' : 'BURNS, LIGHTS TORCHES', cur === 'fire', () => sendAction({ t: 'equip', slot: 'wand', kind: 'fire' }));
     if (me.items.wandthunder) btn(r, 'orb_thunder', 'STORM', me.items.lightninglance ? 'LEAPS FOE TO FOE. SPELL: LIGHTNING LANCE' : 'LEAPS FROM FOE TO FOE', cur === 'thunder', () => sendAction({ t: 'equip', slot: 'wand', kind: 'thunder' }));
   }
+  if (page === 'gear') { // what your tunic stops: all of a physical hit, half as much of an elemental one (game/sim.js defenseMul)
+    const phys = me.armor === 2 ? 0.25 : me.armor === 1 ? 0.5 : 1, el = 1 - (1 - phys) / 2; const n = document.createElement('small'); n.className = 'favnote';
+    n.textContent = 'ARMOR STOPS ' + Math.round((1 - phys) * 100) + '% OF A BLOW, ' + Math.round((1 - el) * 100) + '% OF FIRE, FROST OR MAGIC'; body.appendChild(n); }
+  const rings = (Content.rings || []).filter(r => me.items[r.id]);
+  if (page === 'rings' && !rings.length) { const n = document.createElement('small'); n.className = 'favnote'; n.textContent = 'NO RINGS YET.'; body.appendChild(n); }
+  if (page === 'rings' && rings.length) { const cur = rings.find(rg => rg.id === me.ring); const r = sec('RING - ONE AT A TIME' + (cur ? ': ' + cur.desc : '')); r.classList.add('compact'); btn(r, null, 'NONE', null, !me.ring, () => sendAction({ t: 'equip', slot: 'ring', id: 'none' })); for (const rg of rings) { btn(r, rg.id, rg.name, null, me.ring === rg.id, () => sendAction({ t: 'equip', slot: 'ring', id: rg.id })); r.lastChild.title = rg.desc; } } // a compact grid (no scrolling); the worn ring's effect in the heading, each one's on hover
   const owned = ownedBItems(me);
   if (page === 'items' && owned.length) { const r = sec('ITEM BUTTON (RIGHT-CLICK / E) - HOLD FOR POWER, SHIFT FOR TECHNIQUE'); for (const id of owned) { const d = itemDef(id); const sub = id === 'bow' ? [me.items.loaded || me.items.loaded2 ? 'HOLD: LOADED SHOT' : 'FIRES WHEN YOU LET GO', me.items.bombarrow ? 'SHIFT: BOMB ARROW' : ''].filter(Boolean).join(' / ') : id === 'rod' && me.cls !== 'monk' ? ({ plain: 'FORCE', fire: 'FIRE', thunder: 'STORM' }[me.wandEl || 'plain'] || 'FORCE') + ' MAGIC. SHIFT: ITS SPELL' : id === 'galecloak' ? 'FLY OVER ANYTHING FOR ' + FLY_TIME + 's. PRESS AGAIN TO DROP' + (me.items.cloakslam ? ' AND SLAM' : '') : d.useAlt ? 'SHIFT: TECHNIQUE' : null; btn(r, itemSprite(id, me.cls), itemName(id, me.cls), sub, Lc_sel() === id, () => { G.local.sel = id; sendAction({ t: 'sel', item: id }); });
       const favs = myFavs(); const star = document.createElement('span'); star.className = 'fav' + (favs.has(id) ? ' on' : ''); star.textContent = favs.has(id) ? '\u2605' : '\u2606'; star.title = 'FAVORITE: THE SCROLL WHEEL ONLY STEPS THROUGH FAVORITES'; star.onclick = (ev) => { ev.stopPropagation(); toggleFav(id); sfx('menu'); renderBag(); }; r.lastChild.appendChild(star); }
@@ -489,7 +497,7 @@ function renderBag() {
   if (me.items.cloakslam) ups.push(['scroll', itemName('galeslam', me.cls), 'END A FLIGHT EARLY TO SLAM DOWN']);
   if (me.items.bombbag2) ups.push(['bomb', itemName('bombbag2', me.cls), 'CARRY 16 BOMBS']); else if (me.items.bombbag) ups.push(['bomb', itemName('bombbag', me.cls), 'CARRY 8 BOMBS']);
   if (me.items.bombarrow) ups.push(['scroll', itemName('bombarrows', me.cls), 'SHIFT + BOW: COSTS AN ARROW AND A BOMB']);
-  for (const k of Object.keys(me.items)) { if (!me.items[k] || owned.includes(k) || ['loaded', 'loaded2', 'lunge', 'heavypommel', 'wardshield', 'cloakslam', 'bombbag', 'bombbag2', 'frostarrows', 'silver', 'potion', 'bombarrow'].includes(k)) continue; const d = Content.items[k]; if (!d || d.slot === 'b') continue; ups.push([itemSprite(k, me.cls), itemName(k, me.cls), k === 'skeletonkey' ? 'OPENS EVERY LOCK' : k === 'silver' ? 'ONLY THEY CAN FINISH THE HOLLOW KING' : k === 'magmaboots' ? 'WALK ON LAVA AND VENTS' : k === 'raft' ? 'OPEN WATER ONLY' : null]); }
+  for (const k of Object.keys(me.items)) { if (!me.items[k] || owned.includes(k) || /^ring_/.test(k) || ['loaded', 'loaded2', 'lunge', 'heavypommel', 'wardshield', 'cloakslam', 'bombbag', 'bombbag2', 'frostarrows', 'silver', 'potion', 'bombarrow'].includes(k)) continue; const d = Content.items[k]; if (!d || d.slot === 'b') continue; ups.push([itemSprite(k, me.cls), itemName(k, me.cls), k === 'skeletonkey' ? 'OPENS EVERY LOCK' : k === 'silver' ? 'ONLY THEY CAN FINISH THE HOLLOW KING' : k === 'magmaboots' ? 'WALK ON LAVA AND VENTS' : k === 'raft' ? 'OPEN WATER ONLY' : null]); }
   if (page === 'upgrades' && me.dbg) { // debug: every upgrade and scroll, switched on and off with a click
     const all = sec('DEBUG: CLICK TO SWITCH ON OR OFF'); btn(all, 'scroll', 'ALL ON', 'AND THE BOW, BOOMERANG, CLOAK AND BOMBS', false, () => sendAction({ t: 'dbgup', all: true })); btn(all, 'scroll', 'ALL OFF', null, false, () => sendAction({ t: 'dbgup', all: false }));
     // one compact grid (no scrolling): name and ON/OFF on each button, the description on hover

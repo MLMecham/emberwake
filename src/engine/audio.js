@@ -59,6 +59,7 @@ function sfx(name, vol) {
     case 'roar': tone(120, 0.5, 'sawtooth', 0.2 * v, 60); noise(0.4, 0.15 * v, 600); break;
     case 'reflect': seq([1568, 2093, 2637], 0.04, 'square', 0.13 * v); noise(0.05, 0.08 * v, 3000); break; // a perfect block sends it back
     case 'ward': tone(330, 0.25, 'triangle', 0.14 * v, 660); tone(495, 0.3, 'sine', 0.1 * v, 990); noise(0.08, 0.06 * v, 2500); break; // the Wardhold shield's ward stops a shot
+    case 'rustle': noise(0.35, 0.12 * v, 1800); noise(0.2, 0.08 * v, 900, AU.ctx.currentTime + 0.15); break; // something in the bushes
     case 'growl': tone(70, 0.7, 'sawtooth', 0.12 * v, 55); noise(0.6, 0.06 * v, 300); break; // a low warning rumble (the wyrm arena's bait)
     case 'rage': tone(140, 0.8, 'sawtooth', 0.22 * v, 50); tone(95, 0.9, 'square', 0.12 * v, 40); noise(0.8, 0.2 * v, 500); break; // both wyrms enraged
     case 'whistle': seq([1047, 1175, 1319, 1568, 1319, 1568, 2093], 0.1, 'sine', 0.16 * v); break;

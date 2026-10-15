@@ -54,7 +54,7 @@ function lightFor(kind, d) {
 // Dark levels (L.dark): a small glow around you plus light from lit braziers (FLAME props) nearby.
 let _torches = [];
 function darkLight(wx, wy, camDist) {
-  let l = clamp(1.0 - camDist / (R.heldLight ? 5.5 : 2.8), 0.02, 1); // a held candle lights much further (R.heldLight, set by ui/main.js)
+  let l = clamp(1.0 - camDist / ((R.heldLight ? 5.5 : 2.8) * (R.moth ? 1.9 : 1)), 0.02, 1); // R.moth: the Moth Ring // a held candle lights much further (R.heldLight, set by ui/main.js)
   for (let i = 0; i < _torches.length; i += 2) { const dx = wx - _torches[i], dy = wy - _torches[i + 1]; const tl = 1.2 - Math.sqrt(dx * dx + dy * dy) / 4.8; if (tl > l) l = tl; }
   return l > 1 ? 1 : l;
 }

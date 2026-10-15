@@ -35,7 +35,7 @@ defineEnemy({
 defineEnemy({
   id: 'thornling_briar', title: 'BRIARBACK',
   hp: 4, spd: 1.1, dmg: 1, r: 0.38, sc: 1.0,
-  spawns: { biomes: ['forest', 'mountain'], dungeons: [4, 9] },
+  spawns: { dungeons: [4, 9] }, // outdoors the thorn-folk's grudge decides who comes (game/sim.js thornKin)
   ai: AI.shooter('spear', { pair: 0.2 }),
   anim: thornAnim, pal: { p: '#8a3a5a', P: '#4a1830' },
   sprite: [
@@ -71,7 +71,7 @@ function seerAi(sim, e, dt, { p, spd, def }) {
 defineEnemy({
   id: 'thornling_seer', title: 'THORNSEER',
   hp: 3, spd: 1.4, dmg: 1, r: 0.32, sc: 0.9,
-  spawns: { biomes: ['forest', 'plains'], dungeons: [2, 9] },
+  spawns: { dungeons: [2, 9] },
   ai: seerAi, sprFor: (e) => e.st === 1 ? 'thornling_seer_cast' : null,
   anim: thornAnim,
   sprite: [
@@ -97,7 +97,7 @@ defineSpriteVariant('thornling_seer_cast', 'thornling_seer', { l: '#f8ff90', h: 
 defineEnemy({
   id: 'thornling_nettle', title: 'NETTLING',
   hp: 2, spd: 5.2, dmg: 1, r: 0.26, sc: 0.62,
-  spawns: { biomes: ['plains', 'desert'], dungeons: [2] },
+  spawns: { dungeons: [2] },
   ai: AI.lunge(0.32, 0.7, 1.4),
   anim: thornAnim, pal: { p: '#d0a828', R: '#702010', N: '#3a5a20', n: '#6a8a30' },
   sprite: enemyDef('thornling').sprite,
@@ -106,4 +106,6 @@ defineSprite('seedwisp', [
   '................', '................', '................', '................', '................',
   '.......kk.......', '......klhk......', '.....klhhlk.....', '.....kllllk.....', '......klek......', '.......kk.......',
   '................', '................', '................', '................', '................']);
+// what the old men say once the grudge grows (game/sim.js updateFirstDoor)
+Content.grudgeLines = { g25: 'THE THORN-FOLK ARE COUNTING YOU. EVERY HEDGE YOU BURN, EVERY ONE OF THEIRS YOU CUT DOWN.', g70: 'THEY SING ABOUT YOU NOW, IN THE HEDGES. NOT KINDLY. WATCH THE BUSHES.' };
 defineHints(['THE THORN-FOLK ARE MORE THAN THORNLINGS. THE BIG ONES THROW TWO SPEARS AT ONCE: SIDESTEP, DON\'T STAND STILL.', 'A THORNSEER\'S SEED FOLLOWS YOU. RAISE YOUR SHIELD, OR LEAD IT INTO A WALL.']);

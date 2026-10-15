@@ -67,3 +67,6 @@ Not built yet. Parked here so they don't get lost. Newest at the bottom.
 - **Story mechanic: EMBERS** (see docs/STORY.md). Hollow foes drop their ember when they fall. Take it within a few seconds or they stand back up. Embers rekindle Wardhold braziers (safe rooms and respawn points the Hollow won't enter) and, later, the Hearth. (Mitch: no "one player grabs embers" co-op role.)
 - **A hero's homing shot.** Homing works for hero projectiles too (`homing` on the projectile def). A "seeker" wand orb or scroll could use it.
 - **Elevation next steps.** Smooth ramps (not just steps), cliffs on the overworld, a mountain region with levels you climb, and ledges in dungeons. Enemies that climb steps. Arrows shot down from a ledge.
+
+## Rings (built, debug only except the Thorn Ring)
+- Decide where each ring is found: frontier dungeons (Cinder, Rime), late game (Hollow Silver, Second Wind), shops, grottos, bosses. A second ring slot as a late, hard-won item?
