@@ -51,6 +51,10 @@ function sfx(name, vol) {
     case 'arrow': noise(0.1, 0.2 * v, 5000); break;
     case 'boomer': tone(700, 0.3, 'triangle', 0.1 * v, 1000); break;
     case 'fire': noise(0.4, 0.25 * v, 1200); break;
+    case 'cast_force': tone(80, 1.2, 'sawtooth', 0.12 * v, 220); tone(160, 1.2, 'sine', 0.1 * v, 440); break; // mages gathering to cast together: a rising hum
+    case 'cast_fire': noise(1.2, 0.22 * v, 900); for (let i = 0; i < 10; i++) noise(0.04, 0.15 * v, 3000, AU.ctx.currentTime + i * 0.11); tone(110, 1.0, 'sawtooth', 0.08 * v, 70); break; // a building roar
+    case 'cast_storm': tone(60, 1.2, 'square', 0.07 * v, 240); for (let i = 0; i < 8; i++) tone(2000 + Math.random() * 1500, 0.05, 'square', 0.05 * v, null, AU.ctx.currentTime + i * 0.14); break; // crackling, climbing buzz
+    case 'cast_bone': for (let i = 0; i < 12; i++) noise(0.03, 0.16 * v, 2800, AU.ctx.currentTime + i * 0.08); tone(55, 1.6, 'triangle', 0.14 * v, 48); break; // rattling over a low drone
     case 'zap': noise(0.08, 0.22 * v, 6000); tone(1800, 0.08, 'square', 0.08 * v, 400); tone(2400, 0.06, 'square', 0.06 * v, 900, AU.ctx.currentTime + 0.05); break; // a storm mage's bolt
     case 'bonecast': tone(520, 0.12, 'triangle', 0.1 * v, 260); noise(0.06, 0.14 * v, 3500, AU.ctx.currentTime + 0.04); break; // bone shards
     case 'rattle': for (let i = 0; i < 6; i++) noise(0.03, 0.16 * v, 2800, AU.ctx.currentTime + i * 0.05); break; // a skeleton climbs out of the floor

@@ -4388,8 +4388,9 @@ defineHints(['THE THORN-FOLK ARE MORE THAN THORNLINGS. THE BIG ONES THROW TWO SP
 //             ADEPT   glowing eyes, bone plates on the shoulders (armor 1). Deeper in its own element (below); resists it
 //                     by half (bone: every kind of magic).
 //             ARCHMAGE  burning eyes and mouth, plates and a bone crown (armor 2). Floats (def.fly): pits and lava can't take it. Resists its element by MAGE_RESIST[3].
-//                     Starts its element's COMBO, and any adept or archmage in the room can join it (game: they stop and
-//                     chant; every joiner makes it hit harder). Alone it still casts it.
+//                     Starts its element's COMBO: it raises its staff high and a warning sounds (each element its own);
+//                     every adept and archmage in the room blinks to its side, raises its staff with a thread of light to
+//                     the leader's, and makes it hit harder (they bunch up: a good moment for a bomb). Alone it still casts it.
 //   What each one does:
 //     FORCE   bolt | adept: a push that shoves you back, and SHIELD: it stands still holding a bubble over an ally that
 //             nothing gets through; hit the caster (anything) and the bubble breaks | combo FORCE WAVE: a ring that shoves
@@ -4406,6 +4407,7 @@ defineHints(['THE THORN-FOLK ARE MORE THAN THORNLINGS. THE BIG ONES THROW TWO SP
 //             A bone archmage always drops the HOLLOW RING.
 // Armor blocks both physical and magic hits (ARMOR_STEP per level, game/sim.js). The Heavy Pommel takes the staff only
 // once the armor is off.
+// They only cast at someone inside their own room with a clear line to them (no attacking through walls from safety).
 'use strict';
 const WIZ_BONE_CHANCE = 0.02;
 const MAGE_RESIST = [0, 0, 0.5, 0.7]; // by tier (1 mage, 2 adept, 3 archmage); a bone mage resists all magic, and from tier 1
@@ -4439,6 +4441,13 @@ function wizRows(tier, armor, staff) {
   if (armor >= 2) { r[1] = '.....kzkkzk.....'; r[2] = '.....kzPPzk.....'; r[3] = '....kzzyzzzk..y.'; } // a bone crown
   return staff ? r : r.map((row, i) => i === 3 ? row.slice(0, 13) + '...' : i >= 4 && i <= 11 ? row.slice(0, 13) + '...' : row);
 }
+function wizRowsUp(tier, armor) { // staff raised high over the hat, its head glowing in the element's color (casting together)
+  const r = wizRows(tier, armor, false);
+  r[0] = r[0].slice(0, 13) + 'XYX'; r[1] = r[1].slice(0, 13) + '.X.';
+  for (let i = 2; i <= 5; i++) r[i] = r[i].slice(0, 13) + '.n.';
+  r[6] = r[6].slice(0, 12) + 'kzn.'; r[7] = r[7].slice(0, 12) + 'k.n.';
+  return r;
+}
 const ELEM = {
   force: { id: 'wizard', name: 'FORCE', pal: {}, eye: '#c060ff', core: '#ffe0ff', resist: ['force'] },
   fire: { id: 'wizard_fire', name: 'FIRE', pal: { P: '#901c14', p: '#e0502c' }, eye: '#ff8020', core: '#fff0a0', resist: ['fire'] },
@@ -4455,6 +4464,13 @@ function blink(sim, e, p, near) { // pop to a spot near (or, staffless, away fro
     const x = p.x + Math.cos(a) * r, y = p.y + Math.sin(a) * r;
     if (AI.safeAt(L, x, y) && (!e.b || (x > e.b.x0 && x < e.b.x1 && y > e.b.y0 && y < e.b.y1))) { sim.puff(e, 0.8); e.x = x; e.y = y; return; }
   }
+}
+// a mage only casts at someone in its own room, with nothing solid between them
+const inRoom = (e, p) => !e.b || (p.x > e.b.x0 && p.x < e.b.x1 && p.y > e.b.y0 && p.y < e.b.y1);
+function sees(sim, e, p) {
+  if (!inRoom(e, p)) return false; const L = sim.W.levels[e.lvl]; const d = Math.sqrt(dist2(e.x, e.y, p.x, p.y)), n = Math.ceil(d / 0.2);
+  for (let i = 1; i < n; i++) { const x = lerp(e.x, p.x, i / n), y = lerp(e.y, p.y, i / n); const ti = TINFO[L.get(Math.floor(x), Math.floor(y))]; if (ti && ti.solid && !ti.low) return false; }
+  return true;
 }
 function disarmedAi(sim, e, dt, { p }) { if (e.tm > 0 || !p) return; blink(sim, e, p, false); e.tm = 1.8 + Math.random(); }
 const isMage = (o) => o && o.k === 'en' && !o.dead && enemyDef(o.type).mage;
@@ -4497,19 +4513,23 @@ function pick(list) { let t = 0; for (const [, w] of list) t += w; let r = Math.
 const COMBO_WINDUP = 1.1;
 function startCombo(sim, e, p) {
   const def = enemyDef(e.type); const joiners = roomMates(sim, e).filter(o => isMage(o) && enemyDef(o.type).tier >= 2 && !o.disarmed && o.channel == null && !o.joining && !o.combo);
-  for (const o of joiners) { o.joining = e.id; o.st = 0; }
+  const L = sim.W.levels[e.lvl];
+  for (const o of joiners) { // they gather: each blinks to the leader's side and raises its staff too
+    o.joining = e.id; o.st = 0; o.combo = null;
+    for (let k = 0; k < 16; k++) { const a = Math.random() * TAU, r = 0.9 + Math.random() * 0.5, x = e.x + Math.cos(a) * r, y = e.y + Math.sin(a) * r; if (AI.safeAt(L, x, y) && !sim.ents.some(q => q !== o && q.k === 'en' && !q.dead && dist2(q.x, q.y, x, y) < 0.4)) { sim.puff(o, 0.8); o.x = x; o.y = y; break; } }
+  }
   const wind = def.elem === 'bone' ? OSSUARY_WINDUP : COMBO_WINDUP;
   e.combo = { kind: def.elem, at: sim.time + wind, x: p.x, y: p.y, a: Math.atan2(p.y - e.y, p.x - e.x), joined: joiners.map(o => enemyDef(o.type).elem) };
   if (def.elem === 'bone') { const cx = Math.floor(p.x), cy = Math.floor(p.y); for (let dy = -2; dy <= 2; dy++) for (let dx = -2; dx <= 2; dx++) if (Math.max(Math.abs(dx), Math.abs(dy)) === 2) mark(sim, e, cx + dx + 0.5, cy + dy + 0.5, wind, 'bonemark', 0.6); }
   if (def.elem === 'storm') { for (let d = 1; d < 12; d += 0.8) mark(sim, e, e.x + Math.cos(e.combo.a) * d, e.y + Math.sin(e.combo.a) * d, COMBO_WINDUP, 'lancemark'); }
-  sim.sfx('chant', e.lvl, e.x, e.y); e.comboAt = sim.time + 9 + Math.random() * 3;
+  sim.sfx('cast_' + def.elem, e.lvl, e.x, e.y); e.comboAt = sim.time + 9 + Math.random() * 3; // each element sounds its own warning
 }
 function releaseCombo(sim, e, p) {
   const c = e.combo; e.combo = null; const n = c.joined.length; for (const o of sim.ents) if (o.joining === e.id) o.joining = null;
   const L = sim.W.levels[e.lvl];
   if (c.kind === 'force') { AI.ring(sim, e, 'forcepush', 16 + 4 * n, 0, { dmg: (1 + n) * e.dmgMul }); sim.sfx('force', e.lvl, e.x, e.y); sim.ev({ t: 'shake', lvl: e.lvl, x: e.x, y: e.y }); }
   else if (c.kind === 'fire') { // across the line from the mage to where you stood
-    const tx = p ? p.x : c.x, ty = p ? p.y : c.y, a = Math.atan2(ty - e.y, tx - e.x) + Math.PI / 2, len = 5 + 2 * n;
+    const seen = p && sees(sim, e, p), tx = seen ? p.x : c.x, ty = seen ? p.y : c.y, a = Math.atan2(ty - e.y, tx - e.x) + Math.PI / 2, len = 5 + 2 * n;
     for (let d = -len / 2; d <= len / 2; d += 0.6) { const x = tx + Math.cos(a) * d, y = ty + Math.sin(a) * d; if (!L.solidAt(x, y)) sim.spawn({ k: 'efire', lvl: e.lvl, x, y, life: 4, spr: 'flame', sc: 0.9, z: -0.05 }); }
     sim.sfx('fire', e.lvl, tx, ty);
   } else if (c.kind === 'storm') { sim.fireProj('elance', e.lvl, e.x, e.y, c.a, 'e', null, { dmg: (3 + n) * e.dmgMul }); sim.sfx('beam', e.lvl, e.x, e.y); sim.ev({ t: 'shake', lvl: e.lvl, x: e.x, y: e.y }); }
@@ -4551,7 +4571,7 @@ function mageAi(sim, e, dt, { p }) {
   const def = enemyDef(e.type);
   for (const s of e.strikes || []) if (sim.time >= s.at) { s.done = true; sim.spawn({ k: 'fx', lvl: e.lvl, x: s.x, y: s.y, spr: 'zapfx', life: 0.3, sc: 1.6, z: 0 }); sim.sfx('thunder', e.lvl, s.x, s.y); for (const pl of Object.values(sim.players).filter(q => q.alive && q.lvl === e.lvl && dist2(q.x, q.y, s.x, s.y) < 0.75 * 0.75)) sim.hurtPlayer(pl, 2 * e.dmgMul, { k: 'proj', type: 'stormbolt', x: s.x, y: s.y }); }
   if (e.strikes) e.strikes = e.strikes.filter(s => !s.done);
-  if (e.joining) { const lead = sim.ents.find(o => o.id === e.joining); if (!lead || lead.dead || !lead.combo) e.joining = null; else { if (Math.random() < dt * 6) sim.spawn({ k: 'fx', lvl: e.lvl, x: e.x, y: e.y, spr: 'chantfx', life: 0.3, sc: 0.8, z: 0.6 }); return; } }
+  if (e.joining) { const lead = sim.ents.find(o => o.id === e.joining); if (!lead || lead.dead || !lead.combo) e.joining = null; else { if (Math.random() < dt * 10) { const t = Math.random(); sim.spawn({ k: 'fx', lvl: e.lvl, x: lerp(e.x, lead.x, t), y: lerp(e.y, lead.y, t), spr: 'chantfx', life: 0.25, sc: 0.5, z: 0.9 }); } return; } } // a thread of light from its staff to the leader's
   if (e.channel != null) { // holding a shield over an ally
     const o = sim.ents.find(x => x.id === e.channel);
     if (!o || o.dead || sim.time > e.channelUntil) { if (o) o.wardBy = null; e.channel = null; e.tm = 1; }
@@ -4559,7 +4579,9 @@ function mageAi(sim, e, dt, { p }) {
   }
   if (e.combo) { if (Math.random() < dt * 8) sim.spawn({ k: 'fx', lvl: e.lvl, x: e.x, y: e.y, spr: 'chantfx', life: 0.3, sc: 1.1, z: 0.7 }); if (sim.time >= e.combo.at) { releaseCombo(sim, e, p); e.tm = 1.4; } return; }
   if (e.tm > 0 || !p) return;
+  if (!inRoom(e, p)) { e.st = 0; e.tm = 0.4; return; } // you're not in its room: it waits (no casting through walls)
   if (e.st === 0) { blink(sim, e, p, true); e.st = 1; e.tm = 0.7; return; }
+  if (!sees(sim, e, p)) { e.st = 0; e.tm = 0.3; return; } // a wall or pillar in the way: blink again for a clear shot
   e.st = 0; e.tm = 1.6 + Math.random() - (def.tier - 1) * 0.25;
   const a = Math.atan2(p.y - e.y, p.x - e.x);
   if (def.tier === 3 && def.elem === 'bone' && sim.time >= (e.marchAt || 0)) { SPELL.march(sim, e); return; }
@@ -4584,12 +4606,13 @@ for (const el of Object.keys(ELEM)) for (let tier = 1; tier <= 3; tier++) {
     onDamage(sim, e) { if (e.channel != null) { const o = sim.ents.find(x => x.id === e.channel); if (o) o.wardBy = null; e.channel = null; } }, // any hit breaks a shield it's holding
     onDeath: bone && tier === 3 ? (sim, e) => { if (!sim.team.taken['bonearch:ring']) sim.spawn({ k: 'pick', lvl: e.lvl, x: e.x, y: e.y, item: 'ring_hollow', tk: 'bonearch:ring', perm: true, spr: itemSprite('ring_hollow'), sc: 0.55, z: 0.1, team: false }); else sim.dropItem('gems100', e.lvl, e.x, e.y, { perm: true }); } : undefined,
     rare: bone ? null : { type: mageId('bone', tier), chance: WIZ_BONE_CHANCE },
-    sprFor: armor ? (e) => (e.armor >= armor || e.disarmed ? null : ids['a' + (e.armor || 0)]) : undefined,
+    sprFor: tier >= 2 ? (e) => (e.disarmed ? null : (e.combo || e.joining) ? id + '_up' + Math.min(armor, e.armor || 0) : e.armor >= armor ? null : ids['a' + (e.armor || 0)]) : undefined,
     anim: { fps: 3, frames: (s, kit) => [s, kit.shiftCols(s, 13, 15, -1), kit.shiftCols(s, 13, 15, -2)] },
     sprite: wizRows(tier, armor, true), pal,
   });
   defineSprite(ids.bare, wizRows(tier, 0, false), pal);
   for (let a = 0; a < armor; a++) defineSprite(ids['a' + a], wizRows(tier, a, true), pal);
+  if (tier >= 2) for (let a = 0; a <= armor; a++) defineSprite(id + '_up' + a, wizRowsUp(tier, a), pal);
 }
 // ---- effects and tiles ----
 defineSprite('strikemark', [
@@ -8097,6 +8120,10 @@ function sfx(name, vol) {
     case 'arrow': noise(0.1, 0.2 * v, 5000); break;
     case 'boomer': tone(700, 0.3, 'triangle', 0.1 * v, 1000); break;
     case 'fire': noise(0.4, 0.25 * v, 1200); break;
+    case 'cast_force': tone(80, 1.2, 'sawtooth', 0.12 * v, 220); tone(160, 1.2, 'sine', 0.1 * v, 440); break; // mages gathering to cast together: a rising hum
+    case 'cast_fire': noise(1.2, 0.22 * v, 900); for (let i = 0; i < 10; i++) noise(0.04, 0.15 * v, 3000, AU.ctx.currentTime + i * 0.11); tone(110, 1.0, 'sawtooth', 0.08 * v, 70); break; // a building roar
+    case 'cast_storm': tone(60, 1.2, 'square', 0.07 * v, 240); for (let i = 0; i < 8; i++) tone(2000 + Math.random() * 1500, 0.05, 'square', 0.05 * v, null, AU.ctx.currentTime + i * 0.14); break; // crackling, climbing buzz
+    case 'cast_bone': for (let i = 0; i < 12; i++) noise(0.03, 0.16 * v, 2800, AU.ctx.currentTime + i * 0.08); tone(55, 1.6, 'triangle', 0.14 * v, 48); break; // rattling over a low drone
     case 'zap': noise(0.08, 0.22 * v, 6000); tone(1800, 0.08, 'square', 0.08 * v, 400); tone(2400, 0.06, 'square', 0.06 * v, 900, AU.ctx.currentTime + 0.05); break; // a storm mage's bolt
     case 'bonecast': tone(520, 0.12, 'triangle', 0.1 * v, 260); noise(0.06, 0.14 * v, 3500, AU.ctx.currentTime + 0.04); break; // bone shards
     case 'rattle': for (let i = 0; i < 6; i++) noise(0.03, 0.16 * v, 2800, AU.ctx.currentTime + i * 0.05); break; // a skeleton climbs out of the floor

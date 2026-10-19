@@ -904,6 +904,8 @@ attempt('skeleton mages', () => {
   const mk = (type, x, y) => { const m = sim.spawnEnemy(type, 'dbg', x || 23.5, y || 20.5, {}); m.spawnFx = 0; m.dmgMul = 1; return m; };
   const cast = (m) => { m.st = 1; m.tm = 0; enemyDef(m.type).ai(sim, m, 1 / 60, { p }); };
   const shots = () => sim.ents.filter(e => e.k === 'proj' && !e.dead);
+  { clear(); const m = mk('wizard'); m.b = { x0: 30, y0: 10, x1: 40, y1: 20 }; cast(m); __ok(shots().length === 0, 'a mage does not cast at someone outside its room');
+    clear(); const D0 = sim.W.levels.dbg; const wi = D0.idx(22, 20), was = D0.tiles[wi]; D0.tiles[wi] = TL.BRICK; const m2 = mk('wizard'); cast(m2); __ok(shots().length === 0, 'or through a wall'); D0.tiles[wi] = was; }
   for (const [type, shot] of [['wizard', 'magic'], ['wizard_fire', 'fire'], ['wizard_storm', 'stormbolt']]) { clear(); cast(mk(type)); __ok(shots().length === 1 && shots()[0].type === shot, type + ' casts ' + shot); }
   clear(); const bm = mk('wizard_bone'); for (let i = 0; i < 40; i++) cast(bm);
   const raised = sim.ents.filter(e => e.k === 'en' && !e.dead && e.raisedBy === bm.id); __ok(raised.length >= 1 && raised.length <= 2 && raised.every(r => r.type === 'skeleton_a1'), 'a bone mage raises up to two skeletons in one piece of armor');
@@ -927,7 +929,8 @@ attempt('skeleton mages', () => {
   // COMBO: an archmage starts it, an adept of another element joins, and it hits harder for it
   clear(); const ar = mk('wizard_storm_arch', 23.5, 20.5), jo = mk('wizard_fire_adept', 22.5, 22.5); ar.comboAt = 0; cast(ar);
   __ok(!!ar.combo && jo.joining === ar.id, 'a storm archmage starts the Lightning Lance and a fire adept joins in');
-  sim.time += 1.2; enemyDef(ar.type).ai(sim, ar, 1 / 60, { p }); const ln = shots().find(e => e.type === 'elance'); __ok(ln && ln.dmg === 4 && !jo.joining, 'the lance flies, one point stronger per joiner');
+  __ok(dist2(jo.x, jo.y, ar.x, ar.y) < 1.5 * 1.5, 'the joiner blinks to the leader'); __ok(enemyDef(ar.type).sprFor(ar) === 'wizard_storm_arch_up2' && enemyDef(jo.type).sprFor(jo) === 'wizard_fire_adept_up1' && !!SPR.wizard_storm_arch_up2, 'both raise their staffs');
+  sim.time += 1.2; enemyDef(ar.type).ai(sim, ar, 1 / 60, { p }); const ln = shots().find(e => e.type === 'elance'); __ok(ln && ln.dmg === 4 && !jo.joining, 'the lance flies, one point stronger per joiner'); __ok(enemyDef(ar.type).sprFor(ar) === null, 'and the staff comes down');
   clear(); const so = mk('wizard_arch'); so.comboAt = 0; cast(so); sim.time += 1.2; enemyDef(so.type).ai(sim, so, 1 / 60, { p }); __ok(shots().filter(e => e.type === 'forcepush').length === 16, 'alone, an archmage still casts its combo (a ring of force)');
   clear(); const fw = mk('wizard_fire_arch'); fw.comboAt = 0; cast(fw); sim.time += 1.2; enemyDef(fw.type).ai(sim, fw, 1 / 60, { p }); __ok(sim.ents.filter(e => e.k === 'efire' && !e.dead).length >= 5, 'and a fire archmage a wall of flame');
   // THE DEAD MARCH and THE OSSUARY
