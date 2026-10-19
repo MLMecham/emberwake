@@ -62,7 +62,7 @@ Not built yet. Parked here so they don't get lost. Newest at the bottom.
 
 ## The south: the King's island (plan, from Mitch)
 - **It's an island, not a continent**, out past the rough southern sea (the raft can't cross rough water). Its castle shows on the
-  southern horizon all game: faint from the ground, plain from the summit of THE ASCENT, the mountain climb that replaced the Hearthgate (BUILT:
+  southern horizon all game: faint from the ground, plain from the summit of THE ASCENT, the storm mountain at the back of the high wood (BUILT:
   content/south.js, `genClimb`; the island itself is BUILT empty as level `isle`, debug warp only).
 - **The way across: the Gale Cloak.** 4 s of flight can't cross a sea, so a chain of sea stacks runs south with updrafts on some of them
   that refill the flight: hop, glide, catch the wind. The King in dungeon 9 wears the cloak (that's how he crossed) and drops it.

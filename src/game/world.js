@@ -1,6 +1,8 @@
 // ===== game/world.js : level generation (overworld, caves, dungeons) =====
 'use strict';
-const RW = 10, RH = 6, RSX = 16, RSY = 11; // overworld region grid & stride. Column 0 is the Frozen Reach, column RW-1 the Cinder Wastes.
+const RW = 10, RH = 7, RSX = 16, RSY = 11; // overworld region grid & stride. Column 0 is the Frozen Reach, column RW-1 the Cinder Wastes.
+// Row 0 is THE HIGH ROW: the great wood itself (and the frontier peaks), sealed, except the one region above the Hearth's,
+// a forest that runs back to the mountain (r.high; the Ascent, genClimb). The Wilds proper are rows 1..RH-1.
 const FRONTIER = { 0: 'snow', [RW - 1]: 'ash' }; // the lands beyond the passes, by column
 const NDUNGEONS = () => Math.max(9, Content.dungeons.length - 1); // 1-9 main, 10+ optional
 const DGW = 8, DGH = 8, DSX = 12, DSY = 8;  // dungeon room grid (8x8 rooms, drawn as shapes in content/dungeons.js) & room size
@@ -141,7 +143,7 @@ function genGrottos(W, rnd) {
   const L = W.levels.ow; const kinds = (Content.grottoKinds || []).filter(k => Content.caves[k]); if (!kinds.length) return;
   const seen = new Uint8Array(L.w * L.h); { const sx = Math.floor(L.spawn.x), sy = Math.floor(L.spawn.y); const q = [sx + sy * L.w]; seen[q[0]] = 1; while (q.length) { const i = q.pop(); const x = i % L.w, y = (i / L.w) | 0; for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { const nx = x + dx, ny = y + dy; if (nx < 1 || ny < 1 || nx >= L.w - 1 || ny >= L.h - 1) continue; const j = nx + ny * L.w; if (seen[j] || L.solidAt(nx + 0.5, ny + 0.5)) continue; seen[j] = 1; q.push(j); } } }
   const sr = owRegionAt(L, L.spawn.x, L.spawn.y);
-  const regions = rnd.shuffle(L.regions.filter(r => r !== sr && (r.biome === 'forest' || r.biome === 'plains') && !r.island));
+  const regions = rnd.shuffle(L.regions.filter(r => r !== sr && (r.biome === 'forest' || r.biome === 'plains') && !r.island && !r.sealed && !r.high));
   const used = new Set(); L.grottos = [];
   for (const kind of kinds) {
     let placed = false;
@@ -275,52 +277,65 @@ function genTunnel(W, biome, rnd) {
 //   column 3 of row 5 is the master's cave, behind a cracked wall.
 function genClimb(W, rnd) {
   const OW = W.levels.ow, g = W.dungeons[12]; if (!g || TL.CLIMBH1 == null) return;
-  const N = Content.climbRooms, gw = 4, gh = N + 1, MAIN = 2; const w = gw * DSX + 1, h = gh * DSY + 1;
-  const L = new Level('climb', 'tunnel', w, h); W.levels.climb = L; L.gw = gw; L.outdoor = true; L.showCastle = true; L.maxWallH = 16; L.tunnelBiome = 'snow'; L.label = 'THE ASCENT'; L.theme = 'd10'; L.signText = {};
+  const N = Content.climbRooms, gw = 4, gh = N + 1, MAIN = 2, ROOST = 2; const w = gw * DSX + 1, h = gh * DSY + 1;
+  const L = new Level('climb', 'tunnel', w, h); W.levels.climb = L; L.gw = gw; L.outdoor = true; L.storm = true; L.showCastle = true; L.maxWallH = 16; L.tunnelBiome = 'storm';
+  L.label = 'THE ASCENT'; L.sub = 'THE HEARTH WAITS AT THE TOP'; L.track = 'hearth'; L.theme = 'd11'; L.signText = {}; L.wallZ = {}; L.wallFill = 'thunderrock';
   const floorOf = (b) => b ? TL['CLIMBH' + b * 4] : TL.CFLOOR, baseOf = (ry) => N - ry; // the summit (row 0) is floor N
   const rooms = {}; const mk = (rx, ry, base) => { const r = { rx, ry, id: ry * gw + rx, links: {}, enemies: [], children: [], tier: 1, base }; rooms[r.id] = r; return r; };
   const main = []; for (let ry = N; ry >= 0; ry--) main.push(mk(MAIN, ry, baseOf(ry)));
-  const fight = mk(0, N, 0), loot = mk(1, N, 0), master = mk(3, 5, baseOf(5));
+  const fight = mk(0, ROOST, baseOf(ROOST)), loot = mk(1, ROOST, baseOf(ROOST)), master = mk(3, 5, baseOf(5));
   for (let i = 0; i < w * h; i++) L.tiles[i] = TL.CLIFFFILL; for (let x = 0; x < w; x++) L.set(x, 0, TL.CLIFFEDGE);
   for (const r of Object.values(rooms)) for (let y = r.ry * DSY + 1; y < r.ry * DSY + DSY; y++) for (let x = r.rx * DSX + 1; x < r.rx * DSX + DSX; x++) L.set(x, y, floorOf(r.base));
   // inner walls: a cliff WALL_RISE above the higher of the rooms on either side; the outside stays too tall to fly over
   const roomAt = (x, y) => rooms[Math.floor(y / DSY) * gw + Math.floor(x / DSX)];
   for (let y = 1; y < h - 1; y++) for (let x = 1; x < w - 1; x++) { if (x % DSX && y % DSY) continue; const ns = []; for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [-1, -1], [1, -1], [-1, 1]]) { const r = roomAt(x + dx, y + dy); if (r && (x + dx) % DSX && (y + dy) % DSY) ns.push(r.base); } if (ns.length > 1 || (ns.length && x % DSX === 0 && y % DSY === 0)) L.set(x, y, TL['CLIFF' + Math.max(...ns)]); }
   // the stairs: from each room up into the next, in a three-wide lane that switches sides (four quarter steps, then the door)
-  for (let i = 0; i < N; i++) { const r = main[i], up = main[i + 1], b = r.base, x0 = r.rx * DSX, y0 = r.ry * DSY; const lx = (r.ry % 2 === 0) ? x0 + 2 : x0 + 7;
+  const laneX = (r) => (r.ry % 2 === 0) ? r.rx * DSX + 2 : r.rx * DSX + 7;
+  for (let i = 0; i < N; i++) { const r = main[i], up = main[i + 1], b = r.base, x0 = r.rx * DSX, y0 = r.ry * DSY; const lx = laneX(r);
     for (let k = 0; k < 4; k++) for (let x = lx; x < lx + 3; x++) L.set(x, y0 + 4 - k, TL['CLIMBH' + (b * 4 + k + 1)]);
     for (let x = lx; x < lx + 3; x++) L.set(x, y0, TL['CLIMBH' + (b * 4 + 4)]); r.links[up.id] = up.links[r.id] = 1; r.children.push(up); }
+  // FIRE MEETS FROST: a river down the far side of each room on the way up, lava low down, frozen higher, both in the middle
+  for (let i = 1; i < N; i++) { const r = main[i], b = r.base, x0 = r.rx * DSX, y0 = r.ry * DSY; const cols = laneX(r) === x0 + 2 ? [x0 + 10, x0 + 11] : [x0 + 1];
+    for (const x of cols) for (let y = y0 + 1; y < y0 + DSY; y++) { const lava = b < 4 || (b === 4 && y > y0 + 4), ice = b > 4 || (b === 4 && y < y0 + 4); if (lava) L.set(x, y, TL['CLIMBLAVA' + b]); else if (ice) L.set(x, y, TL['CLIMBICE' + b]); } }
   // the summit: an open ledge over the climb (its south wall is gone: step off and you drop to the room below)
   const top = main[N], tx0 = top.rx * DSX; for (let x = tx0 + 1; x < tx0 + DSX; x++) L.set(x, DSY, floorOf(N));
-  const gateX = tx0 + 6; L.set(gateX, 0, TL.SUMMITGATE); L.portals[L.idx(gateX, 0)] = { to: 'd12' }; L.props[L.idx(gateX - 2, 1)] = PR.STATUE; L.props[L.idx(gateX + 2, 1)] = PR.STATUE;
+  const gateX = tx0 + 6; L.set(gateX, 0, TL.SUMMITGATE); L.wallZ[L.idx(gateX, 0)] = N; L.portals[L.idx(gateX, 0)] = { to: 'd12' }; L.props[L.idx(gateX - 2, 1)] = PR.STATUE; L.props[L.idx(gateX + 2, 1)] = PR.STATUE;
   L.summit = { x: gateX + 0.5, y: 1.6, a: Math.PI / 2 };
   const ladderI = L.idx(tx0 + DSX, 4); L.set(tx0 + DSX, 4, TL.LADDERTOP); L.ladderTop = { x: tx0 + DSX - 0.6, y: 4.5, a: Math.PI };
-  // the roost: one arena two cells wide (the loot cell folds into the fight cell, like the tunnels' wing)
-  for (let y = N * DSY + 1; y < (N + 1) * DSY; y++) L.set(DSX, y, TL.CFLOOR); fight.links[loot.id] = loot.links[fight.id] = 1; loot.mergeInto = fight.id; fight.cx0 = 0; fight.cw = 2;
-  fight.enemies = ['bat_queen']; fight.miniboss = true; fight.at = [[12.5, 3]]; fight.rewardAt = [12.5, 4.5]; fight.rewards = [['widethrow', -1.5], ['ring_bat', 1.5]];
-  { const gx = 2 * DSX, gy = N * DSY + 4; const gate = L.idx(gx, gy), eyes = [L.idx(gx, gy - 3), L.idx(gx, gy + 3)]; // the twin-eye gate into it, from the foot of the stair
-    L.tiles[gate] = TL.TWINGATE; for (const i of eyes) L.tiles[i] = TL.EYE; L.eyeLinks = {}; for (const i of eyes) L.eyeLinks[i] = { kind: 'twin', gate }; L.twinGates = [{ gate, eyes, openTo: TL.CFLOOR }];
-    fight.links[main[0].id] = main[0].links[fight.id] = 1; const si = L.idx(gx + 2, gy - 2); L.props[si] = PR.SIGN; L.signText[si] = 'THE GATE OPENS ONLY WHEN IT IS NOT SEEN.'; }
-  // the master's cave: a cracked wall off the climb (a bomb opens it)
-  { const r = main[N - 5], cy = r.ry * DSY + 4; L.set(3 * DSX, cy, TL.CLIFFCRACK); master.links[r.id] = r.links[master.id] = 1;
+  // the roost, off a room near the top: one arena two cells wide (the loot cell folds into the fight cell, like the tunnels' wing)
+  { const rb = baseOf(ROOST), y0 = ROOST * DSY; for (let y = y0 + 1; y < y0 + DSY; y++) L.set(DSX, y, floorOf(rb)); fight.links[loot.id] = loot.links[fight.id] = 1; loot.mergeInto = fight.id; fight.cx0 = 0; fight.cw = 2;
+    fight.enemies = ['bat_queen']; fight.miniboss = true; fight.at = [[12.5, 3]]; fight.rewardAt = [12.5, 4.5]; fight.rewards = [['widethrow', -1.5], ['ring_bat', 1.5]];
+    const gx = 2 * DSX, gy = y0 + 4; const gate = L.idx(gx, gy), eyes = [L.idx(gx, gy - 3), L.idx(gx, gy + 3)]; // the twin-eye gate into it, standing on the room's floor (L.wallZ)
+    L.tiles[gate] = TL.TWINGATE; for (const i of eyes) L.tiles[i] = TL.EYE; for (const i of [gate, ...eyes]) L.wallZ[i] = rb + 0.2; L.eyeLinks = {}; for (const i of eyes) L.eyeLinks[i] = { kind: 'twin', gate }; L.twinGates = [{ gate, eyes, openTo: floorOf(rb) }];
+    const r = main[N - ROOST]; fight.links[r.id] = r.links[fight.id] = 1; const si = L.idx(gx + 1, gy + 2); L.props[si] = PR.SIGN; L.signText[si] = 'THE GATE OPENS ONLY WHEN IT IS NOT SEEN.'; }
+  // the master's cave: a cracked wall off the climb (a bomb opens it), hard to spot
+  { const r = main[N - 5], cy = r.ry * DSY + 4, ci = L.idx(3 * DSX, cy); L.set(3 * DSX, cy, TL.CLIFFCRACK); L.wallZ[ci] = r.base; master.links[r.id] = r.links[master.id] = 1;
     const mx0 = master.rx * DSX, my0 = master.ry * DSY; L.npcs.push({ x: mx0 + 8.5, y: my0 + 3.5, spr: 'swordmaster', text: Content.master.wait, after: 'climb:roost', textAfter: Content.master.taught });
     L.shop.push({ x: mx0 + 5.5, y: my0 + 4.5, item: 'lunge', price: 0, gift: true, cond: 'roost', condShow: true, condText: Content.master.locked });
     for (const [dx, dy] of [[2, 2], [9, 6]]) L.props[L.idx(mx0 + dx, my0 + dy)] = PR.FLAME; }
-  // who's on the way up: bats all the way, a snow wolf near the top. The mouth and the summit are quiet.
-  main.forEach((r, i) => { if (i === 0 || i >= N) return; const n = 2 + (i > 3 ? 1 : 0); for (let k = 0; k < n; k++) r.enemies.push('bat'); if (i >= N - 2) r.enemies.push('snowwolf'); });
+  // who's on the way up: bats all the way, magmites where the lava runs, frostlings where it's frozen, a snow wolf near the top
+  main.forEach((r, i) => { if (i === 0 || i >= N) return; const n = 2 + (i > 3 ? 1 : 0); for (let k = 0; k < n; k++) r.enemies.push('bat'); if (r.base <= 4) r.enemies.push('magmite'); if (r.base >= 4) r.enemies.push('frostling'); if (i >= N - 2) r.enemies.push('snowwolf'); });
   L.rooms = rooms; L.startRoom = main[0];
   // the way in and out at the foot
   const ex = MAIN * DSX + 6; L.set(ex, h - 1, TL.CEXIT); L.set(ex, h - 2, TL.EXIT); L.spawn = { x: ex + 0.5, y: h - 2.6, a: -Math.PI / 2 };
   const si = L.idx(ex - 3, h - 3); L.props[si] = PR.SIGN; L.signText[si] = 'THE ASCENT. STEPS CUT BY HANDS LONG GONE. THE HEARTH WAITS AT THE TOP.';
-  // THE WILDS SIDE: the old gate becomes a stone stair up to a wide cave mouth in the peaks
-  const gi = OW.idx(g.x, g.y); delete OW.portals[gi];
-  for (let x = g.x - 2; x <= g.x + 3; x++) { OW.set(x, g.y - 1, TL.PEAKS); OW.props[OW.idx(x, g.y + 1)] = 0; }
-  for (const x of [g.x - 2, g.x - 1, g.x + 2, g.x + 3]) OW.set(x, g.y, TL.PEAKS);
+  // THE WILDS SIDE: the high wood ends at the mountain. Its back rises into peaks, a stone stair climbs to a wide cave mouth,
+  // and a storm hangs over it (OW.stormBox).
+  const H = owRegionAt(OW, g.x, g.y), RI = regionInterior(H); const gi = OW.idx(g.x, g.y); delete OW.portals[gi];
+  OW.maxWallH = 6; OW.stormBox = { x0: RI.x0 - 1, y0: 0, x1: RI.x1, y1: RI.y1 };
+  for (let x = RI.x0 - 1; x <= RI.x1; x++) { OW.set(x, 0, TL.HIGHPEAK); if (OW.towerTheme) delete OW.towerTheme[OW.idx(x, g.y - 1)]; }
+  const mid = g.x + 0.5;
+  for (let y = RI.y0; y <= g.y + 2; y++) for (let x = RI.x0; x < RI.x1; x++) { const d = Math.abs(x + 0.5 - mid); const t = y < g.y ? TL.HIGHPEAK : y === g.y ? (d > 1 ? TL.HIGHPEAK : null) : y === g.y + 1 ? (d > 3.5 ? TL.MOUNTFLANK : null) : (d > 5.5 ? TL.MOUNTFLANK : null); if (t) { OW.set(x, y, t); OW.props[OW.idx(x, y)] = 0; } }
+  for (let x = g.x - 2; x <= g.x + 3; x++) OW.props[OW.idx(x, g.y + 1)] = 0;
   let n = 0; while (n < 4 && (g.y + n + 1) % RSY !== 0 && (g.y + n + 2) % RSY !== 0) n++; // as many quarter steps as fit before the region's wall (leaving a row to stand on)
   for (const x of [g.x, g.x + 1]) { OW.set(x, g.y, TL.MOUNTMOUTH); OW.portals[OW.idx(x, g.y)] = { to: 'climb' }; for (let k = 1; k <= n; k++) { OW.set(x, g.y + k, TL['CLIMBH' + (n + 1 - k)]); OW.props[OW.idx(x, g.y + k)] = 0; } }
-  for (const x of [g.x - 1, g.x, g.x + 1, g.x + 2]) { const i = OW.idx(x, g.y + n + 1); OW.props[i] = 0; if (TINFO[OW.tiles[i]].solid && (g.y + n + 1) % RSY) OW.tiles[i] = TL.GRASS; } // room to stand at the foot of the stair
+  const footY = g.y + n + 1;
+  for (const x of [g.x - 1, g.x, g.x + 1, g.x + 2]) { const i = OW.idx(x, footY); OW.props[i] = 0; if (TINFO[OW.tiles[i]].solid && footY % RSY) OW.tiles[i] = TL.PATH; } // room to stand at the foot of the stair
+  // a trail through the wood from the way in to the foot of the stair
+  { const d = (H.doors || []).find(([, y]) => y > footY) || H.doors[0]; if (d) { const [dx, dy] = d; const lay = (x, y) => { const i = OW.idx(x, y); if (TINFO[OW.tiles[i]].portal) return; if (TINFO[OW.tiles[i]].solid || OW.tiles[i] === TL.GRASS || OW.tiles[i] === TL.FLOWERS) OW.tiles[i] = TL.PATH; OW.props[i] = 0; };
+    for (let y = Math.min(footY, dy); y <= Math.max(footY, dy); y++) lay(g.x, y); for (let x = Math.min(g.x, dx); x <= Math.max(g.x, dx); x++) lay(x, dy); } }
   const fx = g.x + 3, fy = g.y + 1; if (TINFO[OW.get(fx, fy)].solid) OW.set(fx, fy, TL.GRASS); OW.props[OW.idx(fx, fy)] = 0; // where the rope ladder will hang
-  W.climb = { stairs: n, mouth: { x: g.x + 1, y: g.y + n + 1.2, a: -Math.PI / 2 }, ladderFoot: OW.idx(g.x + 3, g.y), ladderFront: { x: fx + 0.5, y: fy + 0.6, a: -Math.PI / 2 } };
+  W.climb = { stairs: n, mouth: { x: g.x + 1, y: footY + 0.2, a: -Math.PI / 2 }, ladderFoot: OW.idx(g.x + 3, g.y), ladderFront: { x: fx + 0.5, y: fy + 0.6, a: -Math.PI / 2 } };
   L.portals[ladderI] = { to: 'ow', at: W.climb.ladderFront, ladder: true };
   OW.portals[W.climb.ladderFoot] = { to: 'climb', at: L.ladderTop }; // live once the tile there is a LADDERFOOT (sim.dropLadder)
   L.exits = [{ x: ex, y: h - 2, to: { lvl: 'ow', x: W.climb.mouth.x, y: W.climb.mouth.y, a: Math.PI / 2 } }]; L.exit = L.exits[0].to;
@@ -385,16 +400,17 @@ function genOverworld(W, rnd) {
   const L = new Level('ow', 'ow', w, h); W.levels.ow = L; L.regions = [];
   // biomes: by coarse noise + position bias
   // start near the middle of the map, so every direction has something to find
-  const startR = { x: Math.floor(RW / 2) - (rnd() < 0.5 ? 1 : 0), y: Math.floor(RH / 2) };
+  const startR = { x: Math.floor(RW / 2) - (rnd() < 0.5 ? 1 : 0), y: 1 + Math.floor((RH - 1) / 2) };
   const bn = []; for (let i = 0; i < 4; i++) bn.push(rnd());
   for (let ry = 0; ry < RH; ry++) for (let rx = 0; rx < RW; rx++) {
+    if (ry === 0) { L.regions.push({ rx, ry, biome: FRONTIER[rx] || 'forest', enemies: [], tier: 3, features: [], sealed: true }); continue; } // the high row (opened above the Hearth below)
     let b;
     const v = Math.sin(rx * 0.9 + bn[0] * 6) + Math.cos(ry * 1.1 + bn[1] * 6) + (rnd() - 0.5) * 0.9;
     if (FRONTIER[rx]) b = FRONTIER[rx];
     else if ((rx === 1 || rx === RW - 2) && rnd() < 0.45) b = 'mountain'; // foothills of the edge ranges
-    else if (ry === 0 && rnd() < 0.5) b = 'forest'; // the edge of the great wood
-    else if (v > 1.0) b = 'forest'; else if (v < -1.1) b = 'lake'; else if (rx >= RW - 3 && ry >= 3 && rnd() < 0.6) b = 'desert';
-    else if (rx <= 2 && ry >= 2 && ry <= 4 && rnd() < 0.5) b = 'graveyard'; else b = rnd() < 0.55 ? 'plains' : rnd() < 0.5 ? 'forest' : 'desert';
+    else if (ry === 1 && rnd() < 0.5) b = 'forest'; // the edge of the great wood
+    else if (v > 1.0) b = 'forest'; else if (v < -1.1) b = 'lake'; else if (rx >= RW - 3 && ry >= 4 && rnd() < 0.6) b = 'desert';
+    else if (rx <= 2 && ry >= 3 && ry <= 5 && rnd() < 0.5) b = 'graveyard'; else b = rnd() < 0.55 ? 'plains' : rnd() < 0.5 ? 'forest' : 'desert';
     if (rx === startR.x && ry === startR.y) b = 'plains';
     L.regions.push({ rx, ry, biome: b, enemies: [], tier: 0, features: [] });
   }
@@ -406,19 +422,22 @@ function genOverworld(W, rnd) {
   const seen = new Set(); const stack = [startR.y * RW + startR.x]; seen.add(stack[0]);
   while (stack.length) {
     const cur = stack[stack.length - 1]; const cx = cur % RW, cy = Math.floor(cur / RW);
-    const nb = [[1, 0], [-1, 0], [0, 1], [0, -1]].map(([dx, dy]) => [cx + dx, cy + dy]).filter(([x, y]) => x >= 0 && y >= 0 && x < RW && y < RH && !FRONTIER[x] && !seen.has(y * RW + x));
+    const nb = [[1, 0], [-1, 0], [0, 1], [0, -1]].map(([dx, dy]) => [cx + dx, cy + dy]).filter(([x, y]) => x >= 0 && y >= 0 && x < RW && y >= 1 && y < RH && !FRONTIER[x] && !seen.has(y * RW + x));
     if (!nb.length) { stack.pop(); continue; }
     const [nx, ny] = rnd.pick(nb); const ni = ny * RW + nx; seen.add(ni); edges[ek(cur, ni)] = 1; stack.push(ni);
   }
   for (let ry = 0; ry < RH; ry++) for (let rx = 0; rx < RW; rx++) {
-    const i = ry * RW + rx;
+    const i = ry * RW + rx; if (ry === 0) continue;
     if (FRONTIER[rx]) { if (ry < RH - 1) edges[ek(i, i + RW)] = 1; continue; } // the frontier lands are open north-south
     if (rx < RW - 1 && !FRONTIER[rx + 1] && rnd() < 0.35) edges[ek(i, i + 1)] = 1;
     if (ry < RH - 1 && rnd() < 0.35) edges[ek(i, i + RW)] = 1;
   }
   // one mountain pass into each frontier land
   L.passes = {};
-  for (const fx of [0, RW - 1]) { const ry = rnd.range(1, RH - 2); const inner = fx === 0 ? 1 : RW - 2; edges[ek(ry * RW + fx, ry * RW + inner)] = 1; L.passes[FRONTIER[fx]] = { ry, fx, inner }; }
+  for (const fx of [0, RW - 1]) { const ry = rnd.range(2, RH - 2); const inner = fx === 0 ? 1 : RW - 2; edges[ek(ry * RW + fx, ry * RW + inner)] = 1; L.passes[FRONTIER[fx]] = { ry, fx, inner }; }
+  // the high wood: the region above the Hearth's (the top of the Wilds, near the middle) opens, and the way to the mountain runs through it
+  if (Content.dungeons[12]) { const hr = L.regions.filter(r => r.ry === 1 && !FRONTIER[r.rx] && r.biome !== 'lake' && !(r.rx === startR.x && r.ry === startR.y)).sort((a, b) => Math.abs(a.rx - RW / 2) - Math.abs(b.rx - RW / 2))[0];
+    if (hr) { const hi = R(hr.rx, 0); hi.sealed = false; hi.high = true; hi.biome = 'forest'; L.hearthRegion = hr; L.highRegion = hi; edges[ek(hr.rx, RW + hr.rx)] = 1; } }
   L.edges = edges;
   // region distances from start (for difficulty)
   const dist = new Array(RW * RH).fill(99); dist[startR.y * RW + startR.x] = 0; const q = [startR.y * RW + startR.x];
@@ -444,7 +463,7 @@ function genOverworld(W, rnd) {
   for (let x = 0; x < w; x++) { const fb = FRONTIER[Math.min(RW - 1, Math.floor(x / RSX))]; L.set(x, 0, fb === 'snow' ? TL.PEAKS : fb === 'ash' ? TL.FIREPEAKS : TL.BIGWOOD); L.set(x, h - 1, TL.OCEAN); }
   for (let y = 1; y < h - 1; y++) { L.set(0, y, TL.PEAKS); L.set(w - 1, y, TL.FIREPEAKS); }
   // interiors
-  for (const reg of L.regions) fillRegion(L, reg, rnd);
+  for (const reg of L.regions) if (reg.sealed) fillSealed(L, reg); else fillRegion(L, reg, rnd);
   // a beach along the sea
   for (let x = 1; x < w - 1; x++) { const t = L.get(x, h - 2); if (t === TL.GRASS || t === TL.FLOWERS || t === TL.PATH) L.set(x, h - 2, TL.SAND); }
   // openings
@@ -472,9 +491,9 @@ function genOverworld(W, rnd) {
   const sc = sr.features[0];
   L.spawn = sc ? { x: sc.x + 0.5, y: Math.min(sr.ry * RSY + RSY - 0.6, sc.y + 3.5), a: -Math.PI / 2 } : { x: sr.rx * RSX + 8.5, y: sr.ry * RSY + 8.5, a: -Math.PI / 2 };
   // dungeon placement: sort regions by distance
-  const cand = L.regions.filter(r => r !== sr && !FRONTIER[r.rx]).sort((a, b) => a.dist - b.dist || rnd() - 0.5);
+  const cand = L.regions.filter(r => r !== sr && !FRONTIER[r.rx] && !r.sealed && !r.high).sort((a, b) => a.dist - b.dist || rnd() - 0.5);
   const used = new Set([sr]);
-  const maxD = Math.max(...L.regions.map(r => r.dist));
+  const maxD = Math.max(...L.regions.filter(r => !r.sealed && !r.high).map(r => r.dist));
   for (let d = 1; d <= 9; d++) {
     let target = d === 9 ? maxD : Math.round(1 + (d - 1) * (maxD - 1) / 8);
     let best = null, bestScore = 1e9;
@@ -491,16 +510,13 @@ function genOverworld(W, rnd) {
   // optional dungeons: one deep in each frontier land, far from its pass; the Hearth on the edge of the great wood
   for (const [d, biome] of [[10, 'snow'], [11, 'ash']]) {
     if (!Content.dungeons[d]) continue; const ps = L.passes[biome];
-    const r = L.regions.filter(r => r.rx === ps.fx).sort((a, b) => Math.abs(b.ry - ps.ry) - Math.abs(a.ry - ps.ry))[0];
+    const r = L.regions.filter(r => r.rx === ps.fx && !r.sealed).sort((a, b) => Math.abs(b.ry - ps.ry) - Math.abs(a.ry - ps.ry))[0];
     used.add(r); placeGate(W, L, r, rnd, d);
   }
-  if (Content.dungeons[12]) {
-    const r = L.regions.filter(r => !used.has(r) && !FRONTIER[r.rx] && r.biome !== 'lake').sort((a, b) => a.ry - b.ry || Math.abs(a.rx - RW / 2) - Math.abs(b.rx - RW / 2))[0];
-    if (r) { used.add(r); placeGate(W, L, r, rnd, 12); }
-  }
+  if (L.highRegion) { const r = L.highRegion; used.add(r); placeGate(W, L, r, rnd, 12, [r.rx * RSX + 8, regionInterior(r).y0 + 1]); } // at the back of the high wood (genClimb makes it the stair up the mountain)
   // caves: shops, gifts, hearts, secrets, dojo
   const caveKinds = CAVE_MIX;
-  const free = rnd.shuffle(L.regions.filter(r => !used.has(r) && r.biome !== 'lake' && !FRONTIER[r.rx]));
+  const free = rnd.shuffle(L.regions.filter(r => !used.has(r) && r.biome !== 'lake' && !FRONTIER[r.rx] && !r.sealed && !r.high));
   let fi = 0;
   for (const kind of caveKinds) {
     const r = free[fi++ % free.length];
@@ -512,7 +528,7 @@ function genOverworld(W, rnd) {
   for (const [biome, kind] of [['snow', 'frosthint'], ['ash', 'firehint']]) { const ps = L.passes[biome]; if (Content.caves[kind]) placeCave(W, L, R(ps.fx, ps.ry), rnd, kind, 'open'); }
   // enemies
   for (const r of L.regions) {
-    if (r === sr) continue;
+    if (r === sr || r.sealed) continue;
     const pool = enemiesFor('biomes', r.biome); const n = 2 + r.tier + rnd.int(3);
     for (let i = 0; i < n; i++) r.enemies.push(rnd.pick(pool));
   }
@@ -559,6 +575,8 @@ function repairReach(L) {
 function baseTile(biome) { return biome === 'desert' ? TL.SAND : biome === 'graveyard' ? TL.PATH : biome === 'snow' ? TL.SNOW : biome === 'ash' ? TL.ASH : TL.GRASS; }
 function clearAround(L, x, y, base) { const i = L.idx(x, y); if (x <= 0 || y <= 0 || x >= L.w - 1 || y >= L.h - 1) return; if (TINFO[L.tiles[i]].solid && !TINFO[L.tiles[i]].portal) L.tiles[i] = base != null ? base : TL.GRASS; L.props[i] = 0; }
 function regionInterior(r) { return { x0: r.rx * RSX + 1, y0: r.ry * RSY + 1, x1: r.rx * RSX + RSX, y1: r.ry * RSY + RSY }; }
+// the sealed high row: solid great wood (peaks over the frontier columns)
+function fillSealed(L, r) { const { x0, y0, x1, y1 } = regionInterior(r); const t = r.biome === 'snow' ? TL.PEAKS : r.biome === 'ash' ? TL.FIREPEAKS : TL.BIGWOOD; for (let y = y0; y < y1; y++) for (let x = x0; x < x1; x++) { L.set(x, y, t); L.props[L.idx(x, y)] = 0; } }
 function fillRegion(L, r, rnd) {
   const { x0, y0, x1, y1 } = regionInterior(r);
   const base = baseTile(r.biome);

@@ -66,12 +66,17 @@ function renderWorld(cam, L, ents, players, myId) {
   const plX = -dirY * fov, plY = dirX * fov;
   const hz = Math.round(H / 2 + cam.pitch); const eye = cam.eye;
   const kind = L.kind; const outdoor = kind === 'ow' || !!L.outdoor;
-  const fogR = 168, fogG = 208, fogB = 248;
+  // a storm (L.storm: the whole level; L.stormBox: one patch of the Wilds, fading in as you come near it)
+  let storm = L.storm ? 1 : 0; if (!storm && L.stormBox) { const B = L.stormBox; const d = Math.max(0, B.x0 - cam.x, cam.x - B.x1, B.y0 - cam.y, cam.y - B.y1); storm = clamp(1 - d / 8, 0, 1); }
+  R.storm = storm; const fl = storm ? stormFlash(t) : null; const flash = fl ? fl.f * storm : 0;
+  const fogR = lerp(168, 84, storm) | 0, fogG = lerp(208, 86, storm) | 0, fogB = lerp(248, 104, storm) | 0;
   const wf = Math.floor(t * 4) % 4;
   // --- sky / ceiling ---
   if (outdoor) {
     for (let y = 0; y < Math.min(H, hz); y++) {
-      const f = clamp((hz - y) / (H * 0.8), 0, 1); const c = rgb(lerp(168, 70, f) | 0, lerp(208, 130, f) | 0, lerp(248, 230, f) | 0);
+      const f = clamp((hz - y) / (H * 0.8), 0, 1); let r0 = lerp(168, 70, f), g0 = lerp(208, 130, f), b0 = lerp(248, 230, f);
+      if (storm) { r0 = lerp(r0, lerp(92, 30, f), storm); g0 = lerp(g0, lerp(94, 30, f), storm); b0 = lerp(b0, lerp(112, 44, f), storm); if (flash) { r0 = lerp(r0, 220, flash * 0.7); g0 = lerp(g0, 222, flash * 0.7); b0 = lerp(b0, 255, flash * 0.7); } }
+      const c = rgb(r0 | 0, g0 | 0, b0 | 0);
       for (let x = 0; x < W; x++) buf[y * W + x] = c;
     }
     // the far edges of the Wilds, fixed to the compass so you can always tell which way you face:
@@ -97,10 +102,18 @@ function renderWorld(cam, L, ents, players, myId) {
       if (kind === 'ow' || L.showCastle) { const dC = angDiff(ang, Math.PI / 2); if (Math.abs(dC) < 0.075) { const up = clamp((cam.eye - 0.6) / 2.6, 0, 1), sc2 = (3 + 11 * up) * u, a2 = Math.abs(dC);
         let hC = a2 < 0.045 ? 1 : 0; if (a2 >= 0.06) hC = 0.75; if (a2 < 0.012) hC = 1.9 - a2 * 40; if (Math.abs(a2 - 0.03) < 0.006) hC = 1.35; if (hC > 0 && a2 < 0.045 && ((Math.floor(ang * 900)) & 3) === 0 && hC <= 1) hC += 0.12; // keep, side towers, a spire, battlements
         if (hC > 0) { const k = 0.35 + 0.5 * up; col(hC * sc2 + 3 * u, rgb(lerp(110, 34, k) | 0, lerp(160, 30, k) | 0, lerp(140, 46, k) | 0)); } } }
+      if (storm > 0.3) { // heavy storm clouds, low and rolling
+        const cb = Math.sin(ang * 4 + t * 0.08) + Math.sin(ang * 9 - t * 0.05) * 0.6; const th = (10 + cb * 6) * u, base = hz - 40 * u + Math.sin(ang * 3) * 6 * u;
+        for (let y = Math.max(0, Math.round(base - th)); y < Math.min(hz, Math.round(base + th * 0.4)); y++) { const k = y * W + x; const sh = flash ? 120 : 52; buf[k] = rgb(lerp(buf[k] & 255, sh, storm * 0.8) | 0, lerp((buf[k] >> 8) & 255, sh + 2, storm * 0.8) | 0, lerp((buf[k] >> 16) & 255, sh + 14, storm * 0.8) | 0); }
+        continue;
+      }
       const cl = Math.sin(ang * 5 + t * 0.03) + Math.sin(ang * 11) * 0.5;
       if (cl > 0.9) { const cy = hz - 48 * u - Math.round(Math.sin(ang * 2) * 8); for (let y = cy; y < cy + Math.round((cl - 0.9) * 14); y++) if (y >= 0 && y < hz) buf[y * W + x] = rgb(250, 250, 255); }
     }
   }
+  // the lightning bolt itself, somewhere in the sky
+  if (outdoor && flash > 0.5) { const dA = angDiff(fl.ang, cam.a); if (Math.abs(dA) < 1.1) { const sx = W / 2 + Math.tan(dA) / fov * W / 2; const u = H / 180; let bx = sx;
+    for (let y = 0; y < hz - 6 * u; y++) { if (y % Math.max(2, Math.round(5 * u)) === 0) bx += (((fl.seed * 13 + y * 7) % 11) - 5) * u * 0.6; const xi = Math.round(bx); for (let w2 = -1; w2 <= 1; w2++) { const xx = xi + w2; if (xx >= 0 && xx < W) buf[y * W + xx] = w2 ? rgb(190, 200, 255) : rgb(255, 255, 255); } } } }
   // --- floor & ceiling casting ---
   const rdx0 = dirX - plX, rdy0 = dirY - plY, rdx1 = dirX + plX, rdy1 = dirY + plY;
   const ceilTex = kind === 'dungeon' ? texFor('brick', L) : TEX.cwall;
@@ -147,6 +160,7 @@ function renderWorld(cam, L, ents, players, myId) {
     return h;
   };
   // a face: the side of a cell, from height h0 up to h1, at distance pd. Returns the top row it reaches.
+  let faceZ = 0; // set by the march for the face being drawn (L.wallZ)
   const drawFace = (x, ti, tile, side, pd, rdx, rdy, mx, my, h0, h1, along, tx, clip) => {
     const dist = Math.max(0.05, pd); const lh = H / dist;
     const th = L.towerTheme && L.towerTheme[my * L.w + mx]; const tname = ti.wall || ti.side || 'brick'; const tex = (th && TEX[tname + '@' + th]) || texFor(tname, L) || TEX.brick;
@@ -155,8 +169,9 @@ function renderWorld(cam, L, ents, players, myId) {
     const top = hz + (eye - h1) * lh, bot = hz + (eye - h0) * lh;
     const y0 = Math.max(0, Math.round(top)), y1 = Math.min(H, Math.round(bot), clip);
     const snowLine = h1 - 0.5 - 0.3 * triW(along * 1.3);
+    const fz = faceZ, fillT = fz ? (texFor(L.wallFill || 'rock', L) || TEX.rock) : null; // a wall standing on a raised floor (L.wallZ): plain rock below, its own face above
     for (let y = y0; y < y1; y++) {
-      const z = eye - (y - hz) / lh; const ty = ((1 - (z - Math.floor(z))) * TS) | 0; let c = tex[(ty & 31) * TS + tx];
+      const z = eye - (y - hz) / lh; const zt = z - fz; const ty = ((1 - (zt - Math.floor(zt))) * TS) | 0; let c = (fillT && (zt < 0 || zt >= (ti.faceH || 1e9))) ? fillT[(((1 - (z - Math.floor(z))) * TS | 0) & 31) * TS + tx] : tex[(ty & 31) * TS + tx];
       if (ti.snow && z > snowLine) c = ((tx + ty) & 7) ? rgb(236, 242, 252) : rgb(200, 210, 230);
       if (ti.raised) c = h1 - z < 0.06 ? fogC(c, 0.4, 235, 225, 200) : shadeC(c, 0.8); // a step's edge catches the light; its riser is darker
       c = shadeC(c, lf); if (fogF > 0) c = fogC(c, fogF, fogR, fogG, fogB);
@@ -195,7 +210,7 @@ function renderWorld(cam, L, ents, players, myId) {
     if (rdy < 0) { stepY = -1; sdy = (cam.y - my) * ddy; } else { stepY = 1; sdy = (my + 1 - cam.y) * ddy; }
     clip = H; first = 1e9; occ = 0; ob = x * OCC;
     // the cell you're standing in: if it's raised (a step, a ledge), its top is under your feet
-    let prevH = camTi.wall ? 0 : (camTi.raised || 0);
+    faceZ = 0; let prevH = camTi.wall ? 0 : (camTi.raised || 0);
     if (prevH > 0) occlude(0, drawCap(x, camTi, prevH, 0, Math.min(sdx, sdy), rdx, rdy, clip));
     let side = 0, n = 0;
     while (n++ < maxSteps && clip > 0) {
@@ -206,7 +221,8 @@ function renderWorld(cam, L, ents, players, myId) {
       const hc0 = cellH(ti); if (hc0 <= 0 && prevH <= 0) continue; // plain ground: the floor pass already has it
       let wx = side === 0 ? cam.y + pd * rdy : cam.x + pd * rdx; const along = wx; wx -= Math.floor(wx);
       let tx = (wx * TS) | 0; if ((side === 0 && rdx > 0) || (side === 1 && rdy < 0)) tx = TS - 1 - tx;
-      const hc = ti.wall ? wallH(ti, along, tx) : hc0;
+      const wz = ti.wall && L.wallZ ? (L.wallZ[my * L.w + mx] || 0) : 0; faceZ = wz;
+      const hc = ti.wall ? wallH(ti, along, tx) + wz : hc0;
       if (hc > prevH + 1e-4) { const top = drawFace(x, ti, tile, side, pd, rdx, rdy, mx, my, prevH, hc, along, tx, clip); if (eye <= hc) occlude(pd, top); }
       if (hc > 0 && eye > hc) { const top = drawCap(x, ti, hc, pd, Math.min(sdx, sdy), rdx, rdy, clip); if (Math.abs(hc - prevH) < 1e-4 && !ti.wall) clip = Math.min(clip, top); else occlude(pd, top); } // seen from above (a floor going on at the same height can't hide anything standing on it: no occluder, or a long raised floor fills the list and hides far sprites)
       prevH = hc;
@@ -666,3 +682,9 @@ function drawBigMap(st) {
   text('SHARDS ' + st.team.shards.length + '/8', 6, H - 10, rgb(255, 180, 40));
 }
 function present() { R.ctx.putImageData(R.img, 0, 0); }
+
+// Lightning over a storm (L.storm / L.stormBox): a flash every few seconds, now and then a double. Shared with ui/main.js,
+// which plays the thunder a beat later.
+const STORM_EVERY = 6.5;
+function stormFlash(t) { const c = Math.floor(t / STORM_EVERY), ph = t - c * STORM_EVERY; const h = (c * 2654435761 >>> 0) % 1000 / 1000; const off = h * 2.5; const p = ph - off;
+  let f = 0; if (p >= 0 && p < 0.09) f = 1; else if (h > 0.5 && p > 0.2 && p < 0.27) f = 0.8; return { f, ang: h * Math.PI * 2, seed: c, cycle: c, at: c * STORM_EVERY + off }; }

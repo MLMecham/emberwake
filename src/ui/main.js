@@ -266,6 +266,7 @@ function updateLocal(dt, inp) {
   // Loaded Shot scroll, holding past LOAD_TIME nocks a second arrow ("hold = power").
   // THE BAT'S EAR (items/rings.js): in a dark level, a click every BAT_CLICK seconds lights the walls around you for a moment
   // and shows where foes are, even through walls (drawEchoes)
+  if ((R.storm || 0) > 0.2) { const fl = stormFlash(R.time); if (fl.cycle !== R.thunderCycle && R.time > fl.at + 0.7) { R.thunderCycle = fl.cycle; sfx('thunder', R.storm); } } // thunder a beat after each flash
   { const on = me.ring === 'ring_bat' && !!me.items.ring_bat && !!(L && L.dark); if (on && R.time >= (Lc.batAt || 0)) { Lc.batAt = R.time + BAT_CLICK; R.batPulse = 1; sfx('click'); } R.batPulse = on ? Math.max(0, (R.batPulse || 0) - dt / 0.9) : 0; }
   R.heldLight = Lc.sel === 'candle'; // holding the candle lights up dark rooms; lit braziers do it hands-free
   if (Lc.sel === 'bow') {
@@ -281,7 +282,7 @@ function updateLocal(dt, inp) {
   // low hp beep
   if (me.hp <= 4 && me.hp > 0) { Lc.lowT -= dt; if (Lc.lowT <= 0) { Lc.lowT = 0.5; sfx('lowhp'); } }
   // music
-  let track = me && me.webbed >= 0 ? 'dread' : L.kind === 'isle' ? 'dread' : L.kind === 'ow' ? 'ow' : L.kind === 'cave' ? (L.fallen || L.caveKind === 'g_psalm' ? 'dread' : 'cave') : L.dnum === 13 ? 'deep' : L.kind === 'tunnel' ? (((dungeonRoomAt(L, Lc.x, Lc.y) || {}).miniboss && snap.en.some(e => e[8] >= 0)) ? 'boss' : L.tunnelBiome === 'snow' ? 'tunnel_cold' : 'tunnel_ember') : L.dnum === 10 ? 'frost' : L.dnum === 11 ? 'fire' : L.dnum === 12 ? 'hearth' : (L.dnum >= 5 && L.dnum <= 8 ? 'deep' : 'dungeon');
+  let track = me && me.webbed >= 0 ? 'dread' : L.kind === 'isle' ? 'dread' : L.kind === 'ow' ? 'ow' : L.kind === 'cave' ? (L.fallen || L.caveKind === 'g_psalm' ? 'dread' : 'cave') : L.dnum === 13 ? 'deep' : L.kind === 'tunnel' ? (((dungeonRoomAt(L, Lc.x, Lc.y) || {}).miniboss && snap.en.some(e => e[8] >= 0)) ? 'boss' : L.track || L.tunnelBiome === 'snow' ? 'tunnel_cold' : 'tunnel_ember') : L.dnum === 10 ? 'frost' : L.dnum === 11 ? 'fire' : L.dnum === 12 ? 'hearth' : (L.dnum >= 5 && L.dnum <= 8 ? 'deep' : 'dungeon');
   if (L.kind === 'ow') { const rg = owRegionAt(L, Lc.x, Lc.y); if (rg.biome === 'snow') track = 'frost'; else if (rg.biome === 'ash') track = 'fire'; }
   if (L.kind === 'dungeon') { const r = dungeonRoomAt(L, Lc.x, Lc.y); if (r && r.boss && snap.en.some(e => e[8] >= 0)) track = L.dnum === 9 ? 'final' : L.dnum >= 10 ? 'dragon' : 'boss'; }
   musicPlay(track);

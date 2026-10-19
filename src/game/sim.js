@@ -2,7 +2,7 @@
 // Only the host runs this. Clients send their position and actions; the host sends back snapshots.
 'use strict';
 // Enemy, item, projectile and elite definitions live in src/content and are looked up through core/registry.js.
-const SAVE_VERSION = 8;
+const SAVE_VERSION = 9;
 // Bring an old save up to date. v1 -> v2: dungeons were redrawn as shapes, so dungeon tile changes, cleared rooms,
 // keys and maps from v1 no longer fit; overworld progress, items and shards are kept. Tile/prop ids are remapped by name.
 function migrateSave(s) {
@@ -28,6 +28,11 @@ function migrateSave(s) {
     delete s.mods.d2; for (const t of ['cleared', 'taken']) for (const k of Object.keys(s.team[t] || {})) if (k.startsWith('d2:')) delete s.team[t][k]; for (const t of ['keys', 'maps', 'comps']) if (s.team[t]) delete s.team[t].d2;
     for (const c in (s.players || {})) { const pl = s.players[c]; if (pl.lvl === 'd2') pl.respawn = true; }
     for (const c in (s.players || {})) { const pl = s.players[c]; if ((pl.maxBombs || 0) > 8) { pl.items = pl.items || {}; pl.items.bombbag = true; } }
+  }
+  if ((s.v || 1) < 9) { // v9: the Wilds grew a row to the north (the high wood and the mountain), so the land is redrawn again; the Ascent was rebuilt
+    for (const lvl of Object.keys(s.mods)) if (lvl === 'ow' || lvl === 'climb' || (lvl[0] === 'c' && lvl !== 'c0')) delete s.mods[lvl];
+    for (const t of ['cleared', 'taken']) for (const k of Object.keys(s.team[t] || {})) if (k.startsWith('ow:') || k === 'climb:ladder' || (k[0] === 'c' && !k.startsWith('c0:') && !k.startsWith('climb:'))) delete s.team[t][k];
+    for (const c in (s.players || {})) { const pl = s.players[c]; if (pl.lvl === 'ow' || (pl.lvl && pl.lvl[0] === 'c')) pl.respawn = true; }
   }
   if ((s.v || 1) < 8) { // v8: the fire rod became the magic wand; whoever had it keeps its fire as the Flame Orb
     for (const c in (s.players || {})) { const pl = s.players[c]; if (pl.items && pl.items.rod) { pl.items.wandfire = true; pl.wandEl = 'fire'; } if (pl.items && pl.items.thunderrod) { pl.items.wandthunder = true; pl.items.rod = true; delete pl.items.thunderrod; } }
@@ -226,7 +231,7 @@ class Sim {
   teleport(p, lvl, x, y, a) {
     p.lvl = lvl; p.x = x; p.y = y; p.a = a; p.webbed = null; this.ev({ t: 'tp', pid: p.id, lvl, x, y, a });
     this.initLevel(lvl);
-    if (this.W.levels[lvl] && this.W.levels[lvl].kind === 'tunnel') { const T = this.W.levels[lvl]; this.ev({ t: 'title', pid: p.id, text: T.label, sub: T.tunnelBiome === 'snow' ? 'TO THE FROZEN REACH' : 'TO THE CINDER WASTES' }); }
+    if (this.W.levels[lvl] && this.W.levels[lvl].kind === 'tunnel') { const T = this.W.levels[lvl]; this.ev({ t: 'title', pid: p.id, text: T.label, sub: T.sub || (T.tunnelBiome === 'snow' ? 'TO THE FROZEN REACH' : 'TO THE CINDER WASTES') }); }
     if (lvl === 'dbg') { this.ev({ t: 'title', pid: p.id, text: 'TEST ZONE', sub: 'DEBUG' }); // and its training dummies (world.js genTestZone L.dummies)
       for (const [type, x, y] of (this.W.levels.dbg.dummies || [])) if (!this.ents.some(e => e.k === 'en' && e.lvl === 'dbg' && e.type === type && !e.dead)) { const d = this.spawnEnemy(type, 'dbg', x, y, {}); d.spawnFx = 0; d.f = Math.PI / 2; } }
     else if (lvl[0] === 'd') { const d = +lvl.slice(1); this.ev({ t: 'title', pid: p.id, text: d <= 9 ? 'LEVEL-' + d : dungeonName(d), sub: d <= 9 ? dungeonName(d) : (d === 12 ? 'THE LAST FLAME' : 'OPTIONAL DUNGEON') }); }
@@ -1123,8 +1128,6 @@ class Sim {
     s = migrateSave(s);
     Object.assign(this.team, s.team); this.team.relics = this.team.relics || []; this.team.clearedAt = {}; this.mods = s.mods || {}; this.savedPlayers = s.players || {};
     for (const lvl in this.mods) { const L = this.W.levels[lvl]; if (L && L.gourds) for (const i in this.mods[lvl]) if (L.gourds[i] != null && this.mods[lvl][i][1] !== L.gourds[i]) delete this.mods[lvl][i]; } // split gourds grow back
-    { const g = this.W.dungeons[12]; const om = this.mods.ow; if (g && this.W.levels.climb && om && om[g.y * this.W.levels.ow.w + g.x]) { const gi = g.y * this.W.levels.ow.w + g.x; const opened = om[gi][0] === TL.GATE; delete om[gi]; // saves from before the Ascent: the Hearthgate stood here
-      if (opened) { const C = this.W.levels.climb; const si = C.tiles.indexOf(TL.SUMMITGATE); if (si >= 0) { this.mods.climb = this.mods.climb || {}; this.mods.climb[si] = [TL.SUMMITGATE_OPEN, 0]; } } } }
     for (const lvl in this.mods) { const L = this.W.levels[lvl]; if (!L) continue; for (const i in this.mods[lvl]) { const [t, pr] = this.mods[lvl][i]; L.tiles[i] = t; L.props[i] = pr; } }
     if (this.team.fallen) applyFallen(this.W);
     if (TL.SILK_BURNING != null) for (const lvl in this.mods) for (const i in this.mods[lvl]) if (this.mods[lvl][i][0] === TL.SILK_BURNING) { this.mods[lvl][i][0] = TL.CHARRED; this.W.levels[lvl].tiles[i] = TL.CHARRED; } // a fire that was burning when you saved has burned out

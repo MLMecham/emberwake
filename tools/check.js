@@ -925,6 +925,13 @@ attempt('the Ascent', () => {
   while (q.length) { const [x, y] = q.pop(); for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { const nx = x + dx, ny = y + dy, k = nx + ',' + ny; if (seen.has(k) || !walk(nx, ny) || H(nx, ny) - H(x, y) > STEP_UP + 1e-6) continue; seen.add(k); q.push([nx, ny]); } }
   const S = C.summit; __ok(seen.has(Math.floor(S.x) + ',' + Math.floor(S.y)) && H(Math.floor(S.x), Math.floor(S.y)) >= 8, 'you can climb from the mouth to the summit, eight tiles up');
   __ok(C.outdoor && C.showCastle, 'open sky, and the castle on the horizon from the top');
+  // the high row: sealed great wood, except the forest above the Hearth region that runs back to the mountain
+  { const top = O.regions.filter(r => r.ry === 0), open = top.filter(r => !r.sealed); __ok(top.length === RW && open.length === 1 && open[0].high && owRegionAt(O, g.x, g.y) === open[0], 'one open region on the new top row, with the mountain at its back');
+    const sealedOk = top.filter(r => r.sealed).every(r => { const ri = regionInterior(r); for (let y = ri.y0; y < ri.y1; y++) for (let x = ri.x0; x < ri.x1; x++) if (!TINFO[O.get(x, y)].solid) return false; return true; }); __ok(sealedOk, 'the rest of the top row is solid wood and peaks');
+    __ok(open[0].doors.length >= 1 && open[0].doors.every(([, y]) => y >= RSY - 2), 'the high wood opens only to the south'); __ok(O.stormBox && g.y >= O.stormBox.y0 && g.y <= O.stormBox.y1, 'a storm over the mountain'); }
+  __ok(C.storm && C.tiles.some(t => TINFO[t].lava && TINFO[t].raised) && C.tiles.some(t => TINFO[t].slippery && TINFO[t].raised), 'thunder mountain: a storm, lava rivers low, frozen ones high');
+  { const tg0 = C.twinGates[0], gx = tg0.gate % C.w, gy = Math.floor(tg0.gate / C.w); __ok(gy < 4 * DSY && seen.has((gx + 1) + ',' + gy), 'the roost is near the top, and you can walk to its gate');
+    const ci = C.tiles.indexOf(TL.CLIFFCRACK); __ok(seen.has((ci % C.w - 1) + ',' + Math.floor(ci / C.w)) && C.wallZ[ci] === 3, 'the cracked wall stands on its room floor, and you can reach it'); }
   // the roost behind the twin-eye gate, the master behind the cracked wall
   const tg = C.twinGates[0]; __ok(tg && C.tiles[tg.gate] === TL.TWINGATE && tg.eyes.every(i => C.tiles[i] === TL.EYE), 'the roost is behind a twin-eye gate');
   const fight = Object.values(C.rooms).find(r => r.miniboss); __ok(fight && fight.enemies[0] === 'bat_queen' && fight.rewards.some(r => r[0] === 'widethrow') && fight.rewards.some(r => r[0] === 'ring_bat'), 'the Nightwing guards the Wide Throw and the Bats Ear');
@@ -932,7 +939,7 @@ attempt('the Ascent', () => {
   const sim = new Sim(W, null); const p = sim.addPlayer('p1', 'A', 'GREEN', 'sword'); p.god = true; sim.teleport(p, 'climb', C.spawn.x, C.spawn.y, 0);
   sim.initLevel('climb'); const lunge = sim.ents.find(e => e.k === 'shop' && e.item === 'lunge'); const npc = sim.ents.find(e => e.k === 'npc' && e.lvl === 'climb');
   __ok(lunge && npc && npc.text === Content.master.wait, 'the master waits, his scroll beside him'); p.x = lunge.x; p.y = lunge.y; sim.tick(1 / 60); __ok(!p.items.lunge, 'but he will not teach while the Nightwing shrieks');
-  const nw = sim.spawnEnemy('bat_queen', 'climb', 12.5, 67.5, {}); nw.spawnFx = 0; sim.damageEnemy(nw, 999, null, { ignoreIframes: true }); sim.tick(1 / 60);
+  const nw = sim.spawnEnemy('bat_queen', 'climb', 12.5, 19.5, {}); nw.spawnFx = 0; sim.damageEnemy(nw, 999, null, { ignoreIframes: true }); sim.tick(1 / 60);
   __ok(sim.team.taken['climb:roost'] && npc.text === Content.master.taught, 'once she is dead he teaches'); p.x = lunge.x + 2; sim.tick(1 / 60); sim.time += 2; p.x = lunge.x; p.y = lunge.y; sim.tick(1 / 60); __ok(!!p.items.lunge, 'the Lunge');
   // the rope ladder
   const lt = C.tiles.indexOf(TL.LADDERTOP); sim.teleport(p, 'climb', C.ladderTop.x, C.ladderTop.y, 0); sim.tryEnter(p, lt); __ok(p.lvl === 'ow' && O.tiles[W.climb.ladderFoot] === TL.LADDERFOOT, 'climbing down the summit ladder drops it for good');
