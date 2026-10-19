@@ -2676,21 +2676,44 @@ defineProjectile({ id: 'webglob', spr: 'webglob', spd: 5, dmg: 1, sc: 0.6, block
 })();
 // ---- src/content/south.js ----
 (function () {
-// ===== content/south.js : the way south (first pieces) =====
-// THE LOOKOUT: a stone stair that winds up 3.4 tiles beside the Hearthgate (game/world.js genLookout). From the top you see
-//   over the whole land to the southern horizon, where the King's castle stands on its island (engine/render.js: a dark
-//   silhouette due south, faint from the ground, plain from up here). Nobody says a word about it.
-// THE ISLE (level 'isle', genIsle): the King's island beyond the rough sea. Empty for now: beaches, grass, rocks and the
-//   castle, its gate shut. Reached only by debug warp until the way across (the Gale Cloak and the sea stacks) is built.
-//   Plan: docs/IDEAS.md 'The south'.
+// ===== content/south.js : the mountain, the summit, and the King's isle =====
+// THE ASCENT (level 'climb', game/world.js genClimb): where the Hearthgate used to stand, a stone stair climbs to a wide
+//   cave mouth in the mountain, open to anyone curious. Inside is a cleft open to the sky: rooms of switchback stairs, each
+//   a tile higher than the last, with bats. At the top, THE SUMMIT: the relic-sealed gate to the Hearth (Frost Fang +
+//   Ember Heart, as before), and the ledge looks south over everything to the King's castle on the horizon
+//   (engine/render.js: L.showCastle). A rope ladder at the summit, once someone climbs down it, is a shortcut from the
+//   Wilds straight back up (team.taken['climb:ladder']).
+//   Side rooms: THE MASTER, behind a cracked wall (bombs) about halfway up: an old swordsman who teaches the Lunge, but
+//   not while THE NIGHTWING (enemies/bat.js) shrieks over his head. Her roost is off the foot of the stair, behind a
+//   twin-eye gate (gimmicks/twingate.js: both eyes shut at once). She drops the Wide Throw; the Bat's Ear lies in her nest.
+// THE ISLE (level 'isle', genIsle): the King's island beyond the rough sea, empty for now; debug warp only.
+// Plan for the rest: docs/IDEAS.md 'The south'.
 'use strict';
-const LOOK_STEPS = 16, LOOK_RISE = 0.2; // the spiral: 16 steps of 0.2 around a 3x3 summit at LOOK_STEPS * LOOK_RISE + 0.2
-for (let i = 1; i <= LOOK_STEPS; i++) defineTile('LOOK' + i, { floor: 'path', side: 'rock', raised: +(i * LOOK_RISE).toFixed(2) });
-defineTile('LOOKTOP', { floor: 'path', side: 'rock', raised: +(LOOK_STEPS * LOOK_RISE + 0.2).toFixed(2) });
+const CLIMB_ROOMS = 8, WALL_RISE = 1.2; Content.climbRooms = CLIMB_ROOMS; // rooms from the mouth to the summit, a tile up each; how far the cleft walls stand above a room's floor
+// floor heights in quarter steps (CLIMBH1 = 0.25 ... CLIMBH40 = 10): rock low down, snow higher up
+for (let n = 1; n <= 40; n++) defineTile('CLIMBH' + n, { floor: n <= 16 ? 'cfloor' : 'snow', side: 'rock', raised: n / 4 });
+// the cleft's walls: CLIFF<k> stands WALL_RISE above floor k; the outer edge is too tall to fly over
+for (let k = 0; k <= CLIMB_ROOMS + 1; k++) defineTile('CLIFF' + k, { solid: true, wall: 'mountain', tall: k + WALL_RISE });
+defineTile('CLIFFEDGE', { solid: true, wall: 'mountain', tall: 16, jag: 'peak', snow: true }); // the peak behind the summit
+defineTile('CLIFFFILL', { solid: true, wall: 'mountain', tall: CLIMB_ROOMS + 0.4 }); // the mountain's flank around the climb: just below the summit, so the view from the top is clear
+defineTile('CLIFFCRACK', { solid: true, wall: 'rock_bomb', tall: 3 + WALL_RISE, bomb: true, opensTo: 'CLIMBH12' }); // the master's door (room 3, a floor of 3)
+defineTexture('ropeladder', (x, y, r, ctx) => { const rope = x === 9 || x === 22; const rung = y % 6 === 2 && x > 9 && x < 22; if (rope || rung) return ctx.vary([150, 110, 60], x, y, 0.1); return ctx.texPx('rock', x, y); });
+defineTile('LADDERTOP', { solid: true, wall: 'ropeladder', tall: CLIMB_ROOMS + 1, portal: true }); // the summit end: climb down
+defineTile('LADDERFOOT', { solid: true, wall: 'ropeladder', tall: 2.6, portal: true }); // the Wilds end, once it's down: climb up
+defineTile('MOUNTMOUTH', { solid: true, wall: 'cave', tall: 2, portal: true }); // the wide cave mouth at the top of the stair (2 tiles)
+defineTile('SUMMITGATE', { solid: true, wall: 'hearthgate', tall: CLIMB_ROOMS + 1, hearthGate: true, openTile: 'SUMMITGATE_OPEN' });
+defineTile('SUMMITGATE_OPEN', { solid: true, wall: 'gate', tall: CLIMB_ROOMS + 1, portal: true });
 defineTexture('castlewall', (x, y, r, ctx) => { const by = y % 8, bx = (x + (Math.floor(y / 8) & 1) * 8) % 16; if (by === 7 || bx === 15) return [24, 22, 30]; return ctx.vary([62, 58, 72], x, y, 0.12); });
 defineTexture('castlegate', (x, y, r, ctx) => { if (x < 6 || x > 25 || y < 6) return ctx.texPx('castlewall', x, y); if (Math.hypot(x - 15.5, y - 14) < 10 && y < 14 || y >= 14) return (x % 5 === 0 || y % 6 === 0) ? [30, 24, 20] : [70, 46, 30]; return ctx.texPx('castlewall', x, y); });
 defineTile('CASTLEWALL', { solid: true, wall: 'castlewall', tall: 4.2, jag: 'battlement' });
 defineTile('CASTLEGATE', { solid: true, wall: 'castlegate', tall: 4.2, jag: 'battlement', sealedMsg: 'THE GATE IS SHUT. SOMETHING ON THE OTHER SIDE IS WAITING.' });
+// THE MASTER: an old swordsman, grey robed
+defineSpriteVariant('swordmaster', 'oldman', { R: '#4a4a5a', w: '#e8e8f0', s: '#d8b090' });
+Content.master = {
+  wait: 'YOU CLIMBED. GOOD. I TEACH THE BLADE, BUT NOT WITH THAT THING SCREAMING OVER MY HEAD. IT ROOSTS BELOW, BEHIND THE GATE THAT WON\'T BE WATCHED. MAKE IT QUIET.',
+  taught: 'QUIET AT LAST. HOLD THE GRIP UNTIL IT RINGS, THEN GO. ...THE LIVING WENT UNDER THE ROOTS, YOU KNOW. THERE ARE OTHERS LIKE ME, HIDING. FIND THEM.',
+  locked: 'HE WAVES YOU OFF. "NOT WITH THAT SHRIEKING. MAKE IT QUIET FIRST."',
+};
 
 })();
 // ---- src/content/wardhold.js ----
@@ -3341,6 +3364,48 @@ defineEnemy({
     '................',
   ],
 });
+// THE NIGHTWING (the Ascent's roost, content/south.js): the bats' mother. She hangs high in the dark of her roost and comes
+// down in long dives (her eyes flare first: get out of the line), shrieks for more bats (six at most), and climbs back up.
+// Arrows reach her up there; the boomerang drops her brood in one throw. When she dies the mountain goes quiet: the
+// master up the stair will teach (team.taken['climb:roost']).
+const NW = { diveEvery: 3.2, windup: 0.6, diveTime: 0.55, diveSpd: 9, shriekEvery: 6.5, brood: 6, hang: 1.6 };
+defineEnemy({
+  id: 'bat_queen', title: 'THE NIGHTWING', hp: 14, spd: 2.2, dmg: 2, r: 0.7, sc: 1.8, fly: true, boss: true, bossOf: [], spawnAt: [12.5, 3],
+  view: (e) => e.hz != null ? e.hz : NW.hang,
+  sprFor: (e) => (e.st === 1 ? 'bat_queen_glow' : null),
+  ai(sim, e, dt, ctx) {
+    const { p } = ctx; if (!p) return;
+    e.diveAt = e.diveAt || sim.time + 2; e.shriekAt = e.shriekAt || sim.time + 4;
+    if (e.st === 1) { e.hz = NW.hang; if (sim.time >= e.goAt) { e.st = 2; e.goAt = sim.time + NW.diveTime; e.f = Math.atan2(e.ty - e.y, e.tx - e.x); sim.sfx('whoosh', e.lvl, e.x, e.y); } return; } // eyes flare: she's picked her line
+    if (e.st === 2) { e.hz = Math.max(0.2, (e.hz || NW.hang) - dt * 6); sim.moveEnt(e, Math.cos(e.f) * NW.diveSpd * dt, Math.sin(e.f) * NW.diveSpd * dt, ctx.def); if (sim.time >= e.goAt) { e.st = 3; e.goAt = sim.time + 0.8; } return; } // the dive: low and fast
+    if (e.st === 3) { e.hz = Math.min(NW.hang, (e.hz || 0) + dt * 2.5); if (sim.time >= e.goAt) { e.st = 0; e.diveAt = sim.time + NW.diveEvery; } return; } // climbing back up
+    e.hz = NW.hang; AI.flutter(sim, e, dt, ctx);
+    if (sim.time >= e.shriekAt) { e.shriekAt = sim.time + NW.shriekEvery; sim.sfx('shriek', e.lvl, e.x, e.y); const n = sim.ents.filter(o => o.k === 'en' && !o.dead && o.type === 'bat' && o.lvl === e.lvl).length; for (let i = n; i < Math.min(NW.brood, n + 3); i++) sim.spawnMinion(e, 'bat'); }
+    if (sim.time >= e.diveAt) { e.st = 1; e.goAt = sim.time + NW.windup; e.tx = p.x; e.ty = p.y; }
+  },
+  onDeath(sim, e) { sim.team.taken['climb:roost'] = true; for (const o of sim.ents) if (o.k === 'npc' && o.after === 'climb:roost') o.text = o.textAfter; sim.msg('THE ROOST FALLS SILENT.'); },
+  anim: { fps: 8, frames: (s, kit) => [s, kit.shiftCols(kit.shiftCols(s, 0, 4, -3), 11, 15, -3), kit.shiftCols(kit.shiftCols(s, 0, 4, 2), 11, 15, 2)] },
+  pal: { P: '#3a2440', p: '#7a4a6a' },
+  sprite: [
+    '................',
+    '................',
+    '...k........k...',
+    'k..kk..kk..kk..k',
+    'kk.kPk.kk.kPk.kk',
+    'kPkkPPkkkkPPkkPk',
+    'kPPkPPkprrpkPPkP',
+    'kPPPkPkpppkPkPPP',
+    'kPPPPkkppppkkPPk',
+    '.kPPPPPppppPPPk.',
+    '..kPPPk.kk.kPk..',
+    '...kk..wwww.kk..',
+    '..........w.....',
+    '................',
+    '................',
+    '................',
+  ],
+});
+defineSpriteVariant('bat_queen_glow', 'bat_queen', { r: '#ffff80', p: '#c080a0' });
 
 })();
 // ---- src/content/enemies/dragons.js ----
@@ -5255,7 +5320,7 @@ defineItem({ id: 'skeletonkey', name: 'SKELETON KEY', sprite: 'skelkey', team: t
 //   THORN RING       whatever hits you up close takes three times the hit back
 //   HOLLOW RING      hearts don't heal you; every foe you finish heals a quarter heart
 //   GALE RING        the Gale Cloak rests half as long; the martial artist dashes further and sooner
-//   MOTH RING        you see much further in the dark
+//   BAT'S EAR        in the dark, a click every couple of seconds lights the walls around you and shows foes through walls
 //   LODESTONE        gems and drops drift toward you
 //   SECOND WIND      once per life, a hit that would bring you down leaves you a quarter heart (it comes back when you fall)
 //   ECHO RING        sword beams bounce off one wall
@@ -5272,7 +5337,7 @@ Content.rings = [
   ['ring_thorn', 'THORN RING', '#58a030', 'WHATEVER HITS YOU UP CLOSE TAKES THREE TIMES THE HIT BACK'],
   ['ring_hollow', 'HOLLOW RING', '#7040a0', 'HEARTS DON\'T HEAL YOU. EVERY KILL HEALS A LITTLE'],
   ['ring_gale', 'GALE RING', '#b0f0e0', 'THE CLOAK RESTS HALF AS LONG. DASHES GO FURTHER'],
-  ['ring_moth', 'MOTH RING', '#e8e0a0', 'YOU SEE MUCH FURTHER IN THE DARK'],
+  ['ring_bat', 'BAT\'S EAR', '#8a7aa0', 'IN THE DARK, A CLICK SHOWS YOU WHAT\'S NEAR, EVEN THROUGH WALLS'],
   ['ring_lodestone', 'LODESTONE', '#606878', 'GEMS AND DROPS DRIFT TOWARD YOU'],
   ['ring_secondwind', 'SECOND WIND', '#ff90b0', 'ONCE PER LIFE, A FATAL HIT LEAVES YOU A QUARTER HEART'],
   ['ring_echo', 'ECHO RING', '#a0c8ff', 'SWORD BEAMS BOUNCE OFF ONE WALL'],
@@ -5637,7 +5702,7 @@ function genWorld(seed, mode) {
   if (Content.dungeons[13]) genSilkPlaces(W, mulberry32(seed * 101 + 13)); // before the dungeons: the Silkwood's gate and its far mouth
   for (let d = 1; d <= NDUNGEONS(); d++) genDungeon(W, d, mulberry32(seed * 31 + d * 977));
   if (W.levels.d13) finishSilkPass(W);
-  genLookout(W, mulberry32(seed * 61 + 7)); // the stair by the Hearthgate (content/south.js)
+  genClimb(W, mulberry32(seed * 61 + 7)); // the mountain stair up to the Hearth (content/south.js)
   genGrottos(W, mulberry32(seed * 17 + 5));
   genIsle(W, mulberry32(seed * 67 + 3)); // the King's island, empty for now
   genTestZone(W);
@@ -5812,31 +5877,64 @@ function genTunnel(W, biome, rnd) {
 // One open hall with a strip of every hazard, an eye-drained moat, a sealed eye, a bomb wall and vents, plus open floor
 // for the debug enemy spawner. Only dev names can warp here (pause menu > TEST ZONE). Fixed layout, no randomness.
 // ---------- THE WAY SOUTH (content/south.js) ----------
-// THE LOOKOUT: a 5x5 stone stair beside the Hearthgate. The outer ring climbs LOOK_STEPS steps clockwise; the 3x3 middle is
-// the summit, one step above the last. Placed on open ground in the gate's region, never cutting the way to the gate.
-function genLookout(W, rnd) {
-  const L = W.levels.ow, g = W.dungeons[12]; if (!g || TL.LOOKTOP == null) return;
-  for (const r of [owRegionAt(L, g.x + 0.5, g.y + 0.5), owRegionAt(L, g.x + 0.5, g.y + RSY + 0.5)]) if (placeLookout(W, L, g, r, rnd)) return; // the gate's region, else the one below it
-}
-function placeLookout(W, L, g, r, rnd) {
-  const { x0, y0, x1, y1 } = regionInterior(r);
-  const ring = []; for (let x = -2; x <= 2; x++) ring.push([x, 2]); for (let y = 1; y >= -2; y--) ring.push([-2, y]); for (let x = -1; x <= 2; x++) ring.push([x, -2]); for (let y = -1; y <= 1; y++) ring.push([2, y]); // from the bottom-left, up the left side, across the top, down the right
-  const open = (x, y) => x > x0 && y > y0 && x < x1 - 1 && y < y1 - 1 && (L.get(x, y) === TL.GRASS || L.get(x, y) === TL.FLOWERS || L.get(x, y) === TL.SAND || L.get(x, y) === TL.PATH) && [0, PR.TREE, PR.PINE, PR.BUSH, PR.BOULDER, PR.SNOWPINE, PR.DEADTREE, PR.CACTUS].includes(L.props[L.idx(x, y)]) && !L.portals[L.idx(x, y)]; // trees and bushes make way
-  const reachAll = () => { // from the first door: every other door, and (in the gate's region) the gate
-    const q = [[r.doors[0][0], r.doors[0][1]]], seen = new Set([q[0].join()]);
-    while (q.length) { const [x, y] = q.shift(); for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { const nx = x + dx, ny = y + dy, k = nx + ',' + ny; if (seen.has(k) || nx < x0 - 1 || ny < y0 - 1 || nx > x1 || ny > y1 || L.solidAt(nx + 0.5, ny + 0.5)) continue; seen.add(k); q.push([nx, ny]); } }
-    const gateIn = g.x >= x0 - 1 && g.x <= x1 && g.y >= y0 - 1 && g.y <= y1;
-    return r.doors.every(([x, y]) => seen.has(x + ',' + y)) && (!gateIn || [-1, 0, 1].some(d => seen.has((g.x + d) + ',' + (g.y + 1))));
-  };
-  const spots = []; for (let cy = y0 + 3; cy < y1 - 3; cy++) for (let cx = x0 + 3; cx < x1 - 3; cx++) if (Math.abs(cx - g.x) >= 5 || cy - g.y >= 5) spots.push([cx, cy, Math.abs(cx - g.x) + Math.abs(cy - g.y) + rnd() * 3]);
-  spots.sort((a, b) => a[2] - b[2]);
-  for (const [cx, cy] of spots) {
-    let ok = open(cx - 2, cy + 3) || open(cx - 3, cy + 2); for (let dy = -2; dy <= 2 && ok; dy++) for (let dx = -2; dx <= 2; dx++) if (!open(cx + dx, cy + dy)) { ok = false; break; } if (!ok) continue;
-    const was = []; for (let dy = -2; dy <= 2; dy++) for (let dx = -2; dx <= 2; dx++) { const i = L.idx(cx + dx, cy + dy); was.push([cx + dx, cy + dy, L.get(cx + dx, cy + dy), L.props[i]]); L.props[i] = 0; }
-    ring.forEach(([dx, dy], i) => L.set(cx + dx, cy + dy, TL['LOOK' + (i + 1)])); for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) L.set(cx + dx, cy + dy, TL.LOOKTOP);
-    if (r.doors.length && reachAll()) { W.lookout = { x: cx, y: cy }; r.features.push({ type: 'lookout', x: cx, y: cy }); return true; }
-    for (const [x, y, t, pr] of was) { L.set(x, y, t); L.props[L.idx(x, y)] = pr; }
-  }
+// THE ASCENT (content/south.js): the Hearthgate's spot becomes a stair up to a wide cave mouth, and the mouth opens on a
+// cleft climbing the mountain (a level of its own, open to the sky). Rooms on a 4-wide grid, like the tunnels (L.gw):
+//   column 2 is the climb, row 8 (the mouth, floor 0) up to row 1 (floor 7), then the summit (row 0, floor 8);
+//   columns 0-1 of row 8 are the Nightwing's roost (one arena two cells wide) behind a twin-eye gate;
+//   column 3 of row 5 is the master's cave, behind a cracked wall.
+function genClimb(W, rnd) {
+  const OW = W.levels.ow, g = W.dungeons[12]; if (!g || TL.CLIMBH1 == null) return;
+  const N = Content.climbRooms, gw = 4, gh = N + 1, MAIN = 2; const w = gw * DSX + 1, h = gh * DSY + 1;
+  const L = new Level('climb', 'tunnel', w, h); W.levels.climb = L; L.gw = gw; L.outdoor = true; L.showCastle = true; L.maxWallH = 16; L.tunnelBiome = 'snow'; L.label = 'THE ASCENT'; L.theme = 'd10'; L.signText = {};
+  const floorOf = (b) => b ? TL['CLIMBH' + b * 4] : TL.CFLOOR, baseOf = (ry) => N - ry; // the summit (row 0) is floor N
+  const rooms = {}; const mk = (rx, ry, base) => { const r = { rx, ry, id: ry * gw + rx, links: {}, enemies: [], children: [], tier: 1, base }; rooms[r.id] = r; return r; };
+  const main = []; for (let ry = N; ry >= 0; ry--) main.push(mk(MAIN, ry, baseOf(ry)));
+  const fight = mk(0, N, 0), loot = mk(1, N, 0), master = mk(3, 5, baseOf(5));
+  for (let i = 0; i < w * h; i++) L.tiles[i] = TL.CLIFFFILL; for (let x = 0; x < w; x++) L.set(x, 0, TL.CLIFFEDGE);
+  for (const r of Object.values(rooms)) for (let y = r.ry * DSY + 1; y < r.ry * DSY + DSY; y++) for (let x = r.rx * DSX + 1; x < r.rx * DSX + DSX; x++) L.set(x, y, floorOf(r.base));
+  // inner walls: a cliff WALL_RISE above the higher of the rooms on either side; the outside stays too tall to fly over
+  const roomAt = (x, y) => rooms[Math.floor(y / DSY) * gw + Math.floor(x / DSX)];
+  for (let y = 1; y < h - 1; y++) for (let x = 1; x < w - 1; x++) { if (x % DSX && y % DSY) continue; const ns = []; for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [-1, -1], [1, -1], [-1, 1]]) { const r = roomAt(x + dx, y + dy); if (r && (x + dx) % DSX && (y + dy) % DSY) ns.push(r.base); } if (ns.length > 1 || (ns.length && x % DSX === 0 && y % DSY === 0)) L.set(x, y, TL['CLIFF' + Math.max(...ns)]); }
+  // the stairs: from each room up into the next, in a three-wide lane that switches sides (four quarter steps, then the door)
+  for (let i = 0; i < N; i++) { const r = main[i], up = main[i + 1], b = r.base, x0 = r.rx * DSX, y0 = r.ry * DSY; const lx = (r.ry % 2 === 0) ? x0 + 2 : x0 + 7;
+    for (let k = 0; k < 4; k++) for (let x = lx; x < lx + 3; x++) L.set(x, y0 + 4 - k, TL['CLIMBH' + (b * 4 + k + 1)]);
+    for (let x = lx; x < lx + 3; x++) L.set(x, y0, TL['CLIMBH' + (b * 4 + 4)]); r.links[up.id] = up.links[r.id] = 1; r.children.push(up); }
+  // the summit: an open ledge over the climb (its south wall is gone: step off and you drop to the room below)
+  const top = main[N], tx0 = top.rx * DSX; for (let x = tx0 + 1; x < tx0 + DSX; x++) L.set(x, DSY, floorOf(N));
+  const gateX = tx0 + 6; L.set(gateX, 0, TL.SUMMITGATE); L.portals[L.idx(gateX, 0)] = { to: 'd12' }; L.props[L.idx(gateX - 2, 1)] = PR.STATUE; L.props[L.idx(gateX + 2, 1)] = PR.STATUE;
+  L.summit = { x: gateX + 0.5, y: 1.6, a: Math.PI / 2 };
+  const ladderI = L.idx(tx0 + DSX, 4); L.set(tx0 + DSX, 4, TL.LADDERTOP); L.ladderTop = { x: tx0 + DSX - 0.6, y: 4.5, a: Math.PI };
+  // the roost: one arena two cells wide (the loot cell folds into the fight cell, like the tunnels' wing)
+  for (let y = N * DSY + 1; y < (N + 1) * DSY; y++) L.set(DSX, y, TL.CFLOOR); fight.links[loot.id] = loot.links[fight.id] = 1; loot.mergeInto = fight.id; fight.cx0 = 0; fight.cw = 2;
+  fight.enemies = ['bat_queen']; fight.miniboss = true; fight.at = [[12.5, 3]]; fight.rewardAt = [12.5, 4.5]; fight.rewards = [['widethrow', -1.5], ['ring_bat', 1.5]];
+  { const gx = 2 * DSX, gy = N * DSY + 4; const gate = L.idx(gx, gy), eyes = [L.idx(gx, gy - 3), L.idx(gx, gy + 3)]; // the twin-eye gate into it, from the foot of the stair
+    L.tiles[gate] = TL.TWINGATE; for (const i of eyes) L.tiles[i] = TL.EYE; L.eyeLinks = {}; for (const i of eyes) L.eyeLinks[i] = { kind: 'twin', gate }; L.twinGates = [{ gate, eyes, openTo: TL.CFLOOR }];
+    fight.links[main[0].id] = main[0].links[fight.id] = 1; const si = L.idx(gx + 2, gy - 2); L.props[si] = PR.SIGN; L.signText[si] = 'THE GATE OPENS ONLY WHEN IT IS NOT SEEN.'; }
+  // the master's cave: a cracked wall off the climb (a bomb opens it)
+  { const r = main[N - 5], cy = r.ry * DSY + 4; L.set(3 * DSX, cy, TL.CLIFFCRACK); master.links[r.id] = r.links[master.id] = 1;
+    const mx0 = master.rx * DSX, my0 = master.ry * DSY; L.npcs.push({ x: mx0 + 8.5, y: my0 + 3.5, spr: 'swordmaster', text: Content.master.wait, after: 'climb:roost', textAfter: Content.master.taught });
+    L.shop.push({ x: mx0 + 5.5, y: my0 + 4.5, item: 'lunge', price: 0, gift: true, cond: 'roost', condShow: true, condText: Content.master.locked });
+    for (const [dx, dy] of [[2, 2], [9, 6]]) L.props[L.idx(mx0 + dx, my0 + dy)] = PR.FLAME; }
+  // who's on the way up: bats all the way, a snow wolf near the top. The mouth and the summit are quiet.
+  main.forEach((r, i) => { if (i === 0 || i >= N) return; const n = 2 + (i > 3 ? 1 : 0); for (let k = 0; k < n; k++) r.enemies.push('bat'); if (i >= N - 2) r.enemies.push('snowwolf'); });
+  L.rooms = rooms; L.startRoom = main[0];
+  // the way in and out at the foot
+  const ex = MAIN * DSX + 6; L.set(ex, h - 1, TL.CEXIT); L.set(ex, h - 2, TL.EXIT); L.spawn = { x: ex + 0.5, y: h - 2.6, a: -Math.PI / 2 };
+  const si = L.idx(ex - 3, h - 3); L.props[si] = PR.SIGN; L.signText[si] = 'THE ASCENT. STEPS CUT BY HANDS LONG GONE. THE HEARTH WAITS AT THE TOP.';
+  // THE WILDS SIDE: the old gate becomes a stone stair up to a wide cave mouth in the peaks
+  const gi = OW.idx(g.x, g.y); delete OW.portals[gi];
+  for (let x = g.x - 2; x <= g.x + 3; x++) { OW.set(x, g.y - 1, TL.PEAKS); OW.props[OW.idx(x, g.y + 1)] = 0; }
+  for (const x of [g.x - 2, g.x - 1, g.x + 2, g.x + 3]) OW.set(x, g.y, TL.PEAKS);
+  let n = 0; while (n < 4 && (g.y + n + 1) % RSY !== 0 && (g.y + n + 2) % RSY !== 0) n++; // as many quarter steps as fit before the region's wall (leaving a row to stand on)
+  for (const x of [g.x, g.x + 1]) { OW.set(x, g.y, TL.MOUNTMOUTH); OW.portals[OW.idx(x, g.y)] = { to: 'climb' }; for (let k = 1; k <= n; k++) { OW.set(x, g.y + k, TL['CLIMBH' + (n + 1 - k)]); OW.props[OW.idx(x, g.y + k)] = 0; } }
+  for (const x of [g.x - 1, g.x, g.x + 1, g.x + 2]) { const i = OW.idx(x, g.y + n + 1); OW.props[i] = 0; if (TINFO[OW.tiles[i]].solid && (g.y + n + 1) % RSY) OW.tiles[i] = TL.GRASS; } // room to stand at the foot of the stair
+  const fx = g.x + 3, fy = g.y + 1; if (TINFO[OW.get(fx, fy)].solid) OW.set(fx, fy, TL.GRASS); OW.props[OW.idx(fx, fy)] = 0; // where the rope ladder will hang
+  W.climb = { stairs: n, mouth: { x: g.x + 1, y: g.y + n + 1.2, a: -Math.PI / 2 }, ladderFoot: OW.idx(g.x + 3, g.y), ladderFront: { x: fx + 0.5, y: fy + 0.6, a: -Math.PI / 2 } };
+  L.portals[ladderI] = { to: 'ow', at: W.climb.ladderFront, ladder: true };
+  OW.portals[W.climb.ladderFoot] = { to: 'climb', at: L.ladderTop }; // live once the tile there is a LADDERFOOT (sim.dropLadder)
+  L.exits = [{ x: ex, y: h - 2, to: { lvl: 'ow', x: W.climb.mouth.x, y: W.climb.mouth.y, a: Math.PI / 2 } }]; L.exit = L.exits[0].to;
+  // the Hearth's way out now leads back to the summit
+  if (W.levels.d12) W.levels.d12.exit = { lvl: 'climb', x: L.summit.x, y: L.summit.y, a: L.summit.a };
 }
 // THE ISLE: the King's island past the rough sea (empty for now). An outdoor level of its own (L.outdoor: sky, sea at the edges).
 function genIsle(W, rnd) {
@@ -6665,7 +6763,7 @@ class Sim {
     }
     if (TINFO[t].hearthGate) {
       const rel = this.team.relics || []; const has = (id) => rel.includes(id);
-      if (has('fang') && has('emberheart')) { this.setTile(L.id, idx, TL.GATE); this.sfx('hearthgate', L.id); this.msg('FROST AND FIRE MEET IN THE LOCK... THE HEARTH OPENS.'); }
+      if (has('fang') && has('emberheart')) { this.setTile(L.id, idx, TINFO[t].openTile ? TL[TINFO[t].openTile] : TL.GATE); this.sfx('hearthgate', L.id); this.msg('FROST AND FIRE MEET IN THE LOCK... THE HEARTH OPENS.'); }
       else this.ev({ t: 'dialog', pid: p.id, text: 'A GATE OF THREE FLAMES. TWO OF THE HOLLOWS ARE EMPTY: ONE COLD AS THE FROZEN REACH, ONE HOT AS THE CINDER WASTES.' + (has('fang') ? ' (THE FROST FANG FITS.)' : '') + (has('emberheart') ? ' (THE EMBER HEART FITS.)' : '') });
       return;
     }
@@ -6676,7 +6774,12 @@ class Sim {
     const px = idx % L.w, py = Math.floor(idx / L.w);
     if (Math.abs(p.x - (px + 0.5)) > 1.8 || Math.abs(p.y - (py + 0.5)) > 1.8) return;
     this.sfx('stairs', p.lvl);
-    const at = portal.at || T.spawn; this.teleport(p, T.id, at.x, at.y, at.a); // portal.at: a way in somewhere other than the level's start (the tunnels' far ends)
+    const at = portal.at || T.spawn; this.teleport(p, T.id, at.x, at.y, at.a);
+    if (portal.ladder && !this.team.taken['climb:ladder']) this.dropLadder(); // the summit's rope ladder: the first one down kicks it loose (content/south.js) // portal.at: a way in somewhere other than the level's start (the tunnels' far ends)
+  }
+  dropLadder() {
+    const c = this.W.climb; if (!c) return; this.team.taken['climb:ladder'] = true; this.setTile('ow', c.ladderFoot, TL.LADDERFOOT);
+    this.msg('THE ROPE LADDER UNROLLS DOWN THE CLIFF. A QUICKER WAY UP, FROM NOW ON.'); this.sfx('secret', 'ow');
   }
   tryExit(p) {
     const L = this.W.levels[p.lvl]; if (!L.exit) return;
@@ -6750,7 +6853,7 @@ class Sim {
     const ids = ['thornling', 'thornling_nettle', 'thornling_briar', 'thornling_seer']; let r = rnd() * w.reduce((a, b) => a + b, 0);
     for (let i = 0; i < 4; i++) { if (r < w[i]) return ids[i]; r -= w[i]; } return 'thornling';
   }
-  shopCond(c) { if (c === 'kindToThorns') return (this.team.grudge || 0) <= THORN_RING_GRUDGE; return true; }
+  shopCond(c) { if (c === 'kindToThorns') return (this.team.grudge || 0) <= THORN_RING_GRUDGE; if (c === 'roost') return !!this.team.taken['climb:roost']; return true; }
   onKill(e, pid) {
     const L = this.W.levels[e.lvl]; const p = pid && this.players[pid];
     if (L && L.kind === 'ow' && /^thornling/.test(e.type)) this.addGrudge(1);
@@ -6770,12 +6873,12 @@ class Sim {
   initLevel(id) {
     if (this.levelInit[id]) return; this.levelInit[id] = true;
     const L = this.W.levels[id];
-    for (const n of L.npcs) this.spawn({ k: 'npc', lvl: id, x: n.x, y: n.y, spr: n.spr, text: this.team.taken['refill:' + id] ? Content.refillText : n.text, sc: 0.95 });
+    for (const n of L.npcs) this.spawn({ k: 'npc', lvl: id, x: n.x, y: n.y, spr: n.spr, text: this.team.taken['refill:' + id] ? Content.refillText : n.after && this.team.taken[n.after] ? n.textAfter : n.text, after: n.after, textAfter: n.textAfter, sc: 0.95 });
     if (id === this.W.startCave && this.team.fallen) this.layWardShield(L);
     if (this.team.taken['refill:' + id]) this.openRefill(id);
     L.shop.forEach((s, i) => {
-      const tk = id + ':shop' + i; if (this.team.taken[tk] || (s.choose && this.team.taken[s.choose])) return; if (s.cond && !this.shopCond(s.cond)) return; // e.g. the Thorn Ring: only while the thorn-folk aren't angry
-      this.spawn({ k: 'shop', lvl: id, x: s.x, y: s.y, item: s.item, price: s.price, gift: s.gift, need: s.needHearts, choose: s.choose, unique: s.unique, cond: s.cond, tk, spr: itemSprite(s.item), sc: 0.55, z: 0.12 });
+      const tk = id + ':shop' + i; if (this.team.taken[tk] || (s.choose && this.team.taken[s.choose])) return; if (s.cond && !this.shopCond(s.cond) && !s.condShow) return; // e.g. the Thorn Ring: only while the thorn-folk aren't angry
+      this.spawn({ k: 'shop', lvl: id, x: s.x, y: s.y, item: s.item, price: s.price, gift: s.gift, need: s.needHearts, choose: s.choose, unique: s.unique, cond: s.cond, condText: s.condText, tk, spr: itemSprite(s.item), sc: 0.55, z: 0.12 });
     });
   }
   // you took the potion in a heart cave: from now on its old man refills one for POTION_REFILL (the map marks the cave)
@@ -7453,7 +7556,7 @@ class Sim {
     if (d.takeFrom) { if (d.takeFrom(this, p, e) !== false) e.dead = true; return; } // items that need the ground entity (like a dropped gem bag)
     if (e.k === 'shop') {
       const nag = (t, text) => { if (!e.warned || this.time - e.warned > 3) { e.warned = this.time; this.ev({ t, pid: p.id, text }); } };
-      if (e.cond && !this.shopCond(e.cond)) { nag('dialog', 'THE ROOTS DON\'T TRUST YOU ANYMORE. NOT THAT ONE.'); return; }
+      if (e.cond && !this.shopCond(e.cond)) { nag('dialog', e.condText || 'THE ROOTS DON\'T TRUST YOU ANYMORE. NOT THAT ONE.'); return; }
       if (e.need && p.maxHp / 4 < e.need) return nag('dialog', 'MASTER USING IT AND YOU CAN HAVE THIS... COME BACK WITH ' + e.need + ' HEARTS.');
       if (!e.gift && p.gems < e.price) return nag('hint', 'YOU NEED ' + e.price + ' GEMS.');
       if (e.unique && p.cls === 'monk') return nag('dialog', 'YOUR HANDS ALREADY KNOW THE WAY.');
@@ -7542,6 +7645,8 @@ class Sim {
     s = migrateSave(s);
     Object.assign(this.team, s.team); this.team.relics = this.team.relics || []; this.team.clearedAt = {}; this.mods = s.mods || {}; this.savedPlayers = s.players || {};
     for (const lvl in this.mods) { const L = this.W.levels[lvl]; if (L && L.gourds) for (const i in this.mods[lvl]) if (L.gourds[i] != null && this.mods[lvl][i][1] !== L.gourds[i]) delete this.mods[lvl][i]; } // split gourds grow back
+    { const g = this.W.dungeons[12]; const om = this.mods.ow; if (g && this.W.levels.climb && om && om[g.y * this.W.levels.ow.w + g.x]) { const gi = g.y * this.W.levels.ow.w + g.x; const opened = om[gi][0] === TL.GATE; delete om[gi]; // saves from before the Ascent: the Hearthgate stood here
+      if (opened) { const C = this.W.levels.climb; const si = C.tiles.indexOf(TL.SUMMITGATE); if (si >= 0) { this.mods.climb = this.mods.climb || {}; this.mods.climb[si] = [TL.SUMMITGATE_OPEN, 0]; } } } }
     for (const lvl in this.mods) { const L = this.W.levels[lvl]; if (!L) continue; for (const i in this.mods[lvl]) { const [t, pr] = this.mods[lvl][i]; L.tiles[i] = t; L.props[i] = pr; } }
     if (this.team.fallen) applyFallen(this.W);
     if (TL.SILK_BURNING != null) for (const lvl in this.mods) for (const i in this.mods[lvl]) if (this.mods[lvl][i][0] === TL.SILK_BURNING) { this.mods[lvl][i][0] = TL.CHARRED; this.W.levels[lvl].tiles[i] = TL.CHARRED; } // a fire that was burning when you saved has burned out
@@ -7608,7 +7713,7 @@ function lightFor(kind, d) {
 // Dark levels (L.dark): a small glow around you plus light from lit braziers (FLAME props) nearby.
 let _torches = [];
 function darkLight(wx, wy, camDist) {
-  let l = clamp(1.0 - camDist / ((R.heldLight ? 5.5 : 2.8) * (R.moth ? 1.9 : 1)), 0.02, 1); // R.moth: the Moth Ring // a held candle lights much further (R.heldLight, set by ui/main.js)
+  let l = clamp(1.0 - camDist / (R.heldLight ? 5.5 : 2.8), 0.02, 1); if (R.batPulse > 0) l = Math.max(l, R.batPulse * clamp(1 - camDist / 11, 0, 1) * 0.8); // a held candle lights much further (R.heldLight, set by ui/main.js); R.batPulse: the Bat's Ear's click
   for (let i = 0; i < _torches.length; i += 2) { const dx = wx - _torches[i], dy = wy - _torches[i + 1]; const tl = 1.2 - Math.sqrt(dx * dx + dy * dy) / 4.8; if (tl > l) l = tl; }
   return l > 1 ? 1 : l;
 }
@@ -7648,7 +7753,7 @@ function renderWorld(cam, L, ents, players, myId) {
         if (wE > 0.6) for (let dy = 1; dy < 46 * u; dy++) { const y = top - dy; if (y < 0) break; const off = 0.02 * Math.sin(t * 0.7 + dy * 0.12 / u) + dy * 0.004 / u; const sw = 0.025 + dy * 0.0011 / u; if (Math.abs(dA - off) < sw && ((dy / u + t * 6) % 9) < 6) { const k = y * W + x; const v = buf[k]; buf[k] = rgb(((v & 255) + 110) >> 1, (((v >> 8) & 255) + 100) >> 1, (((v >> 16) & 255) + 100) >> 1); } }
       }
       // the King's castle on its island, far out to sea due south (content/south.js): a faint shape from the ground, plain from the lookout
-      if (kind === 'ow') { const dC = angDiff(ang, Math.PI / 2); if (Math.abs(dC) < 0.075) { const up = clamp((cam.eye - 0.6) / 2.6, 0, 1), sc2 = (3 + 11 * up) * u, a2 = Math.abs(dC);
+      if (kind === 'ow' || L.showCastle) { const dC = angDiff(ang, Math.PI / 2); if (Math.abs(dC) < 0.075) { const up = clamp((cam.eye - 0.6) / 2.6, 0, 1), sc2 = (3 + 11 * up) * u, a2 = Math.abs(dC);
         let hC = a2 < 0.045 ? 1 : 0; if (a2 >= 0.06) hC = 0.75; if (a2 < 0.012) hC = 1.9 - a2 * 40; if (Math.abs(a2 - 0.03) < 0.006) hC = 1.35; if (hC > 0 && a2 < 0.045 && ((Math.floor(ang * 900)) & 3) === 0 && hC <= 1) hC += 0.12; // keep, side towers, a spire, battlements
         if (hC > 0) { const k = 0.35 + 0.5 * up; col(hC * sc2 + 3 * u, rgb(lerp(110, 34, k) | 0, lerp(160, 30, k) | 0, lerp(140, 46, k) | 0)); } } }
       const cl = Math.sin(ang * 5 + t * 0.03) + Math.sin(ang * 11) * 0.5;
@@ -7762,10 +7867,10 @@ function renderWorld(cam, L, ents, players, myId) {
       let tx = (wx * TS) | 0; if ((side === 0 && rdx > 0) || (side === 1 && rdy < 0)) tx = TS - 1 - tx;
       const hc = ti.wall ? wallH(ti, along, tx) : hc0;
       if (hc > prevH + 1e-4) { const top = drawFace(x, ti, tile, side, pd, rdx, rdy, mx, my, prevH, hc, along, tx, clip); if (eye <= hc) occlude(pd, top); }
-      if (hc > 0 && eye > hc) occlude(pd, drawCap(x, ti, hc, pd, Math.min(sdx, sdy), rdx, rdy, clip)); // seen from above
+      if (hc > 0 && eye > hc) { const top = drawCap(x, ti, hc, pd, Math.min(sdx, sdy), rdx, rdy, clip); if (Math.abs(hc - prevH) < 1e-4 && !ti.wall) clip = Math.min(clip, top); else occlude(pd, top); } // seen from above (a floor going on at the same height can't hide anything standing on it: no occluder, or a long raised floor fills the list and hides far sprites)
       prevH = hc;
       if (ti.wall && !outdoor) { occlude(pd, 0); break; } // indoors, a wall meets the ceiling: nothing behind it shows
-      if (outdoor && clip <= hz - (3.5 - eye) * H / Math.max(0.05, pd)) break; // nothing farther can reach above what's painted
+      if (outdoor && clip <= hz - ((L.maxWallH || 3.5) - eye) * H / Math.max(0.05, pd)) break; // nothing farther can reach above what's painted (L.maxWallH: the tallest thing in a level built higher, like the Ascent)
     }
     R.zbuf[x] = first; R.occN[x] = occ;
   }
@@ -8279,6 +8384,8 @@ function sfx(name, vol) {
     case 'cast_fire': noise(1.2, 0.22 * v, 900); for (let i = 0; i < 10; i++) noise(0.04, 0.15 * v, 3000, AU.ctx.currentTime + i * 0.11); tone(110, 1.0, 'sawtooth', 0.08 * v, 70); break; // a building roar
     case 'cast_storm': tone(60, 1.2, 'square', 0.07 * v, 240); for (let i = 0; i < 8; i++) tone(2000 + Math.random() * 1500, 0.05, 'square', 0.05 * v, null, AU.ctx.currentTime + i * 0.14); break; // crackling, climbing buzz
     case 'cast_bone': for (let i = 0; i < 12; i++) noise(0.03, 0.16 * v, 2800, AU.ctx.currentTime + i * 0.08); tone(55, 1.6, 'triangle', 0.14 * v, 48); break; // rattling over a low drone
+    case 'click': tone(2600, 0.03, 'square', 0.07 * v, 1800); tone(1300, 0.05, 'sine', 0.05 * v, null, AU.ctx.currentTime + 0.05); break; // the Bat's Ear
+    case 'shriek': tone(1900, 0.5, 'sawtooth', 0.12 * v, 2600); tone(2300, 0.4, 'square', 0.06 * v, 1500, AU.ctx.currentTime + 0.1); noise(0.4, 0.1 * v, 6000); break; // the Nightwing
     case 'zap': noise(0.08, 0.22 * v, 6000); tone(1800, 0.08, 'square', 0.08 * v, 400); tone(2400, 0.06, 'square', 0.06 * v, 900, AU.ctx.currentTime + 0.05); break; // a storm mage's bolt
     case 'bonecast': tone(520, 0.12, 'triangle', 0.1 * v, 260); noise(0.06, 0.14 * v, 3500, AU.ctx.currentTime + 0.04); break; // bone shards
     case 'rattle': for (let i = 0; i < 6; i++) noise(0.03, 0.16 * v, 2800, AU.ctx.currentTime + i * 0.05); break; // a skeleton climbs out of the floor
@@ -8912,7 +9019,9 @@ function updateLocal(dt, inp) {
   }
   // Item button. Shift (or LB) held = the item's technique. The bow draws while held and fires on release; with the
   // Loaded Shot scroll, holding past LOAD_TIME nocks a second arrow ("hold = power").
-  R.moth = me.ring === 'ring_moth' && !!me.items.ring_moth;
+  // THE BAT'S EAR (items/rings.js): in a dark level, a click every BAT_CLICK seconds lights the walls around you for a moment
+  // and shows where foes are, even through walls (drawEchoes)
+  { const on = me.ring === 'ring_bat' && !!me.items.ring_bat && !!(L && L.dark); if (on && R.time >= (Lc.batAt || 0)) { Lc.batAt = R.time + BAT_CLICK; R.batPulse = 1; sfx('click'); } R.batPulse = on ? Math.max(0, (R.batPulse || 0) - dt / 0.9) : 0; }
   R.heldLight = Lc.sel === 'candle'; // holding the candle lights up dark rooms; lit braziers do it hands-free
   if (Lc.sel === 'bow') {
     const most = Math.min(me.arrows, 1 + (me.items.loaded ? 1 : 0) + (me.items.loaded2 ? 1 : 0)); const nocked = () => Math.min(most, 1 + Math.floor(Lc.loadT / LOAD_TIME)); // one more arrow each LOAD_TIME, up to what your scrolls allow
@@ -9016,7 +9125,7 @@ function draw(dt) {
   renderWorld(cam, L, ents, snap ? snap.pl : [], G.myId);
   // pow words
   for (const p of Lc.pow) { const sc = projectPt(cam, p.x, p.y); if (sc) { const c = p.big ? rgb(255, 230, 60) : rgb(255, 255, 255); text(p.word, sc.x - p.word.length * 3, sc.y - 30 - p.t * (p.num ? 45 : 30), p.num ? rgb(255, 236, 120) : Math.floor(p.t * 20) & 1 ? c : rgb(255, 80, 40)); } }
-  const bossE = ents.find(e => e[8] >= 0);
+  const bossE = ents.find(e => e[8] >= 0 && (L.kind === 'dungeon' || Math.hypot(e[2] - Lc.x, e[3] - Lc.y) < 14)); // (in the tunnels and the Ascent, only when you're near it)
   const st = { me, bob: Lc.bob, moveK: Lc.moveK || 0, readyK: Lc.readyK || 0, blockT: Lc.blockT || 0, mirror: !!(me && me.mirror), arm: me && me.items.silkarm ? (me.armMode || 'blade') : null, armSwing: Lc.armT != null && Lc.armT >= 0 ? Lc.armT : null, armDir: Lc.armDir || 1, armReady: !!(me && me.armReady), wardShield: !!(me && me.items.wardshield && me.cls !== 'monk'), ward: !!(me && me.ward), swing: Lc.swing, swingDir: Lc.swingDir || 1, grip: Lc.gripT || 0, pommelT: Lc.pommelT, lungeReady: !!(Lc.gripT >= LUNGE_HOLD && me && me.items.lunge), punch: Lc.punch, charge: Lc.charge, useFlash: Lc.useFlash, useSpr: Lc.useSpr, level: L, cam, players: snap ? snap.pl : [], myId: G.myId, team: snap ? snap.team : { keys: {}, maps: {}, comps: {}, shards: [], done: [] }, seen: G.seen[L.id] || new Uint8Array(L.w * L.h), seenOW: G.seen.ow || new Uint8Array(1), seenRooms: G.seenRooms, selItem: Lc.sel, pitch: Lc.pitch, lvlKind: L.kind, bossHp: bossE ? bossE[8] : -1, bossName: bossE ? ((bossDefFor(bossE[1]) || {}).title || null) : null, world: G.world };
   if (me && !down) drawViewmodel(st);
   if (me && me.cls === 'monk' && me.armor > 0 && !down) { const ac = me.armor === 2 ? rgb(255, 248, 200) : rgb(100, 190, 255); for (let i = 0; i < 18; i++) { const side = Math.random() < 0.5; const x = side ? (Math.random() < 0.5 ? Math.random() * 10 : R.W - Math.random() * 10) : Math.random() * R.W; const y = side ? Math.random() * R.H : R.H - Math.random() * 8; px(x, y, ac); } }
@@ -9034,6 +9143,7 @@ function draw(dt) {
   if (me && me.chill && !down) { rectA(0, 0, R.W, R.H, rgb(150, 210, 255), 0.14); for (let i = 0; i < 40; i++) { const e = Math.random() < 0.5; px(e ? (Math.random() < 0.5 ? Math.random() * 14 : R.W - Math.random() * 14) : Math.random() * R.W, e ? Math.random() * R.H : (Math.random() < 0.5 ? Math.random() * 10 : R.H - Math.random() * 10), rgb(235, 250, 255)); } }
   if (down) { rectA(0, 0, R.W, R.H, rgb(40, 40, 60), 0.5); const multi = snap.pl.length > 1; textC(multi ? 'YOU ARE DOWN!' : 'YOU HAVE FALLEN...', R.W / 2, R.H / 2 - 20, rgb(255, 80, 80)); textC(multi ? 'A TEAMMATE CAN HOLD F NEXT TO YOU TO HELP YOU UP' : 'RISING AGAIN...', R.W / 2, R.H / 2 - 8, rgb(230, 230, 230)); if (multi) { const rl = me.respawnIn; textC(rl > 0 ? 'OR RESPAWN AT THE START IN ' + rl : 'PRESS ENTER TO RESPAWN AT THE START', R.W / 2, R.H / 2 + 16, rl > 0 ? rgb(170, 170, 190) : rgb(255, 220, 120)); textC('(GETTING UP ALONE DROPS HALF YOUR GEMS)', R.W / 2, R.H / 2 + 26, rgb(170, 150, 150)); } const myP = snap.pl.find(p => p[0] === G.myId); if (myP && myP[11] > 0) { rect(R.W / 2 - 40, R.H / 2 + 6, 80, 5, rgb(30, 30, 30)); rect(R.W / 2 - 40, R.H / 2 + 6, 80 * clamp(myP[11], 0, 1), 5, rgb(80, 255, 120)); } }
   if (snap && me) drawDownMarkers(cam, L, snap);
+  if (snap && R.batPulse > 0) drawEchoes(cam, L, snap);
   drawHUD(st);
   if (Lc.prompt && !Lc.reviveTarget && !Lc.dialog && me && me.alive && G.state === 'play') { const label = Lc.prompt.label; const y = R.H / 2 + 22; const w = label.length * 6 + 12; rectA(R.W / 2 - w / 2, y - 4, w, 15, rgb(0, 0, 0), 0.6); frame(R.W / 2 - w / 2, y - 4, w, 15, rgb(255, 220, 120)); textC(label, R.W / 2, y, rgb(255, 230, 150)); }
   if (Lc.reviveTarget && me && me.alive) { const t = Lc.reviveTarget; const c = c32(hexToRgb((PCOLORS.find(c => c.name === t[5]) || PCOLORS[0]).c)); const y = R.H / 2 + 22; const label = 'HOLD F: HELP UP ' + t[10]; rectA(R.W / 2 - label.length * 3 - 6, y - 4, label.length * 6 + 12, 22, rgb(0, 0, 0), 0.6); textC(label, R.W / 2, y, c); rect(R.W / 2 - 40, y + 10, 80, 4, rgb(40, 40, 40)); rect(R.W / 2 - 40, y + 10, 80 * clamp(t[11], 0, 1), 4, rgb(90, 255, 130)); }
@@ -9053,6 +9163,14 @@ function draw(dt) {
 }
 // Downed teammates show through walls: a marker over them (or, if they fell in a cave or dungeon, over its entrance;
 // if you're inside somewhere and they aren't, over your way out). Off-screen ones get an arrow at the screen edge.
+const BAT_CLICK = 2.2;
+function drawEchoes(cam, L, snap) { // the Bat's Ear: little rings where foes are, through walls, fading with the click
+  const fov = 0.66 * (R.W / R.H) / 1.78; const k = R.batPulse;
+  for (const e of snap.en) { if (!e[11]) continue; const d = Math.hypot(e[2] - cam.x, e[3] - cam.y); if (d > 12) continue;
+    const rel = angDiff(cam.a, Math.atan2(e[3] - cam.y, e[2] - cam.x)); if (Math.abs(rel) > Math.atan(fov) * 0.98) continue; const sp = projectPt(cam, e[2], e[3]); if (!sp) continue;
+    const r = Math.max(2, Math.round(10 / Math.max(1, d) * 2)), c = rgb(140 + 100 * k | 0, 200, 255); const x = Math.round(sp.x), y = Math.round(sp.y - r);
+    for (let a = 0; a < 16; a++) if ((a + Math.floor(R.time * 8)) % 2 === 0) { const t = a / 16 * TAU; px(x + Math.round(Math.cos(t) * r), y + Math.round(Math.sin(t) * r), c); } }
+}
 function drawDownMarkers(cam, L, snap) {
   const fov = 0.66 * (R.W / R.H) / 1.78;
   for (const p of snap.pl) {

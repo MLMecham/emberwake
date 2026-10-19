@@ -54,7 +54,7 @@ function lightFor(kind, d) {
 // Dark levels (L.dark): a small glow around you plus light from lit braziers (FLAME props) nearby.
 let _torches = [];
 function darkLight(wx, wy, camDist) {
-  let l = clamp(1.0 - camDist / ((R.heldLight ? 5.5 : 2.8) * (R.moth ? 1.9 : 1)), 0.02, 1); // R.moth: the Moth Ring // a held candle lights much further (R.heldLight, set by ui/main.js)
+  let l = clamp(1.0 - camDist / (R.heldLight ? 5.5 : 2.8), 0.02, 1); if (R.batPulse > 0) l = Math.max(l, R.batPulse * clamp(1 - camDist / 11, 0, 1) * 0.8); // a held candle lights much further (R.heldLight, set by ui/main.js); R.batPulse: the Bat's Ear's click
   for (let i = 0; i < _torches.length; i += 2) { const dx = wx - _torches[i], dy = wy - _torches[i + 1]; const tl = 1.2 - Math.sqrt(dx * dx + dy * dy) / 4.8; if (tl > l) l = tl; }
   return l > 1 ? 1 : l;
 }
@@ -94,7 +94,7 @@ function renderWorld(cam, L, ents, players, myId) {
         if (wE > 0.6) for (let dy = 1; dy < 46 * u; dy++) { const y = top - dy; if (y < 0) break; const off = 0.02 * Math.sin(t * 0.7 + dy * 0.12 / u) + dy * 0.004 / u; const sw = 0.025 + dy * 0.0011 / u; if (Math.abs(dA - off) < sw && ((dy / u + t * 6) % 9) < 6) { const k = y * W + x; const v = buf[k]; buf[k] = rgb(((v & 255) + 110) >> 1, (((v >> 8) & 255) + 100) >> 1, (((v >> 16) & 255) + 100) >> 1); } }
       }
       // the King's castle on its island, far out to sea due south (content/south.js): a faint shape from the ground, plain from the lookout
-      if (kind === 'ow') { const dC = angDiff(ang, Math.PI / 2); if (Math.abs(dC) < 0.075) { const up = clamp((cam.eye - 0.6) / 2.6, 0, 1), sc2 = (3 + 11 * up) * u, a2 = Math.abs(dC);
+      if (kind === 'ow' || L.showCastle) { const dC = angDiff(ang, Math.PI / 2); if (Math.abs(dC) < 0.075) { const up = clamp((cam.eye - 0.6) / 2.6, 0, 1), sc2 = (3 + 11 * up) * u, a2 = Math.abs(dC);
         let hC = a2 < 0.045 ? 1 : 0; if (a2 >= 0.06) hC = 0.75; if (a2 < 0.012) hC = 1.9 - a2 * 40; if (Math.abs(a2 - 0.03) < 0.006) hC = 1.35; if (hC > 0 && a2 < 0.045 && ((Math.floor(ang * 900)) & 3) === 0 && hC <= 1) hC += 0.12; // keep, side towers, a spire, battlements
         if (hC > 0) { const k = 0.35 + 0.5 * up; col(hC * sc2 + 3 * u, rgb(lerp(110, 34, k) | 0, lerp(160, 30, k) | 0, lerp(140, 46, k) | 0)); } } }
       const cl = Math.sin(ang * 5 + t * 0.03) + Math.sin(ang * 11) * 0.5;
@@ -208,10 +208,10 @@ function renderWorld(cam, L, ents, players, myId) {
       let tx = (wx * TS) | 0; if ((side === 0 && rdx > 0) || (side === 1 && rdy < 0)) tx = TS - 1 - tx;
       const hc = ti.wall ? wallH(ti, along, tx) : hc0;
       if (hc > prevH + 1e-4) { const top = drawFace(x, ti, tile, side, pd, rdx, rdy, mx, my, prevH, hc, along, tx, clip); if (eye <= hc) occlude(pd, top); }
-      if (hc > 0 && eye > hc) occlude(pd, drawCap(x, ti, hc, pd, Math.min(sdx, sdy), rdx, rdy, clip)); // seen from above
+      if (hc > 0 && eye > hc) { const top = drawCap(x, ti, hc, pd, Math.min(sdx, sdy), rdx, rdy, clip); if (Math.abs(hc - prevH) < 1e-4 && !ti.wall) clip = Math.min(clip, top); else occlude(pd, top); } // seen from above (a floor going on at the same height can't hide anything standing on it: no occluder, or a long raised floor fills the list and hides far sprites)
       prevH = hc;
       if (ti.wall && !outdoor) { occlude(pd, 0); break; } // indoors, a wall meets the ceiling: nothing behind it shows
-      if (outdoor && clip <= hz - (3.5 - eye) * H / Math.max(0.05, pd)) break; // nothing farther can reach above what's painted
+      if (outdoor && clip <= hz - ((L.maxWallH || 3.5) - eye) * H / Math.max(0.05, pd)) break; // nothing farther can reach above what's painted (L.maxWallH: the tallest thing in a level built higher, like the Ascent)
     }
     R.zbuf[x] = first; R.occN[x] = occ;
   }

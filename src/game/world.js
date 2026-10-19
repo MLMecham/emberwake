@@ -93,7 +93,7 @@ function genWorld(seed, mode) {
   if (Content.dungeons[13]) genSilkPlaces(W, mulberry32(seed * 101 + 13)); // before the dungeons: the Silkwood's gate and its far mouth
   for (let d = 1; d <= NDUNGEONS(); d++) genDungeon(W, d, mulberry32(seed * 31 + d * 977));
   if (W.levels.d13) finishSilkPass(W);
-  genLookout(W, mulberry32(seed * 61 + 7)); // the stair by the Hearthgate (content/south.js)
+  genClimb(W, mulberry32(seed * 61 + 7)); // the mountain stair up to the Hearth (content/south.js)
   genGrottos(W, mulberry32(seed * 17 + 5));
   genIsle(W, mulberry32(seed * 67 + 3)); // the King's island, empty for now
   genTestZone(W);
@@ -268,31 +268,64 @@ function genTunnel(W, biome, rnd) {
 // One open hall with a strip of every hazard, an eye-drained moat, a sealed eye, a bomb wall and vents, plus open floor
 // for the debug enemy spawner. Only dev names can warp here (pause menu > TEST ZONE). Fixed layout, no randomness.
 // ---------- THE WAY SOUTH (content/south.js) ----------
-// THE LOOKOUT: a 5x5 stone stair beside the Hearthgate. The outer ring climbs LOOK_STEPS steps clockwise; the 3x3 middle is
-// the summit, one step above the last. Placed on open ground in the gate's region, never cutting the way to the gate.
-function genLookout(W, rnd) {
-  const L = W.levels.ow, g = W.dungeons[12]; if (!g || TL.LOOKTOP == null) return;
-  for (const r of [owRegionAt(L, g.x + 0.5, g.y + 0.5), owRegionAt(L, g.x + 0.5, g.y + RSY + 0.5)]) if (placeLookout(W, L, g, r, rnd)) return; // the gate's region, else the one below it
-}
-function placeLookout(W, L, g, r, rnd) {
-  const { x0, y0, x1, y1 } = regionInterior(r);
-  const ring = []; for (let x = -2; x <= 2; x++) ring.push([x, 2]); for (let y = 1; y >= -2; y--) ring.push([-2, y]); for (let x = -1; x <= 2; x++) ring.push([x, -2]); for (let y = -1; y <= 1; y++) ring.push([2, y]); // from the bottom-left, up the left side, across the top, down the right
-  const open = (x, y) => x > x0 && y > y0 && x < x1 - 1 && y < y1 - 1 && (L.get(x, y) === TL.GRASS || L.get(x, y) === TL.FLOWERS || L.get(x, y) === TL.SAND || L.get(x, y) === TL.PATH) && [0, PR.TREE, PR.PINE, PR.BUSH, PR.BOULDER, PR.SNOWPINE, PR.DEADTREE, PR.CACTUS].includes(L.props[L.idx(x, y)]) && !L.portals[L.idx(x, y)]; // trees and bushes make way
-  const reachAll = () => { // from the first door: every other door, and (in the gate's region) the gate
-    const q = [[r.doors[0][0], r.doors[0][1]]], seen = new Set([q[0].join()]);
-    while (q.length) { const [x, y] = q.shift(); for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { const nx = x + dx, ny = y + dy, k = nx + ',' + ny; if (seen.has(k) || nx < x0 - 1 || ny < y0 - 1 || nx > x1 || ny > y1 || L.solidAt(nx + 0.5, ny + 0.5)) continue; seen.add(k); q.push([nx, ny]); } }
-    const gateIn = g.x >= x0 - 1 && g.x <= x1 && g.y >= y0 - 1 && g.y <= y1;
-    return r.doors.every(([x, y]) => seen.has(x + ',' + y)) && (!gateIn || [-1, 0, 1].some(d => seen.has((g.x + d) + ',' + (g.y + 1))));
-  };
-  const spots = []; for (let cy = y0 + 3; cy < y1 - 3; cy++) for (let cx = x0 + 3; cx < x1 - 3; cx++) if (Math.abs(cx - g.x) >= 5 || cy - g.y >= 5) spots.push([cx, cy, Math.abs(cx - g.x) + Math.abs(cy - g.y) + rnd() * 3]);
-  spots.sort((a, b) => a[2] - b[2]);
-  for (const [cx, cy] of spots) {
-    let ok = open(cx - 2, cy + 3) || open(cx - 3, cy + 2); for (let dy = -2; dy <= 2 && ok; dy++) for (let dx = -2; dx <= 2; dx++) if (!open(cx + dx, cy + dy)) { ok = false; break; } if (!ok) continue;
-    const was = []; for (let dy = -2; dy <= 2; dy++) for (let dx = -2; dx <= 2; dx++) { const i = L.idx(cx + dx, cy + dy); was.push([cx + dx, cy + dy, L.get(cx + dx, cy + dy), L.props[i]]); L.props[i] = 0; }
-    ring.forEach(([dx, dy], i) => L.set(cx + dx, cy + dy, TL['LOOK' + (i + 1)])); for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) L.set(cx + dx, cy + dy, TL.LOOKTOP);
-    if (r.doors.length && reachAll()) { W.lookout = { x: cx, y: cy }; r.features.push({ type: 'lookout', x: cx, y: cy }); return true; }
-    for (const [x, y, t, pr] of was) { L.set(x, y, t); L.props[L.idx(x, y)] = pr; }
-  }
+// THE ASCENT (content/south.js): the Hearthgate's spot becomes a stair up to a wide cave mouth, and the mouth opens on a
+// cleft climbing the mountain (a level of its own, open to the sky). Rooms on a 4-wide grid, like the tunnels (L.gw):
+//   column 2 is the climb, row 8 (the mouth, floor 0) up to row 1 (floor 7), then the summit (row 0, floor 8);
+//   columns 0-1 of row 8 are the Nightwing's roost (one arena two cells wide) behind a twin-eye gate;
+//   column 3 of row 5 is the master's cave, behind a cracked wall.
+function genClimb(W, rnd) {
+  const OW = W.levels.ow, g = W.dungeons[12]; if (!g || TL.CLIMBH1 == null) return;
+  const N = Content.climbRooms, gw = 4, gh = N + 1, MAIN = 2; const w = gw * DSX + 1, h = gh * DSY + 1;
+  const L = new Level('climb', 'tunnel', w, h); W.levels.climb = L; L.gw = gw; L.outdoor = true; L.showCastle = true; L.maxWallH = 16; L.tunnelBiome = 'snow'; L.label = 'THE ASCENT'; L.theme = 'd10'; L.signText = {};
+  const floorOf = (b) => b ? TL['CLIMBH' + b * 4] : TL.CFLOOR, baseOf = (ry) => N - ry; // the summit (row 0) is floor N
+  const rooms = {}; const mk = (rx, ry, base) => { const r = { rx, ry, id: ry * gw + rx, links: {}, enemies: [], children: [], tier: 1, base }; rooms[r.id] = r; return r; };
+  const main = []; for (let ry = N; ry >= 0; ry--) main.push(mk(MAIN, ry, baseOf(ry)));
+  const fight = mk(0, N, 0), loot = mk(1, N, 0), master = mk(3, 5, baseOf(5));
+  for (let i = 0; i < w * h; i++) L.tiles[i] = TL.CLIFFFILL; for (let x = 0; x < w; x++) L.set(x, 0, TL.CLIFFEDGE);
+  for (const r of Object.values(rooms)) for (let y = r.ry * DSY + 1; y < r.ry * DSY + DSY; y++) for (let x = r.rx * DSX + 1; x < r.rx * DSX + DSX; x++) L.set(x, y, floorOf(r.base));
+  // inner walls: a cliff WALL_RISE above the higher of the rooms on either side; the outside stays too tall to fly over
+  const roomAt = (x, y) => rooms[Math.floor(y / DSY) * gw + Math.floor(x / DSX)];
+  for (let y = 1; y < h - 1; y++) for (let x = 1; x < w - 1; x++) { if (x % DSX && y % DSY) continue; const ns = []; for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [-1, -1], [1, -1], [-1, 1]]) { const r = roomAt(x + dx, y + dy); if (r && (x + dx) % DSX && (y + dy) % DSY) ns.push(r.base); } if (ns.length > 1 || (ns.length && x % DSX === 0 && y % DSY === 0)) L.set(x, y, TL['CLIFF' + Math.max(...ns)]); }
+  // the stairs: from each room up into the next, in a three-wide lane that switches sides (four quarter steps, then the door)
+  for (let i = 0; i < N; i++) { const r = main[i], up = main[i + 1], b = r.base, x0 = r.rx * DSX, y0 = r.ry * DSY; const lx = (r.ry % 2 === 0) ? x0 + 2 : x0 + 7;
+    for (let k = 0; k < 4; k++) for (let x = lx; x < lx + 3; x++) L.set(x, y0 + 4 - k, TL['CLIMBH' + (b * 4 + k + 1)]);
+    for (let x = lx; x < lx + 3; x++) L.set(x, y0, TL['CLIMBH' + (b * 4 + 4)]); r.links[up.id] = up.links[r.id] = 1; r.children.push(up); }
+  // the summit: an open ledge over the climb (its south wall is gone: step off and you drop to the room below)
+  const top = main[N], tx0 = top.rx * DSX; for (let x = tx0 + 1; x < tx0 + DSX; x++) L.set(x, DSY, floorOf(N));
+  const gateX = tx0 + 6; L.set(gateX, 0, TL.SUMMITGATE); L.portals[L.idx(gateX, 0)] = { to: 'd12' }; L.props[L.idx(gateX - 2, 1)] = PR.STATUE; L.props[L.idx(gateX + 2, 1)] = PR.STATUE;
+  L.summit = { x: gateX + 0.5, y: 1.6, a: Math.PI / 2 };
+  const ladderI = L.idx(tx0 + DSX, 4); L.set(tx0 + DSX, 4, TL.LADDERTOP); L.ladderTop = { x: tx0 + DSX - 0.6, y: 4.5, a: Math.PI };
+  // the roost: one arena two cells wide (the loot cell folds into the fight cell, like the tunnels' wing)
+  for (let y = N * DSY + 1; y < (N + 1) * DSY; y++) L.set(DSX, y, TL.CFLOOR); fight.links[loot.id] = loot.links[fight.id] = 1; loot.mergeInto = fight.id; fight.cx0 = 0; fight.cw = 2;
+  fight.enemies = ['bat_queen']; fight.miniboss = true; fight.at = [[12.5, 3]]; fight.rewardAt = [12.5, 4.5]; fight.rewards = [['widethrow', -1.5], ['ring_bat', 1.5]];
+  { const gx = 2 * DSX, gy = N * DSY + 4; const gate = L.idx(gx, gy), eyes = [L.idx(gx, gy - 3), L.idx(gx, gy + 3)]; // the twin-eye gate into it, from the foot of the stair
+    L.tiles[gate] = TL.TWINGATE; for (const i of eyes) L.tiles[i] = TL.EYE; L.eyeLinks = {}; for (const i of eyes) L.eyeLinks[i] = { kind: 'twin', gate }; L.twinGates = [{ gate, eyes, openTo: TL.CFLOOR }];
+    fight.links[main[0].id] = main[0].links[fight.id] = 1; const si = L.idx(gx + 2, gy - 2); L.props[si] = PR.SIGN; L.signText[si] = 'THE GATE OPENS ONLY WHEN IT IS NOT SEEN.'; }
+  // the master's cave: a cracked wall off the climb (a bomb opens it)
+  { const r = main[N - 5], cy = r.ry * DSY + 4; L.set(3 * DSX, cy, TL.CLIFFCRACK); master.links[r.id] = r.links[master.id] = 1;
+    const mx0 = master.rx * DSX, my0 = master.ry * DSY; L.npcs.push({ x: mx0 + 8.5, y: my0 + 3.5, spr: 'swordmaster', text: Content.master.wait, after: 'climb:roost', textAfter: Content.master.taught });
+    L.shop.push({ x: mx0 + 5.5, y: my0 + 4.5, item: 'lunge', price: 0, gift: true, cond: 'roost', condShow: true, condText: Content.master.locked });
+    for (const [dx, dy] of [[2, 2], [9, 6]]) L.props[L.idx(mx0 + dx, my0 + dy)] = PR.FLAME; }
+  // who's on the way up: bats all the way, a snow wolf near the top. The mouth and the summit are quiet.
+  main.forEach((r, i) => { if (i === 0 || i >= N) return; const n = 2 + (i > 3 ? 1 : 0); for (let k = 0; k < n; k++) r.enemies.push('bat'); if (i >= N - 2) r.enemies.push('snowwolf'); });
+  L.rooms = rooms; L.startRoom = main[0];
+  // the way in and out at the foot
+  const ex = MAIN * DSX + 6; L.set(ex, h - 1, TL.CEXIT); L.set(ex, h - 2, TL.EXIT); L.spawn = { x: ex + 0.5, y: h - 2.6, a: -Math.PI / 2 };
+  const si = L.idx(ex - 3, h - 3); L.props[si] = PR.SIGN; L.signText[si] = 'THE ASCENT. STEPS CUT BY HANDS LONG GONE. THE HEARTH WAITS AT THE TOP.';
+  // THE WILDS SIDE: the old gate becomes a stone stair up to a wide cave mouth in the peaks
+  const gi = OW.idx(g.x, g.y); delete OW.portals[gi];
+  for (let x = g.x - 2; x <= g.x + 3; x++) { OW.set(x, g.y - 1, TL.PEAKS); OW.props[OW.idx(x, g.y + 1)] = 0; }
+  for (const x of [g.x - 2, g.x - 1, g.x + 2, g.x + 3]) OW.set(x, g.y, TL.PEAKS);
+  let n = 0; while (n < 4 && (g.y + n + 1) % RSY !== 0 && (g.y + n + 2) % RSY !== 0) n++; // as many quarter steps as fit before the region's wall (leaving a row to stand on)
+  for (const x of [g.x, g.x + 1]) { OW.set(x, g.y, TL.MOUNTMOUTH); OW.portals[OW.idx(x, g.y)] = { to: 'climb' }; for (let k = 1; k <= n; k++) { OW.set(x, g.y + k, TL['CLIMBH' + (n + 1 - k)]); OW.props[OW.idx(x, g.y + k)] = 0; } }
+  for (const x of [g.x - 1, g.x, g.x + 1, g.x + 2]) { const i = OW.idx(x, g.y + n + 1); OW.props[i] = 0; if (TINFO[OW.tiles[i]].solid && (g.y + n + 1) % RSY) OW.tiles[i] = TL.GRASS; } // room to stand at the foot of the stair
+  const fx = g.x + 3, fy = g.y + 1; if (TINFO[OW.get(fx, fy)].solid) OW.set(fx, fy, TL.GRASS); OW.props[OW.idx(fx, fy)] = 0; // where the rope ladder will hang
+  W.climb = { stairs: n, mouth: { x: g.x + 1, y: g.y + n + 1.2, a: -Math.PI / 2 }, ladderFoot: OW.idx(g.x + 3, g.y), ladderFront: { x: fx + 0.5, y: fy + 0.6, a: -Math.PI / 2 } };
+  L.portals[ladderI] = { to: 'ow', at: W.climb.ladderFront, ladder: true };
+  OW.portals[W.climb.ladderFoot] = { to: 'climb', at: L.ladderTop }; // live once the tile there is a LADDERFOOT (sim.dropLadder)
+  L.exits = [{ x: ex, y: h - 2, to: { lvl: 'ow', x: W.climb.mouth.x, y: W.climb.mouth.y, a: Math.PI / 2 } }]; L.exit = L.exits[0].to;
+  // the Hearth's way out now leads back to the summit
+  if (W.levels.d12) W.levels.d12.exit = { lvl: 'climb', x: L.summit.x, y: L.summit.y, a: L.summit.a };
 }
 // THE ISLE: the King's island past the rough sea (empty for now). An outdoor level of its own (L.outdoor: sky, sea at the edges).
 function genIsle(W, rnd) {

@@ -241,7 +241,7 @@ class Sim {
     }
     if (TINFO[t].hearthGate) {
       const rel = this.team.relics || []; const has = (id) => rel.includes(id);
-      if (has('fang') && has('emberheart')) { this.setTile(L.id, idx, TL.GATE); this.sfx('hearthgate', L.id); this.msg('FROST AND FIRE MEET IN THE LOCK... THE HEARTH OPENS.'); }
+      if (has('fang') && has('emberheart')) { this.setTile(L.id, idx, TINFO[t].openTile ? TL[TINFO[t].openTile] : TL.GATE); this.sfx('hearthgate', L.id); this.msg('FROST AND FIRE MEET IN THE LOCK... THE HEARTH OPENS.'); }
       else this.ev({ t: 'dialog', pid: p.id, text: 'A GATE OF THREE FLAMES. TWO OF THE HOLLOWS ARE EMPTY: ONE COLD AS THE FROZEN REACH, ONE HOT AS THE CINDER WASTES.' + (has('fang') ? ' (THE FROST FANG FITS.)' : '') + (has('emberheart') ? ' (THE EMBER HEART FITS.)' : '') });
       return;
     }
@@ -252,7 +252,12 @@ class Sim {
     const px = idx % L.w, py = Math.floor(idx / L.w);
     if (Math.abs(p.x - (px + 0.5)) > 1.8 || Math.abs(p.y - (py + 0.5)) > 1.8) return;
     this.sfx('stairs', p.lvl);
-    const at = portal.at || T.spawn; this.teleport(p, T.id, at.x, at.y, at.a); // portal.at: a way in somewhere other than the level's start (the tunnels' far ends)
+    const at = portal.at || T.spawn; this.teleport(p, T.id, at.x, at.y, at.a);
+    if (portal.ladder && !this.team.taken['climb:ladder']) this.dropLadder(); // the summit's rope ladder: the first one down kicks it loose (content/south.js) // portal.at: a way in somewhere other than the level's start (the tunnels' far ends)
+  }
+  dropLadder() {
+    const c = this.W.climb; if (!c) return; this.team.taken['climb:ladder'] = true; this.setTile('ow', c.ladderFoot, TL.LADDERFOOT);
+    this.msg('THE ROPE LADDER UNROLLS DOWN THE CLIFF. A QUICKER WAY UP, FROM NOW ON.'); this.sfx('secret', 'ow');
   }
   tryExit(p) {
     const L = this.W.levels[p.lvl]; if (!L.exit) return;
@@ -326,7 +331,7 @@ class Sim {
     const ids = ['thornling', 'thornling_nettle', 'thornling_briar', 'thornling_seer']; let r = rnd() * w.reduce((a, b) => a + b, 0);
     for (let i = 0; i < 4; i++) { if (r < w[i]) return ids[i]; r -= w[i]; } return 'thornling';
   }
-  shopCond(c) { if (c === 'kindToThorns') return (this.team.grudge || 0) <= THORN_RING_GRUDGE; return true; }
+  shopCond(c) { if (c === 'kindToThorns') return (this.team.grudge || 0) <= THORN_RING_GRUDGE; if (c === 'roost') return !!this.team.taken['climb:roost']; return true; }
   onKill(e, pid) {
     const L = this.W.levels[e.lvl]; const p = pid && this.players[pid];
     if (L && L.kind === 'ow' && /^thornling/.test(e.type)) this.addGrudge(1);
@@ -346,12 +351,12 @@ class Sim {
   initLevel(id) {
     if (this.levelInit[id]) return; this.levelInit[id] = true;
     const L = this.W.levels[id];
-    for (const n of L.npcs) this.spawn({ k: 'npc', lvl: id, x: n.x, y: n.y, spr: n.spr, text: this.team.taken['refill:' + id] ? Content.refillText : n.text, sc: 0.95 });
+    for (const n of L.npcs) this.spawn({ k: 'npc', lvl: id, x: n.x, y: n.y, spr: n.spr, text: this.team.taken['refill:' + id] ? Content.refillText : n.after && this.team.taken[n.after] ? n.textAfter : n.text, after: n.after, textAfter: n.textAfter, sc: 0.95 });
     if (id === this.W.startCave && this.team.fallen) this.layWardShield(L);
     if (this.team.taken['refill:' + id]) this.openRefill(id);
     L.shop.forEach((s, i) => {
-      const tk = id + ':shop' + i; if (this.team.taken[tk] || (s.choose && this.team.taken[s.choose])) return; if (s.cond && !this.shopCond(s.cond)) return; // e.g. the Thorn Ring: only while the thorn-folk aren't angry
-      this.spawn({ k: 'shop', lvl: id, x: s.x, y: s.y, item: s.item, price: s.price, gift: s.gift, need: s.needHearts, choose: s.choose, unique: s.unique, cond: s.cond, tk, spr: itemSprite(s.item), sc: 0.55, z: 0.12 });
+      const tk = id + ':shop' + i; if (this.team.taken[tk] || (s.choose && this.team.taken[s.choose])) return; if (s.cond && !this.shopCond(s.cond) && !s.condShow) return; // e.g. the Thorn Ring: only while the thorn-folk aren't angry
+      this.spawn({ k: 'shop', lvl: id, x: s.x, y: s.y, item: s.item, price: s.price, gift: s.gift, need: s.needHearts, choose: s.choose, unique: s.unique, cond: s.cond, condText: s.condText, tk, spr: itemSprite(s.item), sc: 0.55, z: 0.12 });
     });
   }
   // you took the potion in a heart cave: from now on its old man refills one for POTION_REFILL (the map marks the cave)
@@ -1029,7 +1034,7 @@ class Sim {
     if (d.takeFrom) { if (d.takeFrom(this, p, e) !== false) e.dead = true; return; } // items that need the ground entity (like a dropped gem bag)
     if (e.k === 'shop') {
       const nag = (t, text) => { if (!e.warned || this.time - e.warned > 3) { e.warned = this.time; this.ev({ t, pid: p.id, text }); } };
-      if (e.cond && !this.shopCond(e.cond)) { nag('dialog', 'THE ROOTS DON\'T TRUST YOU ANYMORE. NOT THAT ONE.'); return; }
+      if (e.cond && !this.shopCond(e.cond)) { nag('dialog', e.condText || 'THE ROOTS DON\'T TRUST YOU ANYMORE. NOT THAT ONE.'); return; }
       if (e.need && p.maxHp / 4 < e.need) return nag('dialog', 'MASTER USING IT AND YOU CAN HAVE THIS... COME BACK WITH ' + e.need + ' HEARTS.');
       if (!e.gift && p.gems < e.price) return nag('hint', 'YOU NEED ' + e.price + ' GEMS.');
       if (e.unique && p.cls === 'monk') return nag('dialog', 'YOUR HANDS ALREADY KNOW THE WAY.');
@@ -1118,6 +1123,8 @@ class Sim {
     s = migrateSave(s);
     Object.assign(this.team, s.team); this.team.relics = this.team.relics || []; this.team.clearedAt = {}; this.mods = s.mods || {}; this.savedPlayers = s.players || {};
     for (const lvl in this.mods) { const L = this.W.levels[lvl]; if (L && L.gourds) for (const i in this.mods[lvl]) if (L.gourds[i] != null && this.mods[lvl][i][1] !== L.gourds[i]) delete this.mods[lvl][i]; } // split gourds grow back
+    { const g = this.W.dungeons[12]; const om = this.mods.ow; if (g && this.W.levels.climb && om && om[g.y * this.W.levels.ow.w + g.x]) { const gi = g.y * this.W.levels.ow.w + g.x; const opened = om[gi][0] === TL.GATE; delete om[gi]; // saves from before the Ascent: the Hearthgate stood here
+      if (opened) { const C = this.W.levels.climb; const si = C.tiles.indexOf(TL.SUMMITGATE); if (si >= 0) { this.mods.climb = this.mods.climb || {}; this.mods.climb[si] = [TL.SUMMITGATE_OPEN, 0]; } } } }
     for (const lvl in this.mods) { const L = this.W.levels[lvl]; if (!L) continue; for (const i in this.mods[lvl]) { const [t, pr] = this.mods[lvl][i]; L.tiles[i] = t; L.props[i] = pr; } }
     if (this.team.fallen) applyFallen(this.W);
     if (TL.SILK_BURNING != null) for (const lvl in this.mods) for (const i in this.mods[lvl]) if (this.mods[lvl][i][0] === TL.SILK_BURNING) { this.mods[lvl][i][0] = TL.CHARRED; this.W.levels[lvl].tiles[i] = TL.CHARRED; } // a fire that was burning when you saved has burned out

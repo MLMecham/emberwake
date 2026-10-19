@@ -69,7 +69,7 @@ for (let s = 1; s <= SEEDS; s++) {
   const seen = flood();
   // with the raft (level 6's treasure) everything is reachable; without it, level 7's island is not
   const seenR = flood({ raft: true });
-  for (let d = 1; d <= NDUNGEONS(); d++) { const g = W.dungeons[d]; if (!g) continue; const gi = (g.y + 1) * L.w + g.x;
+  for (let d = 1; d <= NDUNGEONS(); d++) { const g = W.dungeons[d]; if (!g) continue; const gi = (g.y + (d === 12 && W.climb ? W.climb.stairs + 1 : 1)) * L.w + g.x; // (12: the foot of the Ascent's stair)
     if (d === 7) { __ok(!!seenR[gi], 'seed ' + seed + ': island gate 7 unreachable even with the raft'); __ok(!seen[gi], 'seed ' + seed + ': island gate 7 reachable without the raft'); }
     else __ok(!!seen[gi], 'seed ' + seed + ': gate ' + d + ' unreachable'); }
   const g6 = W.dungeons[6]; __ok(g6 && !!seen[(g6.y + 1) * L.w + g6.x], 'seed ' + seed + ': gate 6 (the raft) must be reachable on foot');
@@ -190,10 +190,11 @@ attempt('frontier', () => {
   const W = genWorld(7319, 'adv'); const L = W.levels.ow;
   __ok(L.regions.filter(r => r.biome === 'snow').length === RH && L.regions.filter(r => r.biome === 'ash').length === RH, 'frontier columns should be snow and ash');
   for (const d of [10, 11, 12]) __ok(!!W.dungeons[d], 'gate ' + d + ' missing');
-  __ok(L.tiles[L.idx(W.dungeons[12].x, W.dungeons[12].y)] === TL.HEARTHGATE, 'the Hearth gate should start sealed');
-  const sim = new Sim(W, null); const p = sim.addPlayer('p1', 'A', 'GREEN', 'sword'); const g = W.dungeons[12]; p.x = g.x + 0.5; p.y = g.y + 1.5;
-  sim.tryEnter(p, L.idx(g.x, g.y)); __ok(L.tiles[L.idx(g.x, g.y)] === TL.HEARTHGATE, 'the Hearth opened without its keys');
-  sim.team.relics.push('fang', 'emberheart'); sim.tryEnter(p, L.idx(g.x, g.y)); __ok(L.tiles[L.idx(g.x, g.y)] === TL.GATE, 'the Hearth did not open with both keys');
+  { const C = W.levels.climb; const gi = C.tiles.indexOf(TL.SUMMITGATE); __ok(gi >= 0 && C.portals[gi] && C.portals[gi].to === 'd12', 'the Hearth gate should start sealed, at the top of the Ascent');
+    const sim = new Sim(W, null); const p = sim.addPlayer('p1', 'A', 'GREEN', 'sword'); p.lvl = 'climb'; p.x = gi % C.w + 0.5; p.y = Math.floor(gi / C.w) + 1.5;
+    sim.tryEnter(p, gi); __ok(C.tiles[gi] === TL.SUMMITGATE && p.lvl === 'climb', 'the Hearth opened without its keys');
+    sim.team.relics.push('fang', 'emberheart'); sim.tryEnter(p, gi); __ok(C.tiles[gi] === TL.SUMMITGATE_OPEN, 'the Hearth did not open with both keys'); sim.tryEnter(p, gi); __ok(p.lvl === 'd12', 'and leads into the Hearth');
+    __ok(W.levels.d12.exit.lvl === 'climb', 'leaving the Hearth brings you back to the summit'); }
   __ok(Object.values(W.levels).some(l => l.caveKind === 'frosthint') && Object.values(W.levels).some(l => l.caveKind === 'firehint'), 'hermit caves missing');
 });
 // hazards: vents blow on the shared rhythm, magma boots protect, ice breath chills
@@ -913,14 +914,31 @@ attempt('bomb bags and potions', () => {
   p.hp = 4; p.poisonTicks = 3; p.chill = 2; p.inv = 0; sim.useItem(p, 'potion'); __ok(p.hp === p.maxHp && !p.poisonTicks && !p.chill && p.inv >= POTION_GUARD - 0.1, 'a potion heals fully, cures poison and chill, and shields you for a moment');
   __ok(Content.items.whistle.sprite === 'whistle' && !!SPR.whistle, 'the Wind Whistle has its own look');
 });
-attempt('the lookout and the isle', () => {
-  let placed = 0; for (let s = 1; s <= 20; s++) { const W = genWorld(s * 7919, 'adv'); if (W.lookout) placed++; }
-  __ok(placed >= 19, 'the lookout stands by the Hearthgate in (almost) every world: ' + placed + '/20');
-  const W = genWorld(7919, 'adv'); const L = W.levels.ow, o = W.lookout; __ok(!!o, 'lookout placed');
-  if (o) { const hs = []; for (let i = 1; i <= 16; i++) hs.push(TINFO[TL['LOOK' + i]].raised); __ok(hs.every((h, i) => i === 0 || Math.abs(h - hs[i - 1] - 0.2) < 1e-6) && TINFO[TL.LOOKTOP].raised - hs[15] <= STEP_UP, 'every step is one you can take');
-    __ok(TINFO[L.get(o.x, o.y)].raised > 3 && heightAt(L, o.x + 0.5, o.y + 0.5) > 3, 'the summit stands over three tiles up'); }
-  const I = W.levels.isle; __ok(I && I.outdoor && skyRoom(I) && I.tiles.includes(TL.CASTLEGATE) && TINFO[TL.CASTLEGATE].sealedMsg, 'the isle: open sky, and the castle gate shut');
-  __ok(!I.solidAt(I.spawn.x, I.spawn.y), 'you come ashore on open ground');
+attempt('the Ascent', () => {
+  let ok = 0; for (let sd = 1; sd <= 20; sd++) { const W = genWorld(sd * 7919, 'adv'); if (W.levels.climb && W.climb) ok++; } __ok(ok === 20, 'the Ascent is built in every world: ' + ok + '/20');
+  const W = genWorld(7919, 'adv'); const C = W.levels.climb, O = W.levels.ow, g = W.dungeons[12];
+  __ok(O.tiles[O.idx(g.x, g.y)] === TL.MOUNTMOUTH && O.tiles[O.idx(g.x + 1, g.y)] === TL.MOUNTMOUTH && O.portals[O.idx(g.x, g.y)].to === 'climb', 'a wide cave mouth where the gate was, open to anyone');
+  { const n = W.climb.stairs; __ok(n >= 2 && [...Array(n).keys()].every(i => TINFO[O.get(g.x, g.y + i + 1)].raised === (n - i) / 4), 'up a stone stair'); }
+  // walk it: from the mouth to the summit, stepping no more than STEP_UP at a time (flood over walkable cells by height)
+  const H = (x, y) => heightAt(C, x + 0.5, y + 0.5); const walk = (x, y) => !TINFO[C.get(x, y)].solid;
+  const s0 = [Math.floor(C.spawn.x), Math.floor(C.spawn.y)], seen = new Set([s0.join()]), q = [s0];
+  while (q.length) { const [x, y] = q.pop(); for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { const nx = x + dx, ny = y + dy, k = nx + ',' + ny; if (seen.has(k) || !walk(nx, ny) || H(nx, ny) - H(x, y) > STEP_UP + 1e-6) continue; seen.add(k); q.push([nx, ny]); } }
+  const S = C.summit; __ok(seen.has(Math.floor(S.x) + ',' + Math.floor(S.y)) && H(Math.floor(S.x), Math.floor(S.y)) >= 8, 'you can climb from the mouth to the summit, eight tiles up');
+  __ok(C.outdoor && C.showCastle, 'open sky, and the castle on the horizon from the top');
+  // the roost behind the twin-eye gate, the master behind the cracked wall
+  const tg = C.twinGates[0]; __ok(tg && C.tiles[tg.gate] === TL.TWINGATE && tg.eyes.every(i => C.tiles[i] === TL.EYE), 'the roost is behind a twin-eye gate');
+  const fight = Object.values(C.rooms).find(r => r.miniboss); __ok(fight && fight.enemies[0] === 'bat_queen' && fight.rewards.some(r => r[0] === 'widethrow') && fight.rewards.some(r => r[0] === 'ring_bat'), 'the Nightwing guards the Wide Throw and the Bats Ear');
+  __ok(C.tiles.includes(TL.CLIFFCRACK) && TINFO[TL.CLIFFCRACK].bomb, 'the master is behind a cracked wall');
+  const sim = new Sim(W, null); const p = sim.addPlayer('p1', 'A', 'GREEN', 'sword'); p.god = true; sim.teleport(p, 'climb', C.spawn.x, C.spawn.y, 0);
+  sim.initLevel('climb'); const lunge = sim.ents.find(e => e.k === 'shop' && e.item === 'lunge'); const npc = sim.ents.find(e => e.k === 'npc' && e.lvl === 'climb');
+  __ok(lunge && npc && npc.text === Content.master.wait, 'the master waits, his scroll beside him'); p.x = lunge.x; p.y = lunge.y; sim.tick(1 / 60); __ok(!p.items.lunge, 'but he will not teach while the Nightwing shrieks');
+  const nw = sim.spawnEnemy('bat_queen', 'climb', 12.5, 67.5, {}); nw.spawnFx = 0; sim.damageEnemy(nw, 999, null, { ignoreIframes: true }); sim.tick(1 / 60);
+  __ok(sim.team.taken['climb:roost'] && npc.text === Content.master.taught, 'once she is dead he teaches'); p.x = lunge.x + 2; sim.tick(1 / 60); sim.time += 2; p.x = lunge.x; p.y = lunge.y; sim.tick(1 / 60); __ok(!!p.items.lunge, 'the Lunge');
+  // the rope ladder
+  const lt = C.tiles.indexOf(TL.LADDERTOP); sim.teleport(p, 'climb', C.ladderTop.x, C.ladderTop.y, 0); sim.tryEnter(p, lt); __ok(p.lvl === 'ow' && O.tiles[W.climb.ladderFoot] === TL.LADDERFOOT, 'climbing down the summit ladder drops it for good');
+  p.x = W.climb.ladderFront.x; p.y = W.climb.ladderFront.y; sim.tryEnter(p, W.climb.ladderFoot); __ok(p.lvl === 'climb' && heightAt(C, p.x, p.y) >= 8, 'and it takes you straight back up');
+  __ok(Content.rings.some(r => r.id === 'ring_bat') && !Content.rings.some(r => r.id === 'ring_moth'), 'the Bats Ear replaced the Moth Ring');
+  const I = W.levels.isle; __ok(I && I.outdoor && skyRoom(I) && I.tiles.includes(TL.CASTLEGATE), 'the isle: open sky, and the castle gate shut');
 });
 attempt('the King calls his adepts', () => {
   const sim = freshSim(); const p = sim.players.p1; sim.teleport(p, 'dbg', 20.5, 20.5, 0); for (const e of sim.ents) if (e.k === 'en') e.dead = true;

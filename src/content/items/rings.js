@@ -13,7 +13,7 @@
 //   THORN RING       whatever hits you up close takes three times the hit back
 //   HOLLOW RING      hearts don't heal you; every foe you finish heals a quarter heart
 //   GALE RING        the Gale Cloak rests half as long; the martial artist dashes further and sooner
-//   MOTH RING        you see much further in the dark
+//   BAT'S EAR        in the dark, a click every couple of seconds lights the walls around you and shows foes through walls
 //   LODESTONE        gems and drops drift toward you
 //   SECOND WIND      once per life, a hit that would bring you down leaves you a quarter heart (it comes back when you fall)
 //   ECHO RING        sword beams bounce off one wall
@@ -30,7 +30,7 @@ Content.rings = [
   ['ring_thorn', 'THORN RING', '#58a030', 'WHATEVER HITS YOU UP CLOSE TAKES THREE TIMES THE HIT BACK'],
   ['ring_hollow', 'HOLLOW RING', '#7040a0', 'HEARTS DON\'T HEAL YOU. EVERY KILL HEALS A LITTLE'],
   ['ring_gale', 'GALE RING', '#b0f0e0', 'THE CLOAK RESTS HALF AS LONG. DASHES GO FURTHER'],
-  ['ring_moth', 'MOTH RING', '#e8e0a0', 'YOU SEE MUCH FURTHER IN THE DARK'],
+  ['ring_bat', 'BAT\'S EAR', '#8a7aa0', 'IN THE DARK, A CLICK SHOWS YOU WHAT\'S NEAR, EVEN THROUGH WALLS'],
   ['ring_lodestone', 'LODESTONE', '#606878', 'GEMS AND DROPS DRIFT TOWARD YOU'],
   ['ring_secondwind', 'SECOND WIND', '#ff90b0', 'ONCE PER LIFE, A FATAL HIT LEAVES YOU A QUARTER HEART'],
   ['ring_echo', 'ECHO RING', '#a0c8ff', 'SWORD BEAMS BOUNCE OFF ONE WALL'],

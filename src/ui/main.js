@@ -264,7 +264,9 @@ function updateLocal(dt, inp) {
   }
   // Item button. Shift (or LB) held = the item's technique. The bow draws while held and fires on release; with the
   // Loaded Shot scroll, holding past LOAD_TIME nocks a second arrow ("hold = power").
-  R.moth = me.ring === 'ring_moth' && !!me.items.ring_moth;
+  // THE BAT'S EAR (items/rings.js): in a dark level, a click every BAT_CLICK seconds lights the walls around you for a moment
+  // and shows where foes are, even through walls (drawEchoes)
+  { const on = me.ring === 'ring_bat' && !!me.items.ring_bat && !!(L && L.dark); if (on && R.time >= (Lc.batAt || 0)) { Lc.batAt = R.time + BAT_CLICK; R.batPulse = 1; sfx('click'); } R.batPulse = on ? Math.max(0, (R.batPulse || 0) - dt / 0.9) : 0; }
   R.heldLight = Lc.sel === 'candle'; // holding the candle lights up dark rooms; lit braziers do it hands-free
   if (Lc.sel === 'bow') {
     const most = Math.min(me.arrows, 1 + (me.items.loaded ? 1 : 0) + (me.items.loaded2 ? 1 : 0)); const nocked = () => Math.min(most, 1 + Math.floor(Lc.loadT / LOAD_TIME)); // one more arrow each LOAD_TIME, up to what your scrolls allow
@@ -368,7 +370,7 @@ function draw(dt) {
   renderWorld(cam, L, ents, snap ? snap.pl : [], G.myId);
   // pow words
   for (const p of Lc.pow) { const sc = projectPt(cam, p.x, p.y); if (sc) { const c = p.big ? rgb(255, 230, 60) : rgb(255, 255, 255); text(p.word, sc.x - p.word.length * 3, sc.y - 30 - p.t * (p.num ? 45 : 30), p.num ? rgb(255, 236, 120) : Math.floor(p.t * 20) & 1 ? c : rgb(255, 80, 40)); } }
-  const bossE = ents.find(e => e[8] >= 0);
+  const bossE = ents.find(e => e[8] >= 0 && (L.kind === 'dungeon' || Math.hypot(e[2] - Lc.x, e[3] - Lc.y) < 14)); // (in the tunnels and the Ascent, only when you're near it)
   const st = { me, bob: Lc.bob, moveK: Lc.moveK || 0, readyK: Lc.readyK || 0, blockT: Lc.blockT || 0, mirror: !!(me && me.mirror), arm: me && me.items.silkarm ? (me.armMode || 'blade') : null, armSwing: Lc.armT != null && Lc.armT >= 0 ? Lc.armT : null, armDir: Lc.armDir || 1, armReady: !!(me && me.armReady), wardShield: !!(me && me.items.wardshield && me.cls !== 'monk'), ward: !!(me && me.ward), swing: Lc.swing, swingDir: Lc.swingDir || 1, grip: Lc.gripT || 0, pommelT: Lc.pommelT, lungeReady: !!(Lc.gripT >= LUNGE_HOLD && me && me.items.lunge), punch: Lc.punch, charge: Lc.charge, useFlash: Lc.useFlash, useSpr: Lc.useSpr, level: L, cam, players: snap ? snap.pl : [], myId: G.myId, team: snap ? snap.team : { keys: {}, maps: {}, comps: {}, shards: [], done: [] }, seen: G.seen[L.id] || new Uint8Array(L.w * L.h), seenOW: G.seen.ow || new Uint8Array(1), seenRooms: G.seenRooms, selItem: Lc.sel, pitch: Lc.pitch, lvlKind: L.kind, bossHp: bossE ? bossE[8] : -1, bossName: bossE ? ((bossDefFor(bossE[1]) || {}).title || null) : null, world: G.world };
   if (me && !down) drawViewmodel(st);
   if (me && me.cls === 'monk' && me.armor > 0 && !down) { const ac = me.armor === 2 ? rgb(255, 248, 200) : rgb(100, 190, 255); for (let i = 0; i < 18; i++) { const side = Math.random() < 0.5; const x = side ? (Math.random() < 0.5 ? Math.random() * 10 : R.W - Math.random() * 10) : Math.random() * R.W; const y = side ? Math.random() * R.H : R.H - Math.random() * 8; px(x, y, ac); } }
@@ -386,6 +388,7 @@ function draw(dt) {
   if (me && me.chill && !down) { rectA(0, 0, R.W, R.H, rgb(150, 210, 255), 0.14); for (let i = 0; i < 40; i++) { const e = Math.random() < 0.5; px(e ? (Math.random() < 0.5 ? Math.random() * 14 : R.W - Math.random() * 14) : Math.random() * R.W, e ? Math.random() * R.H : (Math.random() < 0.5 ? Math.random() * 10 : R.H - Math.random() * 10), rgb(235, 250, 255)); } }
   if (down) { rectA(0, 0, R.W, R.H, rgb(40, 40, 60), 0.5); const multi = snap.pl.length > 1; textC(multi ? 'YOU ARE DOWN!' : 'YOU HAVE FALLEN...', R.W / 2, R.H / 2 - 20, rgb(255, 80, 80)); textC(multi ? 'A TEAMMATE CAN HOLD F NEXT TO YOU TO HELP YOU UP' : 'RISING AGAIN...', R.W / 2, R.H / 2 - 8, rgb(230, 230, 230)); if (multi) { const rl = me.respawnIn; textC(rl > 0 ? 'OR RESPAWN AT THE START IN ' + rl : 'PRESS ENTER TO RESPAWN AT THE START', R.W / 2, R.H / 2 + 16, rl > 0 ? rgb(170, 170, 190) : rgb(255, 220, 120)); textC('(GETTING UP ALONE DROPS HALF YOUR GEMS)', R.W / 2, R.H / 2 + 26, rgb(170, 150, 150)); } const myP = snap.pl.find(p => p[0] === G.myId); if (myP && myP[11] > 0) { rect(R.W / 2 - 40, R.H / 2 + 6, 80, 5, rgb(30, 30, 30)); rect(R.W / 2 - 40, R.H / 2 + 6, 80 * clamp(myP[11], 0, 1), 5, rgb(80, 255, 120)); } }
   if (snap && me) drawDownMarkers(cam, L, snap);
+  if (snap && R.batPulse > 0) drawEchoes(cam, L, snap);
   drawHUD(st);
   if (Lc.prompt && !Lc.reviveTarget && !Lc.dialog && me && me.alive && G.state === 'play') { const label = Lc.prompt.label; const y = R.H / 2 + 22; const w = label.length * 6 + 12; rectA(R.W / 2 - w / 2, y - 4, w, 15, rgb(0, 0, 0), 0.6); frame(R.W / 2 - w / 2, y - 4, w, 15, rgb(255, 220, 120)); textC(label, R.W / 2, y, rgb(255, 230, 150)); }
   if (Lc.reviveTarget && me && me.alive) { const t = Lc.reviveTarget; const c = c32(hexToRgb((PCOLORS.find(c => c.name === t[5]) || PCOLORS[0]).c)); const y = R.H / 2 + 22; const label = 'HOLD F: HELP UP ' + t[10]; rectA(R.W / 2 - label.length * 3 - 6, y - 4, label.length * 6 + 12, 22, rgb(0, 0, 0), 0.6); textC(label, R.W / 2, y, c); rect(R.W / 2 - 40, y + 10, 80, 4, rgb(40, 40, 40)); rect(R.W / 2 - 40, y + 10, 80 * clamp(t[11], 0, 1), 4, rgb(90, 255, 130)); }
@@ -405,6 +408,14 @@ function draw(dt) {
 }
 // Downed teammates show through walls: a marker over them (or, if they fell in a cave or dungeon, over its entrance;
 // if you're inside somewhere and they aren't, over your way out). Off-screen ones get an arrow at the screen edge.
+const BAT_CLICK = 2.2;
+function drawEchoes(cam, L, snap) { // the Bat's Ear: little rings where foes are, through walls, fading with the click
+  const fov = 0.66 * (R.W / R.H) / 1.78; const k = R.batPulse;
+  for (const e of snap.en) { if (!e[11]) continue; const d = Math.hypot(e[2] - cam.x, e[3] - cam.y); if (d > 12) continue;
+    const rel = angDiff(cam.a, Math.atan2(e[3] - cam.y, e[2] - cam.x)); if (Math.abs(rel) > Math.atan(fov) * 0.98) continue; const sp = projectPt(cam, e[2], e[3]); if (!sp) continue;
+    const r = Math.max(2, Math.round(10 / Math.max(1, d) * 2)), c = rgb(140 + 100 * k | 0, 200, 255); const x = Math.round(sp.x), y = Math.round(sp.y - r);
+    for (let a = 0; a < 16; a++) if ((a + Math.floor(R.time * 8)) % 2 === 0) { const t = a / 16 * TAU; px(x + Math.round(Math.cos(t) * r), y + Math.round(Math.sin(t) * r), c); } }
+}
 function drawDownMarkers(cam, L, snap) {
   const fov = 0.66 * (R.W / R.H) / 1.78;
   for (const p of snap.pl) {

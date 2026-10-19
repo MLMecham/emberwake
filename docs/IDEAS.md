@@ -62,8 +62,8 @@ Not built yet. Parked here so they don't get lost. Newest at the bottom.
 
 ## The south: the King's island (plan, from Mitch)
 - **It's an island, not a continent**, out past the rough southern sea (the raft can't cross rough water). Its castle shows on the
-  southern horizon all game: faint from the ground, plain from THE LOOKOUT, the stone stair by the Hearthgate (BUILT: content/south.js,
-  `genLookout`; the island itself is BUILT empty as level `isle`, debug warp only).
+  southern horizon all game: faint from the ground, plain from the summit of THE ASCENT, the mountain climb that replaced the Hearthgate (BUILT:
+  content/south.js, `genClimb`; the island itself is BUILT empty as level `isle`, debug warp only).
 - **The way across: the Gale Cloak.** 4 s of flight can't cross a sea, so a chain of sea stacks runs south with updrafts on some of them
   that refill the flight: hop, glide, catch the wind. The King in dungeon 9 wears the cloak (that's how he crossed) and drops it.
 - **The fake ending:** beating dungeon 9 rolls credits as if it's over. You wake in the start cave; the tunnels are still getting
@@ -89,11 +89,23 @@ Not built yet. Parked here so they don't get lost. Newest at the bottom.
   Whispers only on that player's screen, a few lines through the island; there's no way to refuse before the end. At the stolen
   head's last stand only they get YES/NO: YES heals the head and turns them on the party (needs player-vs-player damage, which
   doesn't exist yet: the biggest piece of work here), with its own ending. Solo: YES is simply the bad ending.
-- **Rings for the north (first pass):** Rime (Rimefang Hollow), Cinder (Cinder Caldera), Moth (Starless Deep, hidden room), Echo
+- **Rings for the north (first pass):** Rime (Rimefang Hollow), Cinder (Cinder Caldera), Bat's Ear (BUILT: the Nightwing's nest on the Ascent; it replaced the Moth), Echo
   (Whispering Vault, hidden room), Wardhold Signet (Iron Cathedral), Second Wind (the Lament grotto), Mender's (the warm spring),
   Shepherd's (a co-op side quest), Gale (the sea stacks), Hollow Silver and Glass (the towers). Side quests could give others.
 - Wizard bosses in the north still to do: a storm archmage boss (dungeon 5, Storm Orb) and a fire archmage boss (dungeon 8, Flame
   Orb), each bringing adepts, replacing the repeated Orb boss there.
+
+## The master and the hidden teachers (agreed, not built yet)
+- **The master's hints.** After the Lunge, the mountain master hints at the other techniques, one at a time; once you have every
+  combat skill he tells you where the monks' teacher (the hidden dojo) is. "THE LIVING WENT UNDER THE ROOTS": other hermits hide
+  underground.
+- **The first shop's merchant** gets a rotating line hinting at "an old blade up the mountain" and marks the master on the map.
+- **Rotating dialog** for every shopkeeper and old man (a few lines each, cycling); one-off story lines stay one-off.
+- **The Iron Cathedral knight (Heavy Pommel).** A knight with his helmet off, a skull face, asks you to put his brothers to rest
+  (about 8 knights in dungeon 7). Then he kneels: "STRIKE THE HILT HOME." You pommel him and he leaves the Heavy Pommel scroll. He
+  never names the Wardhold or explains the crest.
+- **Second ring slot:** the reward for clearing all three towers.
+- **Backlog: gauntlets.** Push tombstones aside to find stairs under graveyards.
 
 ## Open questions (from Mitch, to decide)
 - **Lakes: drain or dive?** Draining reuses the eye/tide machinery: a sluice eye on the shore of two lake regions drains them for good and shows a cave on the lakebed. It's cheap, but it's another eye puzzle. Diving would be a new item: swim under deep fresh water, with a blue underwater view and caves under the surface. It's more novel, but it would be the fourth way across water (raft, frost arrows, cloak). Leaning: drain now, dive later if a water dungeon wants it.
