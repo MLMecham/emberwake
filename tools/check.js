@@ -913,6 +913,17 @@ attempt('bomb bags and potions', () => {
   p.hp = 4; p.poisonTicks = 3; p.chill = 2; p.inv = 0; sim.useItem(p, 'potion'); __ok(p.hp === p.maxHp && !p.poisonTicks && !p.chill && p.inv >= POTION_GUARD - 0.1, 'a potion heals fully, cures poison and chill, and shields you for a moment');
   __ok(Content.items.whistle.sprite === 'whistle' && !!SPR.whistle, 'the Wind Whistle has its own look');
 });
+attempt('ceiling spiders', () => {
+  const sim = freshSim(); const p = sim.players.p1; p.god = false; p.hp = p.maxHp = 40; const D = sim.W.levels.d13; const r = Object.values(D.rooms).find(r => !r.boss && !r.silk && r !== D.startRoom);
+  const cx = r.rx * DSX + 6.5, cy = r.ry * DSY + 6.5; sim.teleport(p, 'd13', cx, cy + 3, -Math.PI / 2); for (const e of sim.ents) if (e.k === 'en') e.dead = true;
+  const c = sim.spawnEnemy('spider_crawler', 'd13', cx, cy - 2, {}); c.spawnFx = 0; c.ceil = true; const ai = enemyDef('spider_crawler').ai;
+  ai(sim, c, 1 / 60, { p, spd: 3, def: enemyDef('spider_crawler') }); __ok(c.air && c.hz > 1 && enemyDef('spider_crawler').sprFor(c) === 'spider_crawler_ceil' && !!SPR.spider_crawler_ceil, 'in a tall room a crawler hangs upside down on the ceiling');
+  __ok(sim.damageEnemy(c, 1, null, { ignoreIframes: true }) === false, 'out of reach up there');
+  const y0 = c.y; for (let i = 0; i < 30; i++) ai(sim, c, 1 / 60, { p, spd: 3, def: enemyDef('spider_crawler') }); __ok(c.y > y0 && c.ceil === true, 'it creeps after you overhead');
+  p.x = c.x; p.y = c.y + 1.2; ai(sim, c, 1 / 60, { p, spd: 3, def: enemyDef('spider_crawler') }); __ok(c.ceil === 'drop', 'and drops when you come close');
+  for (let i = 0; i < 40; i++) ai(sim, c, 1 / 60, { p, spd: 3, def: enemyDef('spider_crawler') }); __ok(c.ceil === false && !c.air && c.hz === 0, 'landing to fight');
+  __ok(['wizard_arch', 'wizard_fire_arch', 'wizard_storm_arch', 'wizard_bone_arch'].every(t => !Object.keys(enemyDef(t).spawns).length), 'archmages never spawn at random');
+});
 attempt('skeleton mages', () => {
   const sim = freshSim(); const p = sim.players.p1; p.god = false; p.hp = p.maxHp = 400; sim.teleport(p, 'dbg', 20.5, 20.5, 0);
   const clear = () => { for (const e of sim.ents) if (e.k !== 'pl') e.dead = true; sim.ents = sim.ents.filter(e => !e.dead); sim.ossuaries = []; };

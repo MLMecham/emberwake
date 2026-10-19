@@ -4055,23 +4055,26 @@ defineEnemy({
   hp: 8, spd: 3.2, dmg: 2, r: 0.6, sc: 1.5, boss: true,
   bossOf: [6], // (the Sunken Stair has the Bog King now: enemies/frog.js)
   ai: AI.lunge(0.55, 0.5, 1.1),
-  anim: { fps: 9, frames: (s, kit) => [s, kit.shearRows(kit.shearRows(s, 2, 5, 1), 10, 13, -1), kit.shearRows(kit.shearRows(s, 2, 5, -1), 10, 13, 1)] },
+  // two body segments: the round abdomen behind and above, the head below it with its eyes and fangs; four legs a side
+  // that rise to a high knee before they reach the floor. The walk ripples the legs front and back out of step.
+  anim: { fps: 10, frames: (s, kit) => { const a = kit.shearRows(kit.shearRows(s, 4, 8, 1), 11, 14, -1), b = kit.shearRows(kit.shearRows(s, 4, 8, -1), 11, 14, 1); return [s, a, kit.bob(a, 1), s, b, kit.bob(b, 1)]; } },
+  pal: { J: '#6a6070' }, // J: the legs (each kind sets its own, a shade of its body)
   sprite: [
     '................',
-    '................',
-    '.k....kkkk....k.',
-    '..k..kGGGGk..k..',
-    'k..kkGGGGGGkk..k',
-    '.k.kGrGGGGrGk.k.',
-    '..kkGGGGGGGGkk..',
-    'kkkGGGrrrrGGGkkk',
-    '...kGGGGGGGGk...',
-    '..kkGGGkkGGGkk..',
-    '.k.kkGGGGGGkk.k.',
-    'k..k.kkkkkk.k..k',
-    '..k..........k..',
-    '.k............k.',
-    '................',
+    '......kkkk......',
+    '....kkGGGGkk....',
+    '...kGGGrrGGGk...',
+    '.J.kGGrGGrGGk.J.',
+    'J.JkGGGrrGGGkJ.J',
+    'J.J.kkGGGGkk.J.J',
+    'J..J..kkkk..J..J',
+    'J...JJkGGkJJ...J',
+    '.J.kGrGGGGrGk.J.',
+    '.JJkGGrGGrGGkJJ.',
+    'J..kkGGGGGGkk..J',
+    'J.J..kwkkwk..J.J',
+    'J.J...w..w...J.J',
+    '.J............J.',
     '................',
   ],
 });
@@ -4095,13 +4098,42 @@ defineEnemy({
 'use strict';
 const HANG_Z = 1.55; // how high a dropper hangs (the Silkwood is two tiles tall, gimmicks/webs.js)
 const SPIDER_ROWS = enemyDef('spider').sprite; // the old cave spider's body, recolored for each
-const legs = { fps: 9, frames: (s, kit) => [s, kit.shearRows(kit.shearRows(s, 2, 5, 1), 10, 13, -1), kit.shearRows(kit.shearRows(s, 2, 5, -1), 10, 13, 1)] };
+const legs = enemyDef('spider').anim; // (enemies/spider.js: the legs ripple out of step, the body dips)
 const kin = (o) => defineEnemy(Object.assign({ spiderkin: true, anim: legs, spawns: { dungeons: [13] } }, o));
-kin({ id: 'spiderling', title: 'SPIDERLING', hp: 1, spd: 3.6, dmg: 1, r: 0.26, sc: 0.55, ai: AI.lunge(0.35, 0.35, 0.8), sprite: SPIDER_ROWS, pal: { G: '#8a7a90', r: '#ff4040' } });
-kin({ id: 'spider_crawler', title: 'CRAWLER', hp: 3, spd: 3.0, dmg: 2, r: 0.42, sc: 1.0, ai: AI.lunge(0.5, 0.6, 1.2), sprite: SPIDER_ROWS, pal: { G: '#4a3a5a', r: '#ffd040' } });
-kin({ id: 'spider_spitter', title: 'SPINNER', hp: 3, spd: 1.6, dmg: 1, r: 0.4, sc: 0.95, ai: AI.shooter('webglob'), sprite: SPIDER_ROWS, pal: { G: '#3e5a4a', r: '#e0ffe0' } });
+// CEILING CRAWLERS: in a room two tiles tall (the Silkwood) crawlers and spiderlings start up on the ceiling, upside down,
+// out of reach. They creep after you overhead, skittering, and drop the moment you're close (their shadow shows where).
+const CEIL_CHANCE = 0.7, CEIL_DROP = 2.0, CEIL_CREEP = 0.55; // share that start up there; how close you get before they drop; their speed up there
+const upside = (rows) => rows.slice().reverse();
+function ceilingWalker(base) {
+  return function (sim, e, dt, ctx) {
+    const L = sim.W.levels[e.lvl], { p } = ctx;
+    if (e.ceil == null) e.ceil = (L.ceilH || 1) >= 2 && Math.random() < CEIL_CHANCE;
+    if (e.ceil === true) {
+      e.air = true; e.hz = (L.ceilH || 1) - 0.45;
+      if (p) {
+        const d = Math.sqrt(dist2(p.x, p.y, e.x, e.y));
+        if (d < CEIL_DROP) { e.ceil = 'drop'; e.dropT = 0.45; sim.spawn({ k: 'fx', lvl: e.lvl, x: p.x, y: p.y, spr: 'shadowring', life: 0.45, sc: 0.9, z: -0.35 }); sim.sfx('skitter', e.lvl, e.x, e.y); e.tx = p.x; e.ty = p.y; return; }
+        const a = Math.atan2(p.y - e.y, p.x - e.x) + Math.sin(sim.time * 3 + e.id) * 0.6; // a wandering, twitchy line toward you
+        sim.moveEnt(e, Math.cos(a) * ctx.spd * CEIL_CREEP * dt, Math.sin(a) * ctx.spd * CEIL_CREEP * dt, Object.assign({}, ctx.def, { fly: true })); e.f = a;
+        if (Math.random() < dt * 0.7) sim.sfx('skitter', e.lvl, e.x, e.y);
+      }
+      return;
+    }
+    if (e.ceil === 'drop') {
+      e.dropT -= dt; e.x += (e.tx - e.x) * Math.min(1, dt * 7); e.y += (e.ty - e.y) * Math.min(1, dt * 7); e.hz = Math.max(0, ((L.ceilH || 1) - 0.45) * e.dropT / 0.45);
+      if (e.dropT > 0) return; e.ceil = false; e.air = false; e.hz = 0; e.tm = 0.25; e.st = 0;
+      for (const pl of Object.values(sim.players)) if (pl.alive && pl.lvl === e.lvl && dist2(pl.x, pl.y, e.x, e.y) < 0.6) sim.hurtPlayer(pl, 1 * e.dmgMul, e);
+      return;
+    }
+    base(sim, e, dt, ctx);
+  };
+}
+const ceilKin = (o) => { kin(Object.assign({}, o, { ai: ceilingWalker(o.ai), view: (e) => e.hz || 0, sprFor: (e) => (e.ceil === true ? o.id + '_ceil' : null) })); defineSprite(o.id + '_ceil', upside(o.sprite), o.pal); };
+ceilKin({ id: 'spiderling', title: 'SPIDERLING', hp: 1, spd: 3.6, dmg: 1, r: 0.26, sc: 0.55, ai: AI.lunge(0.35, 0.35, 0.8), sprite: SPIDER_ROWS, pal: { G: '#8a7a90', r: '#ff4040', J: '#b0a4b8' } });
+ceilKin({ id: 'spider_crawler', title: 'CRAWLER', hp: 3, spd: 3.0, dmg: 2, r: 0.42, sc: 1.0, ai: AI.lunge(0.5, 0.6, 1.2), sprite: SPIDER_ROWS, pal: { G: '#4a3a5a', r: '#ffd040', J: '#7a6a8c' } });
+kin({ id: 'spider_spitter', title: 'SPINNER', hp: 3, spd: 1.6, dmg: 1, r: 0.4, sc: 0.95, ai: AI.shooter('webglob'), sprite: SPIDER_ROWS, pal: { G: '#3e5a4a', r: '#e0ffe0', J: '#6a8a76' } });
 // DROPPER: st 0 = on the ceiling (out of reach); st 1 = falling toward (tx, ty) after tm; then a crawler
-kin({ id: 'spider_ceiling', title: 'DROPPER', hp: 3, spd: 3.0, dmg: 2, r: 0.42, sc: 1.0, sprite: SPIDER_ROWS, pal: { G: '#2a2430', r: '#ff2020' }, spawns: { dungeons: [13] },
+kin({ id: 'spider_ceiling', title: 'DROPPER', hp: 3, spd: 3.0, dmg: 2, r: 0.42, sc: 1.0, sprite: SPIDER_ROWS, pal: { G: '#2a2430', r: '#ff2020', J: '#5a5064' }, spawns: { dungeons: [13] },
   view: (e) => e.hz || 0,
   ai(sim, e, dt, ctx) {
     const { p } = ctx;
@@ -4117,8 +4149,8 @@ kin({ id: 'spider_ceiling', title: 'DROPPER', hp: 3, spd: 3.0, dmg: 2, r: 0.42, 
   },
 });
 // EMBERBACK: wanders; silk under it catches
-const EMBER_ROWS = SPIDER_ROWS.map((r, y) => y === 0 ? '......yo........' : y === 1 ? '.....oyyo.......' : r);
-kin({ id: 'spider_ember', title: 'EMBERBACK', hp: 2, spd: 1.8, dmg: 1, r: 0.38, sc: 0.85, sprite: EMBER_ROWS, pal: { G: '#5a2a1a', r: '#ffd040' }, elem: 'fire', spawns: {},
+const EMBER_ROWS = SPIDER_ROWS.map((r, y) => y === 0 ? '.......yo.......' : y === 1 ? '......oyyo......' : r); // the ember rides on its back
+kin({ id: 'spider_ember', title: 'EMBERBACK', hp: 2, spd: 1.8, dmg: 1, r: 0.38, sc: 0.85, sprite: EMBER_ROWS, pal: { G: '#5a2a1a', r: '#ffd040', J: '#8a5a40' }, elem: 'fire', spawns: {},
   ai(sim, e, dt, ctx) {
     AI.flutter(sim, e, dt, ctx); const L = sim.W.levels[e.lvl]; const i = L.idx(Math.floor(e.x), Math.floor(e.y));
     if (TINFO[L.tiles[i]].silk) sim.igniteSilk(L, i);
@@ -4156,28 +4188,28 @@ kin({ id: 'spider_pip', title: 'PIP', hp: 99, spd: 3.2, dmg: 0, r: 0.24, sc: 0.5
   },
 });
 // ---- THE BROODMOTHER ----
-const BROOD_ROWS = [
-  '................',
-  '.k....kkkk....k.',
-  '..k..kZZZZk..k..',
-  'k..kkZrZZrZkk..k',
-  '.k.kZZrZZrZZk.k.',
-  '..kkZZZZZZZZkk..',
-  'kkkZZZrrrrZZZkkk',
-  '...kZZZZZZZZk...',
-  '..kkZZZkkZZZkk..',
-  '.k.kZZzzzzZZk.k.',
-  'k..kZzZZZZzZk..k',
-  '..k.kZzzzzZk.k..',
-  '.k...kZZZZk...k.',
-  'k.....kkkk.....k',
-  '................',
-  '................'];
+const BROOD_ROWS = [ // a swollen abdomen patterned like eggs, the head tucked under it, legs high and wide
+  '.....kkkkkk.....',
+  '...kkZZZZZZkk...',
+  '..kZZzZZZZzZZk..',
+  'J.kZZZzZZzZZZk.J',
+  '.JkZzZZzzZZzZkJ.',
+  'J.kZZZzZZzZZZk.J',
+  'JJ.kZZZZZZZZk.JJ',
+  'J.J.kkZZZZkk.J.J',
+  'J..JJ.kkkk.JJ..J',
+  '.J.kkZZZZZZkk.J.',
+  '..JkZrZrrZrZkJ..',
+  '.J.kZZrZZrZZk.J.',
+  'J..kkZZZZZZkk..J',
+  'J.J..kwkkwk..J.J',
+  '.J...w....w...J.',
+  'J..............J'];
 defineSpriteVariant('broodmother_glow', 'broodmother', { Z: '#e0d0f0', z: '#ff6060' }); // about to strike
 const BM = { climbEvery: 7, upTime: 1.6, spinEvery: 9, eggsEvery: 12, wrapStill: 2.2 };
 defineEnemy({
   id: 'broodmother', title: 'THE BROODMOTHER', hp: 16, spd: 2.6, dmg: 2, r: 0.8, sc: 2.4, boss: true, bossOf: [13], spiderkin: true, anim: legs, sprite: BROOD_ROWS,
-  pal: { Z: '#d8d0c8', z: '#7a2a3a' },
+  pal: { Z: '#d8d0c8', z: '#7a2a3a', J: '#a89c94' },
   view: (e) => e.hz || 0,
   sprFor: (e) => e.glowT > 0 ? 'broodmother_glow' : null,
   ai(sim, e, dt, ctx) {
@@ -4389,7 +4421,7 @@ defineHints(['THE THORN-FOLK ARE MORE THAN THORNLINGS. THE BIG ONES THROW TWO SP
 //   Tiers:    MAGE    empty sockets. One spell.
 //             ADEPT   glowing eyes, bone plates on the shoulders (armor 1). Deeper in its own element (below); resists it
 //                     by half (bone: every kind of magic).
-//             ARCHMAGE  burning eyes and mouth, plates and a bone crown (armor 2). Floats (def.fly): pits and lava can't take it. Resists its element by MAGE_RESIST[3].
+//             ARCHMAGE  (never a random spawn: bosses and minibosses only) burning eyes and mouth, plates and a bone crown (armor 2). Floats (def.fly): pits and lava can't take it. Resists its element by MAGE_RESIST[3].
 //                     Starts its element's COMBO: it raises its staff high and a warning sounds (each element its own);
 //                     every adept and archmage in the room blinks to its side, raises its staff with a thread of light to
 //                     the leader's, and makes it hit harder (they bunch up: a good moment for a bomb). Alone it still casts it.
@@ -4416,6 +4448,7 @@ const WIZ_BONE_CHANCE = 0.02;
 const MAGE_RESIST = [0, 0, 0.5, 0.7]; // by tier (1 mage, 2 adept, 3 archmage); a bone mage resists all magic, and from tier 1
 const OSSUARY_CLOSE = 5; // seconds from the cage rising to it crushing whoever is still inside
 const OSSUARY_WINDUP = 1.1; // the archmage's chant (same as the other combos): bones on the floor show where the ribs will rise
+const OSSUARY_CRUSH = 10; // half-hearts the cage does to whoever is still inside when it closes (5 hearts; +1 heart per joiner)
 const OSSUARY_DEAD = 5, OSSUARY_DEAD_MAX = 10; // fully armored skeletons that climb out as it falls (no more than OSSUARY_DEAD_MAX of the mage's own at once)
 // ---- the look: rows built from the tier (eyes, armor shown) ----
 const WIZ_BASE = [
@@ -4548,7 +4581,7 @@ function ossuary(sim, e, p, joined) {
     sim.setTempTile(L.id, i, hot ? TL.BONERIB_HOT : TL.BONERIB, OSSUARY_CLOSE + 0.2); ribs.push(i);
   }
   L.ribHits = L.ribHits || {}; for (const i of ribs) L.ribHits[i] = 0;
-  sim.ossuaries = (sim.ossuaries || []).concat([{ lvl: L.id, cx: cx + 0.5, cy: cy + 0.5, ribs, by: e.id, dmg: 3 + joined.length, at: sim.time + (joined.includes('force') ? OSSUARY_CLOSE / 2 : OSSUARY_CLOSE), storm: joined.includes('storm'), zapAt: sim.time + 0.5 }]);
+  sim.ossuaries = (sim.ossuaries || []).concat([{ lvl: L.id, cx: cx + 0.5, cy: cy + 0.5, ribs, by: e.id, dmg: OSSUARY_CRUSH + 2 * joined.length, at: sim.time + (joined.includes('force') ? OSSUARY_CLOSE / 2 : OSSUARY_CLOSE), storm: joined.includes('storm'), zapAt: sim.time + 0.5 }]);
   sim.sfx('rattle', L.id, p.x, p.y); sim.ev({ t: 'shake', lvl: L.id, x: p.x, y: p.y }); sim.msg('THE OSSUARY CLOSES!');
 }
 // called by game/sim.js every tick
@@ -4597,7 +4630,7 @@ function mageAi(sim, e, dt, { p }) {
 for (const el of Object.keys(ELEM)) for (let tier = 1; tier <= 3; tier++) {
   const E = ELEM[el], id = mageId(el, tier), bone = el === 'bone', pal = Object.assign({}, E.pal, { X: E.eye, Y: E.core });
   const armor = tier - 1, res = {}; for (const k of E.resist) res[k] = Math.max(MAGE_RESIST[tier], bone ? 0.5 : 0);
-  const spawns = bone ? {} : { force: [{ dungeons: [6, 7, 8, 9] }, { dungeons: [8, 9] }, { dungeons: [9] }], fire: [{ dungeons: [7, 9] }, { dungeons: [9, 12] }, { dungeons: [12] }], storm: [{ dungeons: [6, 8, 9] }, { dungeons: [8, 9] }, { dungeons: [9] }] }[el][tier - 1];
+  const spawns = bone || tier === 3 ? {} : { force: [{ dungeons: [6, 7, 8, 9] }, { dungeons: [8, 9] }, { dungeons: [9] }], fire: [{ dungeons: [7, 9] }, { dungeons: [9, 12] }, { dungeons: [12] }], storm: [{ dungeons: [6, 8, 9] }, { dungeons: [8, 9] }, { dungeons: [9] }] }[el][tier - 1];
   const ids = { full: id, bare: id + '_bare' }; for (let a = 0; a < armor; a++) ids['a' + a] = id + '_a' + a;
   defineEnemy({
     id, title: E.name + ' ' + TIER_NAME[tier], mage: true, elem: el, tier, armor: armor || undefined,

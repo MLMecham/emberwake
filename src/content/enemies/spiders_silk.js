@@ -14,13 +14,42 @@
 'use strict';
 const HANG_Z = 1.55; // how high a dropper hangs (the Silkwood is two tiles tall, gimmicks/webs.js)
 const SPIDER_ROWS = enemyDef('spider').sprite; // the old cave spider's body, recolored for each
-const legs = { fps: 9, frames: (s, kit) => [s, kit.shearRows(kit.shearRows(s, 2, 5, 1), 10, 13, -1), kit.shearRows(kit.shearRows(s, 2, 5, -1), 10, 13, 1)] };
+const legs = enemyDef('spider').anim; // (enemies/spider.js: the legs ripple out of step, the body dips)
 const kin = (o) => defineEnemy(Object.assign({ spiderkin: true, anim: legs, spawns: { dungeons: [13] } }, o));
-kin({ id: 'spiderling', title: 'SPIDERLING', hp: 1, spd: 3.6, dmg: 1, r: 0.26, sc: 0.55, ai: AI.lunge(0.35, 0.35, 0.8), sprite: SPIDER_ROWS, pal: { G: '#8a7a90', r: '#ff4040' } });
-kin({ id: 'spider_crawler', title: 'CRAWLER', hp: 3, spd: 3.0, dmg: 2, r: 0.42, sc: 1.0, ai: AI.lunge(0.5, 0.6, 1.2), sprite: SPIDER_ROWS, pal: { G: '#4a3a5a', r: '#ffd040' } });
-kin({ id: 'spider_spitter', title: 'SPINNER', hp: 3, spd: 1.6, dmg: 1, r: 0.4, sc: 0.95, ai: AI.shooter('webglob'), sprite: SPIDER_ROWS, pal: { G: '#3e5a4a', r: '#e0ffe0' } });
+// CEILING CRAWLERS: in a room two tiles tall (the Silkwood) crawlers and spiderlings start up on the ceiling, upside down,
+// out of reach. They creep after you overhead, skittering, and drop the moment you're close (their shadow shows where).
+const CEIL_CHANCE = 0.7, CEIL_DROP = 2.0, CEIL_CREEP = 0.55; // share that start up there; how close you get before they drop; their speed up there
+const upside = (rows) => rows.slice().reverse();
+function ceilingWalker(base) {
+  return function (sim, e, dt, ctx) {
+    const L = sim.W.levels[e.lvl], { p } = ctx;
+    if (e.ceil == null) e.ceil = (L.ceilH || 1) >= 2 && Math.random() < CEIL_CHANCE;
+    if (e.ceil === true) {
+      e.air = true; e.hz = (L.ceilH || 1) - 0.45;
+      if (p) {
+        const d = Math.sqrt(dist2(p.x, p.y, e.x, e.y));
+        if (d < CEIL_DROP) { e.ceil = 'drop'; e.dropT = 0.45; sim.spawn({ k: 'fx', lvl: e.lvl, x: p.x, y: p.y, spr: 'shadowring', life: 0.45, sc: 0.9, z: -0.35 }); sim.sfx('skitter', e.lvl, e.x, e.y); e.tx = p.x; e.ty = p.y; return; }
+        const a = Math.atan2(p.y - e.y, p.x - e.x) + Math.sin(sim.time * 3 + e.id) * 0.6; // a wandering, twitchy line toward you
+        sim.moveEnt(e, Math.cos(a) * ctx.spd * CEIL_CREEP * dt, Math.sin(a) * ctx.spd * CEIL_CREEP * dt, Object.assign({}, ctx.def, { fly: true })); e.f = a;
+        if (Math.random() < dt * 0.7) sim.sfx('skitter', e.lvl, e.x, e.y);
+      }
+      return;
+    }
+    if (e.ceil === 'drop') {
+      e.dropT -= dt; e.x += (e.tx - e.x) * Math.min(1, dt * 7); e.y += (e.ty - e.y) * Math.min(1, dt * 7); e.hz = Math.max(0, ((L.ceilH || 1) - 0.45) * e.dropT / 0.45);
+      if (e.dropT > 0) return; e.ceil = false; e.air = false; e.hz = 0; e.tm = 0.25; e.st = 0;
+      for (const pl of Object.values(sim.players)) if (pl.alive && pl.lvl === e.lvl && dist2(pl.x, pl.y, e.x, e.y) < 0.6) sim.hurtPlayer(pl, 1 * e.dmgMul, e);
+      return;
+    }
+    base(sim, e, dt, ctx);
+  };
+}
+const ceilKin = (o) => { kin(Object.assign({}, o, { ai: ceilingWalker(o.ai), view: (e) => e.hz || 0, sprFor: (e) => (e.ceil === true ? o.id + '_ceil' : null) })); defineSprite(o.id + '_ceil', upside(o.sprite), o.pal); };
+ceilKin({ id: 'spiderling', title: 'SPIDERLING', hp: 1, spd: 3.6, dmg: 1, r: 0.26, sc: 0.55, ai: AI.lunge(0.35, 0.35, 0.8), sprite: SPIDER_ROWS, pal: { G: '#8a7a90', r: '#ff4040', J: '#b0a4b8' } });
+ceilKin({ id: 'spider_crawler', title: 'CRAWLER', hp: 3, spd: 3.0, dmg: 2, r: 0.42, sc: 1.0, ai: AI.lunge(0.5, 0.6, 1.2), sprite: SPIDER_ROWS, pal: { G: '#4a3a5a', r: '#ffd040', J: '#7a6a8c' } });
+kin({ id: 'spider_spitter', title: 'SPINNER', hp: 3, spd: 1.6, dmg: 1, r: 0.4, sc: 0.95, ai: AI.shooter('webglob'), sprite: SPIDER_ROWS, pal: { G: '#3e5a4a', r: '#e0ffe0', J: '#6a8a76' } });
 // DROPPER: st 0 = on the ceiling (out of reach); st 1 = falling toward (tx, ty) after tm; then a crawler
-kin({ id: 'spider_ceiling', title: 'DROPPER', hp: 3, spd: 3.0, dmg: 2, r: 0.42, sc: 1.0, sprite: SPIDER_ROWS, pal: { G: '#2a2430', r: '#ff2020' }, spawns: { dungeons: [13] },
+kin({ id: 'spider_ceiling', title: 'DROPPER', hp: 3, spd: 3.0, dmg: 2, r: 0.42, sc: 1.0, sprite: SPIDER_ROWS, pal: { G: '#2a2430', r: '#ff2020', J: '#5a5064' }, spawns: { dungeons: [13] },
   view: (e) => e.hz || 0,
   ai(sim, e, dt, ctx) {
     const { p } = ctx;
@@ -36,8 +65,8 @@ kin({ id: 'spider_ceiling', title: 'DROPPER', hp: 3, spd: 3.0, dmg: 2, r: 0.42, 
   },
 });
 // EMBERBACK: wanders; silk under it catches
-const EMBER_ROWS = SPIDER_ROWS.map((r, y) => y === 0 ? '......yo........' : y === 1 ? '.....oyyo.......' : r);
-kin({ id: 'spider_ember', title: 'EMBERBACK', hp: 2, spd: 1.8, dmg: 1, r: 0.38, sc: 0.85, sprite: EMBER_ROWS, pal: { G: '#5a2a1a', r: '#ffd040' }, elem: 'fire', spawns: {},
+const EMBER_ROWS = SPIDER_ROWS.map((r, y) => y === 0 ? '.......yo.......' : y === 1 ? '......oyyo......' : r); // the ember rides on its back
+kin({ id: 'spider_ember', title: 'EMBERBACK', hp: 2, spd: 1.8, dmg: 1, r: 0.38, sc: 0.85, sprite: EMBER_ROWS, pal: { G: '#5a2a1a', r: '#ffd040', J: '#8a5a40' }, elem: 'fire', spawns: {},
   ai(sim, e, dt, ctx) {
     AI.flutter(sim, e, dt, ctx); const L = sim.W.levels[e.lvl]; const i = L.idx(Math.floor(e.x), Math.floor(e.y));
     if (TINFO[L.tiles[i]].silk) sim.igniteSilk(L, i);
@@ -75,28 +104,28 @@ kin({ id: 'spider_pip', title: 'PIP', hp: 99, spd: 3.2, dmg: 0, r: 0.24, sc: 0.5
   },
 });
 // ---- THE BROODMOTHER ----
-const BROOD_ROWS = [
-  '................',
-  '.k....kkkk....k.',
-  '..k..kZZZZk..k..',
-  'k..kkZrZZrZkk..k',
-  '.k.kZZrZZrZZk.k.',
-  '..kkZZZZZZZZkk..',
-  'kkkZZZrrrrZZZkkk',
-  '...kZZZZZZZZk...',
-  '..kkZZZkkZZZkk..',
-  '.k.kZZzzzzZZk.k.',
-  'k..kZzZZZZzZk..k',
-  '..k.kZzzzzZk.k..',
-  '.k...kZZZZk...k.',
-  'k.....kkkk.....k',
-  '................',
-  '................'];
+const BROOD_ROWS = [ // a swollen abdomen patterned like eggs, the head tucked under it, legs high and wide
+  '.....kkkkkk.....',
+  '...kkZZZZZZkk...',
+  '..kZZzZZZZzZZk..',
+  'J.kZZZzZZzZZZk.J',
+  '.JkZzZZzzZZzZkJ.',
+  'J.kZZZzZZzZZZk.J',
+  'JJ.kZZZZZZZZk.JJ',
+  'J.J.kkZZZZkk.J.J',
+  'J..JJ.kkkk.JJ..J',
+  '.J.kkZZZZZZkk.J.',
+  '..JkZrZrrZrZkJ..',
+  '.J.kZZrZZrZZk.J.',
+  'J..kkZZZZZZkk..J',
+  'J.J..kwkkwk..J.J',
+  '.J...w....w...J.',
+  'J..............J'];
 defineSpriteVariant('broodmother_glow', 'broodmother', { Z: '#e0d0f0', z: '#ff6060' }); // about to strike
 const BM = { climbEvery: 7, upTime: 1.6, spinEvery: 9, eggsEvery: 12, wrapStill: 2.2 };
 defineEnemy({
   id: 'broodmother', title: 'THE BROODMOTHER', hp: 16, spd: 2.6, dmg: 2, r: 0.8, sc: 2.4, boss: true, bossOf: [13], spiderkin: true, anim: legs, sprite: BROOD_ROWS,
-  pal: { Z: '#d8d0c8', z: '#7a2a3a' },
+  pal: { Z: '#d8d0c8', z: '#7a2a3a', J: '#a89c94' },
   view: (e) => e.hz || 0,
   sprFor: (e) => e.glowT > 0 ? 'broodmother_glow' : null,
   ai(sim, e, dt, ctx) {

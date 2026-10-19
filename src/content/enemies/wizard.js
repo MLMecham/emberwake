@@ -5,7 +5,7 @@
 //   Tiers:    MAGE    empty sockets. One spell.
 //             ADEPT   glowing eyes, bone plates on the shoulders (armor 1). Deeper in its own element (below); resists it
 //                     by half (bone: every kind of magic).
-//             ARCHMAGE  burning eyes and mouth, plates and a bone crown (armor 2). Floats (def.fly): pits and lava can't take it. Resists its element by MAGE_RESIST[3].
+//             ARCHMAGE  (never a random spawn: bosses and minibosses only) burning eyes and mouth, plates and a bone crown (armor 2). Floats (def.fly): pits and lava can't take it. Resists its element by MAGE_RESIST[3].
 //                     Starts its element's COMBO: it raises its staff high and a warning sounds (each element its own);
 //                     every adept and archmage in the room blinks to its side, raises its staff with a thread of light to
 //                     the leader's, and makes it hit harder (they bunch up: a good moment for a bomb). Alone it still casts it.
@@ -32,6 +32,7 @@ const WIZ_BONE_CHANCE = 0.02;
 const MAGE_RESIST = [0, 0, 0.5, 0.7]; // by tier (1 mage, 2 adept, 3 archmage); a bone mage resists all magic, and from tier 1
 const OSSUARY_CLOSE = 5; // seconds from the cage rising to it crushing whoever is still inside
 const OSSUARY_WINDUP = 1.1; // the archmage's chant (same as the other combos): bones on the floor show where the ribs will rise
+const OSSUARY_CRUSH = 10; // half-hearts the cage does to whoever is still inside when it closes (5 hearts; +1 heart per joiner)
 const OSSUARY_DEAD = 5, OSSUARY_DEAD_MAX = 10; // fully armored skeletons that climb out as it falls (no more than OSSUARY_DEAD_MAX of the mage's own at once)
 // ---- the look: rows built from the tier (eyes, armor shown) ----
 const WIZ_BASE = [
@@ -164,7 +165,7 @@ function ossuary(sim, e, p, joined) {
     sim.setTempTile(L.id, i, hot ? TL.BONERIB_HOT : TL.BONERIB, OSSUARY_CLOSE + 0.2); ribs.push(i);
   }
   L.ribHits = L.ribHits || {}; for (const i of ribs) L.ribHits[i] = 0;
-  sim.ossuaries = (sim.ossuaries || []).concat([{ lvl: L.id, cx: cx + 0.5, cy: cy + 0.5, ribs, by: e.id, dmg: 3 + joined.length, at: sim.time + (joined.includes('force') ? OSSUARY_CLOSE / 2 : OSSUARY_CLOSE), storm: joined.includes('storm'), zapAt: sim.time + 0.5 }]);
+  sim.ossuaries = (sim.ossuaries || []).concat([{ lvl: L.id, cx: cx + 0.5, cy: cy + 0.5, ribs, by: e.id, dmg: OSSUARY_CRUSH + 2 * joined.length, at: sim.time + (joined.includes('force') ? OSSUARY_CLOSE / 2 : OSSUARY_CLOSE), storm: joined.includes('storm'), zapAt: sim.time + 0.5 }]);
   sim.sfx('rattle', L.id, p.x, p.y); sim.ev({ t: 'shake', lvl: L.id, x: p.x, y: p.y }); sim.msg('THE OSSUARY CLOSES!');
 }
 // called by game/sim.js every tick
@@ -213,7 +214,7 @@ function mageAi(sim, e, dt, { p }) {
 for (const el of Object.keys(ELEM)) for (let tier = 1; tier <= 3; tier++) {
   const E = ELEM[el], id = mageId(el, tier), bone = el === 'bone', pal = Object.assign({}, E.pal, { X: E.eye, Y: E.core });
   const armor = tier - 1, res = {}; for (const k of E.resist) res[k] = Math.max(MAGE_RESIST[tier], bone ? 0.5 : 0);
-  const spawns = bone ? {} : { force: [{ dungeons: [6, 7, 8, 9] }, { dungeons: [8, 9] }, { dungeons: [9] }], fire: [{ dungeons: [7, 9] }, { dungeons: [9, 12] }, { dungeons: [12] }], storm: [{ dungeons: [6, 8, 9] }, { dungeons: [8, 9] }, { dungeons: [9] }] }[el][tier - 1];
+  const spawns = bone || tier === 3 ? {} : { force: [{ dungeons: [6, 7, 8, 9] }, { dungeons: [8, 9] }, { dungeons: [9] }], fire: [{ dungeons: [7, 9] }, { dungeons: [9, 12] }, { dungeons: [12] }], storm: [{ dungeons: [6, 8, 9] }, { dungeons: [8, 9] }, { dungeons: [9] }] }[el][tier - 1];
   const ids = { full: id, bare: id + '_bare' }; for (let a = 0; a < armor; a++) ids['a' + a] = id + '_a' + a;
   defineEnemy({
     id, title: E.name + ' ' + TIER_NAME[tier], mage: true, elem: el, tier, armor: armor || undefined,
