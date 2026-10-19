@@ -107,6 +107,10 @@ Not built yet. Parked here so they don't get lost. Newest at the bottom.
 - **Second ring slot:** the reward for clearing all three towers.
 - **Backlog: gauntlets.** Push tombstones aside to find stairs under graveyards.
 
+## The Ascent (later)
+- **Ice on the left, fire on the right.** Mitch's picture: the climb split by side, frost down the west half and lava down the east,
+  rather than lava low and ice high. Not urgent.
+
 ## Open questions (from Mitch, to decide)
 - **Lakes: drain or dive?** Draining reuses the eye/tide machinery: a sluice eye on the shore of two lake regions drains them for good and shows a cave on the lakebed. It's cheap, but it's another eye puzzle. Diving would be a new item: swim under deep fresh water, with a blue underwater view and caves under the surface. It's more novel, but it would be the fourth way across water (raft, frost arrows, cloak). Leaning: drain now, dive later if a water dungeon wants it.
 - **Shield techniques.** Perfect block is the Wardhold shield's (built). The Mirror Guard scroll (reflected shots x3) still needs a place in the world. Still open:

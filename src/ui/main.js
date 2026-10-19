@@ -190,7 +190,7 @@ function updateLocal(dt, inp) {
     const fx = Math.floor(Lc.x + Math.sign(mvx) * (blockedX ? 0.5 : 0)), fy = Math.floor(Lc.y + Math.sign(mvy) * (blockedY ? 0.5 : 0));
     for (const [tx, ty] of [[fx, fy], [Math.floor(Lc.x + Math.cos(Lc.a) * 0.6), Math.floor(Lc.y + Math.sin(Lc.a) * 0.6)]]) {
       const idx = ty * L.w + tx; const t = L.get(tx, ty); const ti = TINFO[t];
-      if (ti.portal || ti.shardGate || ti.sealedMsg) { sendAction({ t: 'enter', idx }); Lc.bumpT = 0.8; break; }
+      if (ti.portal || ti.shardGate || ti.hearthGate || ti.sealedMsg) { sendAction({ t: 'enter', idx }); Lc.bumpT = 0.8; break; }
       if (ti.locked) { sendAction({ t: 'unlock', idx }); Lc.bumpT = 0.6; break; }
       if (ti.exitWall) { sendAction({ t: 'exit' }); Lc.bumpT = 0.8; break; }
     }
