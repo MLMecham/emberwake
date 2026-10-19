@@ -11,6 +11,7 @@ defineProjectile({ id: 'magic', elem: 'magic', spr: 'magic', spd: 4.5, dmg: 2, s
 defineProjectile({ id: 'fire', elem: 'fire', spr: 'fireball', spd: 4.5, dmg: 2 });
 defineProjectile({ id: 'stormbolt', elem: 'magic', spr: 'stormbolt', spd: 8, dmg: 2, sc: 0.6 }); // a storm mage's crackling bolt (enemies/wizard.js)
 defineProjectile({ id: 'forcepush', elem: 'magic', spr: 'forcebolt', spd: 6, dmg: 1, sc: 0.8, range: 4.5, knock: 15 }); // a force adept's push: it shoves (sim 'shove' event)
+defineProjectile({ id: 'eforcewave', elem: 'magic', spr: 'forcebolt', spd: 7, dmg: 1, sc: 1.1, range: 7, knock: 34, guardOnly: true }); // a force archmage's FORCE WAVE: only a raised shield stops it, and it throws you far
 defineProjectile({ id: 'elance', elem: 'magic', spr: 'beam', spd: 20, dmg: 3, sc: 1.1, range: 14 }); // a storm archmage's LIGHTNING LANCE
 defineProjectile({ id: 'boneshard', spr: 'boneshard', spd: 6, dmg: 2, sc: 0.55, blockable: true }); // a bone mage's shard: physical, so a shield stops it
 defineSprite('stormbolt', [

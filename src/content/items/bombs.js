@@ -17,15 +17,15 @@ defineItem({
 });
 // dropped by enemies
 defineItem({ id: 'bomb', name: 'BOMBS', sprite: 'bomb', give(sim, p) { p.bombs = Math.min(p.maxBombs, p.bombs + 4); sim.sfx('gem', p.lvl); } });
-// Without a bag you can carry 1 bomb (game/sim.js bombCap). Dungeon 2 treasure: carry 8, shared with the party.
+// Without a bag you can carry 1 bomb; each bag holds 8 more, in either order (game/sim.js bombCap). Dungeon 2 treasure, shared.
 defineItem({
   id: 'bombbag', name: 'BOMB BAG', sprite: 'bomb', team: true, debug: true,
   give(sim, p, ctx) { p.items.bombs = true; p.items.bombbag = true; p.maxBombs = bombCap(p); p.bombs = Math.max(p.bombs, 8); ctx.banner(); },
   debugGrant(p) { p.items.bombs = true; p.items.bombbag = true; },
 });
-// the second bag, sold in a hidden grotto shop (content/caves.js 'bombshop'): carry 16
+// the other bag, sold in a hidden grotto shop (content/caves.js 'bombshop'): 8 more
 defineItem({
-  id: 'bombbag2', name: 'BIG BOMB BAG', sprite: 'bomb', team: true, debug: true,
+  id: 'bombbag2', name: 'DIGGER\'S BOMB BAG', sprite: 'bomb', team: true, debug: true,
   full: (p) => !!p.items.bombbag2, // the shop won't sell it twice
   give(sim, p, ctx) { p.items.bombs = true; p.items.bombbag2 = true; p.maxBombs = bombCap(p); p.bombs = p.maxBombs; ctx.banner(); },
   debugGrant(p) { p.items.bombs = true; p.items.bombbag2 = true; },

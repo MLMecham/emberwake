@@ -511,7 +511,7 @@ function renderBag() {
   if (me.items.wandfire) ups.push(['orb_fire', itemName('flameorb', me.cls), 'THE WAND CAN HURL FIRE']);
   if (me.items.wandthunder) ups.push(['orb_thunder', itemName('stormorb', me.cls), 'THE WAND CAN CALL LIGHTNING']);
   if (me.items.cloakslam) ups.push(['scroll', itemName('galeslam', me.cls), 'END A FLIGHT EARLY TO SLAM DOWN']);
-  if (me.items.bombbag2) ups.push(['bomb', itemName('bombbag2', me.cls), 'CARRY 16 BOMBS']); else if (me.items.bombbag) ups.push(['bomb', itemName('bombbag', me.cls), 'CARRY 8 BOMBS']);
+  for (const bg of ['bombbag', 'bombbag2']) if (me.items[bg]) ups.push(['bomb', itemName(bg, me.cls), 'HOLDS 8 BOMBS (YOU CARRY ' + me.maxBombs + ')']);
   if (me.items.bombarrow) ups.push(['scroll', itemName('bombarrows', me.cls), 'SHIFT + BOW: COSTS AN ARROW AND A BOMB']);
   for (const k of Object.keys(me.items)) { if (!me.items[k] || owned.includes(k) || /^ring_/.test(k) || k === 'silkarm' || ['loaded', 'loaded2', 'lunge', 'heavypommel', 'wardshield', 'cloakslam', 'bombbag', 'bombbag2', 'frostarrows', 'silver', 'potion', 'bombarrow'].includes(k)) continue; const d = Content.items[k]; if (!d || d.slot === 'b') continue; ups.push([itemSprite(k, me.cls), itemName(k, me.cls), k === 'skeletonkey' ? 'OPENS EVERY LOCK' : k === 'silver' ? 'ONLY THEY CAN FINISH THE HOLLOW KING' : k === 'magmaboots' ? 'WALK ON LAVA AND VENTS' : k === 'raft' ? 'OPEN WATER ONLY' : null]); }
   if (page === 'upgrades' && me.dbg) { // debug: every upgrade and scroll, switched on and off with a click

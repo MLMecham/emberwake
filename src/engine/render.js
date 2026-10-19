@@ -648,6 +648,12 @@ function drawBigMap(st) {
   textC(L.kind === 'cave' || L.kind === 'tunnel' ? 'THE WILDS - YOU ARE IN: ' + caveLabel(L) : 'THE WILDS', W / 2, 4, rgb(255, 220, 120));
   for (let y = 0; y < Lo.h; y++) for (let x = 0; x < Lo.w; x++) { const i = y * Lo.w + x; if (!seen[i]) continue; rect(x0 + x * sc, y0 + y * sc, sc, sc, mmColor(Lo.tiles[i], Lo.props[i])); }
   for (let d = 1; d <= NDUNGEONS(); d++) { const g = st.world.dungeons[d]; if (!g || !seen[g.y * Lo.w + g.x]) continue; const done = st.team.done.includes(d); const lb = d <= 9 ? String(d) : (Content.dungeons[d].mapLabel || String(d)); text(lb, x0 + g.x * sc - 2, y0 + g.y * sc - 8, done ? rgb(120, 255, 120) : d >= 10 ? rgb(170, 140, 255) : rgb(255, 120, 80)); }
+  for (const id of st.team.refills || []) { // a heart cave whose old man refills your potion (sim.openRefill)
+    for (const r of Lo.regions) for (const f of r.features) if (f.type === 'cave' && f.id === id && seen[f.y * Lo.w + f.x]) {
+      const px0 = x0 + f.x * sc - 2, py0 = y0 + f.y * sc - 9; const K = rgb(20, 16, 24), Rd = rgb(240, 60, 90), Gl = rgb(200, 220, 240);
+      rect(px0 + 1, py0, 3, 1, rgb(150, 100, 60)); rect(px0 + 1, py0 + 1, 3, 2, Gl); rect(px0, py0 + 3, 5, 4, Rd); px(px0 + 1, py0 + 4, rgb(255, 200, 220)); frame(px0 - 1, py0 + 2, 7, 6, K);
+    }
+  }
   for (const p of st.players) {
     const pos = owSpot(st.world, p); if (!pos) continue; const c = p[0] === st.myId ? rgb(255, 255, 255) : c32(hexToRgb((PCOLORS.find(c => c.name === p[5]) || PCOLORS[0]).c));
     const bx = x0 + pos.x * sc, by = y0 + pos.y * sc;

@@ -898,6 +898,21 @@ attempt('sealed rooms are one-way', () => {
   const edgeX = dx === x0 ? x0 + 1.23 : dx === x0 + DSX ? x0 + DSX - 0.23 : dx + 0.5, edgeY = dy === y0 ? y0 + 1.23 : dy === y0 + DSY ? y0 + DSY - 0.23 : dy + 0.5;
   __ok(D.solidAt(dx + 0.5, dy + 0.5, { mx: edgeX, my: edgeY }), 'pressed right up against it from inside, still a wall');
 });
+attempt('bomb bags and potions', () => {
+  const sim = freshSim(); const p = sim.players.p1; p.items = {};
+  __ok(bombCap(p) === 1, 'no bag: one bomb'); p.items.bombbag2 = true; __ok(bombCap(p) === 8, 'the grotto bag alone holds 8'); p.items.bombbag = true; __ok(bombCap(p) === 16, 'both: 16, in either order');
+  __ok(Object.values(Content.caves).every(c => c.stock.every(s => s.item !== 'potion' || s.price === 0 || s.price === POTION_PRICE)), 'every shop sells potions at ' + POTION_PRICE);
+  const W = sim.W; const hc = Object.values(W.levels).find(L => L.caveKind === 'heart'); sim.teleport(p, hc.id, hc.spawn.x, hc.spawn.y, 0);
+  const pot = sim.ents.find(e => e.k === 'shop' && e.lvl === hc.id && e.item === 'potion'); p.potions = 0; p.gems = 0; sim.buy ? 0 : 0;
+  sim.collect ? 0 : 0; sim.takeEnt ? 0 : 0;
+  const take = (e) => { p.x = e.x; p.y = e.y; for (let i = 0; i < 5; i++) sim.tick(1 / 60); };
+  take(pot); __ok(p.potions === 1 && !sim.ents.some(e => e.k === 'shop' && e.lvl === hc.id && e.item === 'hcont' && !e.dead), 'take the potion in a heart cave (the heart goes)');
+  const ref = sim.ents.find(e => e.k === 'shop' && e.lvl === hc.id && e.refill && !e.dead); __ok(ref && ref.price === POTION_REFILL && sim.snapshotFor('p1').team.refills.includes(hc.id), 'and his refills appear, marked on the map');
+  __ok(sim.ents.some(e => e.k === 'npc' && e.lvl === hc.id && e.text === Content.refillText), 'he says so');
+  p.potions = 0; p.gems = 100; sim.time += 2; p.x = 0; p.y = 0; sim.tick(1 / 60); take(ref); __ok(p.potions === 1 && p.gems === 100 - POTION_REFILL, 'a refill costs ' + POTION_REFILL);
+  p.hp = 4; p.poisonTicks = 3; p.chill = 2; p.inv = 0; sim.useItem(p, 'potion'); __ok(p.hp === p.maxHp && !p.poisonTicks && !p.chill && p.inv >= POTION_GUARD - 0.1, 'a potion heals fully, cures poison and chill, and shields you for a moment');
+  __ok(Content.items.whistle.sprite === 'whistle' && !!SPR.whistle, 'the Wind Whistle has its own look');
+});
 attempt('skeleton mages', () => {
   const sim = freshSim(); const p = sim.players.p1; p.god = false; p.hp = p.maxHp = 400; sim.teleport(p, 'dbg', 20.5, 20.5, 0);
   const clear = () => { for (const e of sim.ents) if (e.k !== 'pl') e.dead = true; sim.ents = sim.ents.filter(e => !e.dead); sim.ossuaries = []; };
@@ -931,12 +946,15 @@ attempt('skeleton mages', () => {
   __ok(!!ar.combo && jo.joining === ar.id, 'a storm archmage starts the Lightning Lance and a fire adept joins in');
   __ok(dist2(jo.x, jo.y, ar.x, ar.y) < 1.5 * 1.5, 'the joiner blinks to the leader'); __ok(enemyDef(ar.type).sprFor(ar) === 'wizard_storm_arch_up2' && enemyDef(jo.type).sprFor(jo) === 'wizard_fire_adept_up1' && !!SPR.wizard_storm_arch_up2, 'both raise their staffs');
   sim.time += 1.2; enemyDef(ar.type).ai(sim, ar, 1 / 60, { p }); const ln = shots().find(e => e.type === 'elance'); __ok(ln && ln.dmg === 4 && !jo.joining, 'the lance flies, one point stronger per joiner'); __ok(enemyDef(ar.type).sprFor(ar) === null, 'and the staff comes down');
-  clear(); const so = mk('wizard_arch'); so.comboAt = 0; cast(so); sim.time += 1.2; enemyDef(so.type).ai(sim, so, 1 / 60, { p }); __ok(shots().filter(e => e.type === 'forcepush').length === 16, 'alone, an archmage still casts its combo (a ring of force)');
+  clear(); const so = mk('wizard_arch'); so.comboAt = 0; cast(so); sim.time += 1.2; enemyDef(so.type).ai(sim, so, 1 / 60, { p }); __ok(shots().filter(e => e.type === 'eforcewave').length === 16, 'alone, an archmage still casts its combo (a ring of force)');
+  { const w = shots().find(e => e.type === 'eforcewave'); const d = Content.projectiles.eforcewave; __ok(d.guardOnly && d.knock >= 30, 'the Force Wave throws you far');
+    for (const o of sim.ents) if (o.k === 'proj' && o !== w) o.dead = true; p.items.wardshield = true; p.wardAt = 0; p.shUp = false; p.inv = 0; p.god = false; const h0 = p.hp; w.x = p.x - Math.cos(p.a) * -0.3; w.y = p.y - Math.sin(p.a) * -0.3; w.vx = -Math.cos(p.a) * 7; w.vy = -Math.sin(p.a) * 7; sim.tick(1 / 60); __ok(p.hp < h0, 'the shield ward does not stop it');
+    clear(); so.combo = null; so.comboAt = 0; cast(so); sim.time += 1.2; enemyDef(so.type).ai(sim, so, 1 / 60, { p }); const w2 = shots().find(e => e.type === 'eforcewave'); for (const o of sim.ents) if (o.k === 'proj' && o !== w2) o.dead = true; p.shUp = true; p.inv = 0; const h1 = p.hp; w2.x = p.x + Math.cos(p.a) * 0.3; w2.y = p.y + Math.sin(p.a) * 0.3; w2.vx = -Math.cos(p.a) * 7; w2.vy = -Math.sin(p.a) * 7; sim.tick(1 / 60); __ok(p.hp === h1 && w2.dead, 'a raised shield does'); p.shUp = false; p.items.wardshield = false; }
   clear(); const fw = mk('wizard_fire_arch'); fw.comboAt = 0; cast(fw); sim.time += 1.2; enemyDef(fw.type).ai(sim, fw, 1 / 60, { p }); __ok(sim.ents.filter(e => e.k === 'efire' && !e.dead).length >= 5, 'and a fire archmage a wall of flame');
   // THE DEAD MARCH and THE OSSUARY
   clear(); const ba = mk('wizard_bone_arch'); ba.marchAt = 0; cast(ba); __ok(sim.ents.filter(e => e.k === 'en' && !e.dead && e.raisedBy === ba.id && e.type === 'skeleton_a3').length === 5, 'a bone archmage raises five fully armored skeletons');
   for (const e of sim.ents) if (e.raisedBy === ba.id) e.dead = true; ba.marchAt = 1e9; ba.comboAt = 0; cast(ba); __ok(ba.combo && ba.combo.kind === 'bone', 'then calls the Ossuary');
-  const D = sim.W.levels.dbg; sim.time += 1.2; enemyDef(ba.type).ai(sim, ba, 1 / 60, { p }); __ok(!sim.ossuaries.length && sim.ents.filter(e => e.k === 'fx' && e.spr === 'bonemark').length >= 8, 'during the chant, bones on the floor show where the cage will rise'); sim.time += 0.7; enemyDef(ba.type).ai(sim, ba, 1 / 60, { p }); const os = sim.ossuaries[0];
+  const D = sim.W.levels.dbg; sim.time += 0.6; enemyDef(ba.type).ai(sim, ba, 1 / 60, { p }); __ok(!sim.ossuaries.length && sim.ents.filter(e => e.k === 'fx' && e.spr === 'bonemark').length >= 8, 'during the chant, bones on the floor show where the cage will rise'); sim.time += 0.6; enemyDef(ba.type).ai(sim, ba, 1 / 60, { p }); const os = sim.ossuaries[0];
   __ok(os && os.ribs.length >= 8 && os.ribs.every(i => TINFO[D.tiles[i]].rib && TINFO[D.tiles[i]].solid), 'ribs burst up around the hero');
   const rib = os.ribs[0], rx = rib % D.w + 0.5, ry = Math.floor(rib / D.w) + 0.5; for (let i = 0; i < 6; i++) sim.cutAt(D, rx, ry, p); __ok(TINFO[D.tiles[rib]].rib, 'six sword cuts are not enough');
   sim.cutAt(D, rx, ry, p); __ok(!TINFO[D.tiles[rib]].rib, 'the seventh breaks a rib');

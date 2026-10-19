@@ -11,7 +11,8 @@
 //                     the leader's, and makes it hit harder (they bunch up: a good moment for a bomb). Alone it still casts it.
 //   What each one does:
 //     FORCE   bolt | adept: a push that shoves you back, and SHIELD: it stands still holding a bubble over an ally that
-//             nothing gets through; hit the caster (anything) and the bubble breaks | combo FORCE WAVE: a ring that shoves
+//             nothing gets through; hit the caster (anything) and the bubble breaks | combo FORCE WAVE: a ring that throws you far;
+//             only a raised shield stops it (stand still and face it: no ward, reflect or Silk Arm)
 //     FIRE    fireball | adept: burning patches where you stand | combo FLAME WALL: a line of fire across your path.
 //             Takes double from frost arrows (def.hot).
 //     STORM   fast bolt | adept: STORM STRIKE, a mark under your feet, then lightning | combo LIGHTNING LANCE: a line marked
@@ -30,7 +31,7 @@
 const WIZ_BONE_CHANCE = 0.02;
 const MAGE_RESIST = [0, 0, 0.5, 0.7]; // by tier (1 mage, 2 adept, 3 archmage); a bone mage resists all magic, and from tier 1
 const OSSUARY_CLOSE = 5; // seconds from the cage rising to it crushing whoever is still inside
-const OSSUARY_WINDUP = 1.8; // the archmage's chant: bones rattle on the floor where the ribs will rise (you can step out)
+const OSSUARY_WINDUP = 1.1; // the archmage's chant (same as the other combos): bones on the floor show where the ribs will rise
 const OSSUARY_DEAD = 5, OSSUARY_DEAD_MAX = 10; // fully armored skeletons that climb out as it falls (no more than OSSUARY_DEAD_MAX of the mage's own at once)
 // ---- the look: rows built from the tier (eyes, armor shown) ----
 const WIZ_BASE = [
@@ -145,7 +146,7 @@ function startCombo(sim, e, p) {
 function releaseCombo(sim, e, p) {
   const c = e.combo; e.combo = null; const n = c.joined.length; for (const o of sim.ents) if (o.joining === e.id) o.joining = null;
   const L = sim.W.levels[e.lvl];
-  if (c.kind === 'force') { AI.ring(sim, e, 'forcepush', 16 + 4 * n, 0, { dmg: (1 + n) * e.dmgMul }); sim.sfx('force', e.lvl, e.x, e.y); sim.ev({ t: 'shake', lvl: e.lvl, x: e.x, y: e.y }); }
+  if (c.kind === 'force') { AI.ring(sim, e, 'eforcewave', 16 + 4 * n, 0, { dmg: (1 + n) * e.dmgMul }); sim.sfx('force', e.lvl, e.x, e.y); sim.ev({ t: 'shake', lvl: e.lvl, x: e.x, y: e.y }); }
   else if (c.kind === 'fire') { // across the line from the mage to where you stood
     const seen = p && sees(sim, e, p), tx = seen ? p.x : c.x, ty = seen ? p.y : c.y, a = Math.atan2(ty - e.y, tx - e.x) + Math.PI / 2, len = 5 + 2 * n;
     for (let d = -len / 2; d <= len / 2; d += 0.6) { const x = tx + Math.cos(a) * d, y = ty + Math.sin(a) * d; if (!L.solidAt(x, y)) sim.spawn({ k: 'efire', lvl: e.lvl, x, y, life: 4, spr: 'flame', sc: 0.9, z: -0.05 }); }

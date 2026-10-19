@@ -57,7 +57,7 @@ const REFLECT_TIME = 1, WARD_TIME = 8; // the Wardhold shield (content/wardhold.
 const TWIN_EYE_TIME = 0.55; // seconds a twin-eye gate's eye stays shut (content/gimmicks/twingate.js)
 const GOURD_REGROW = 40; // seconds before a split gourd can grow back (and only with nobody within 6 tiles)
 // how many bombs you can carry: 1 without a bag, 8 with the Bramble Keep bag, 16 with the second one (sold in a grotto)
-const bombCap = (p) => p.items.bombbag2 ? 16 : p.items.bombbag ? 8 : 1;
+const bombCap = (p) => (p.items.bombbag ? 8 : 0) + (p.items.bombbag2 ? 8 : 0) || 1; // each bag holds 8, in either order (1 bomb without one)
 // sword techniques: the pommel strike (reverse grip), the lunge's slashes, and the backswing on every third hit
 const POMMEL_DMG = 0.25, POMMEL_STUN = 2.5, CHAIN_GAP = 2, BACKSWING_DELAY = 0.2; // the backswing lands while the blade comes back (ui/main.js plays it right after the forward cut) // radians off a foe's facing that count as behind it (about 120 degrees)
 const SHIELD_STUN = 0.9; // seconds a knight reels after a loaded shot hits its shield
@@ -346,12 +346,19 @@ class Sim {
   initLevel(id) {
     if (this.levelInit[id]) return; this.levelInit[id] = true;
     const L = this.W.levels[id];
-    for (const n of L.npcs) this.spawn({ k: 'npc', lvl: id, x: n.x, y: n.y, spr: n.spr, text: n.text, sc: 0.95 });
+    for (const n of L.npcs) this.spawn({ k: 'npc', lvl: id, x: n.x, y: n.y, spr: n.spr, text: this.team.taken['refill:' + id] ? Content.refillText : n.text, sc: 0.95 });
     if (id === this.W.startCave && this.team.fallen) this.layWardShield(L);
+    if (this.team.taken['refill:' + id]) this.openRefill(id);
     L.shop.forEach((s, i) => {
       const tk = id + ':shop' + i; if (this.team.taken[tk] || (s.choose && this.team.taken[s.choose])) return; if (s.cond && !this.shopCond(s.cond)) return; // e.g. the Thorn Ring: only while the thorn-folk aren't angry
       this.spawn({ k: 'shop', lvl: id, x: s.x, y: s.y, item: s.item, price: s.price, gift: s.gift, need: s.needHearts, choose: s.choose, unique: s.unique, cond: s.cond, tk, spr: itemSprite(s.item), sc: 0.55, z: 0.12 });
     });
+  }
+  // you took the potion in a heart cave: from now on its old man refills one for POTION_REFILL (the map marks the cave)
+  openRefill(id) {
+    const L = this.W.levels[id]; const s = L.shop.find(x => x.item === 'potion'); if (!s || this.ents.some(o => o.k === 'shop' && o.lvl === id && o.refill)) return;
+    this.spawn({ k: 'shop', lvl: id, x: s.x, y: s.y, item: 'potion', price: POTION_REFILL, refill: true, tk: id + ':refill', spr: itemSprite('potion'), sc: 0.55, z: 0.12 });
+    for (const o of this.ents) if (o.k === 'npc' && o.lvl === id) o.text = Content.refillText;
   }
   spawn(e) { e.id = uid(); e.t = e.t || 0; this.ents.push(e); return e; }
   // ---- small helpers content files use ----
@@ -676,10 +683,11 @@ class Sim {
     this.ev({ t: 'hurt', pid: p.id, kx, ky });
     if (p.hp <= 0) {
       if (this.ringOn(p, 'ring_secondwind') && !p.windUsed) { p.windUsed = true; p.hp = 1; this.sfx('heal', p.lvl); this.ev({ t: 'hint', pid: p.id, text: 'SECOND WIND!' }); return; } // once per life
-      if (p.potions > 0) { p.potions--; p.hp = p.maxHp; this.msg(p.name + "'S POTION SAVED THEM!"); this.sfx('heal', p.lvl); return; }
+      if (p.potions > 0) { p.potions--; this.drinkPotion(p); this.msg(p.name + "'S POTION SAVED THEM!"); return; }
       p.hp = 0; p.alive = false; p.downAt = this.time; p.revive = 0; p.reviver = null; this.clearBeam(p); p.windUsed = false; p.webbed = null; this.ev({ t: 'down', pid: p.id }); this.msg(p.name + ' IS DOWN!' + (Object.keys(this.players).length > 1 ? ' GET CLOSE AND HOLD F TO HELP THEM UP.' : ''));
     }
   }
+  drinkPotion(p) { p.hp = p.maxHp; p.poisonTicks = 0; p.chill = 0; p.inv = Math.max(p.inv || 0, POTION_GUARD); this.clearBeam(p); this.sfx('heal', p.lvl); this.ev({ t: 'flash', pid: p.id, c: '#f060b0' }); } // full health, poison and chill gone, and a few seconds nothing can touch you
   clearBeam(p) { for (const e of this.ents) if (e.k === 'proj' && e.pid === p.id && Content.projectiles[e.type].beam) e.dead = true; }
   heal(p, amt) { const before = p.hp; p.hp = Math.min(p.maxHp, p.hp + amt); if (p.hp !== before) this.clearBeam(p); }
   // opt: pid (who hit it), silver, pierceShield, ignoreIframes, stunOnly. Returns true if the hit landed.
@@ -939,10 +947,11 @@ class Sim {
           const toP = Math.atan2(e.y - p.y, e.x - p.x);
           if (def.poison) this.poisonPlayer(p); // poison gets through a shield
           if (def.silk) p.silk = Math.max(p.silk || 0, def.silk); // a web glob: you wade for a moment
-          const guardArm = def.blockable && this.armOn(p, 'guard'); // the Silk Arm's guard blocks from any side
-          if (p.cls !== 'monk' && def.blockable && Math.abs(angDiff(p.a, toP)) < 0.7 && this.reflectOpen(p)) { this.reflectProj(e, p); return; }
-          if (!def.blockable && Math.abs(angDiff(p.a, toP)) < 0.7 && this.wardReady(p)) { p.wardAt = this.time + WARD_TIME; e.dead = true; this.sfx('ward', e.lvl, p.x, p.y); this.ev({ t: 'block', pid: p.id, reflect: true }); return; } // the shield's ward stops what a shield can't
-          if (guardArm || (p.cls !== 'monk' && def.blockable && Math.abs(angDiff(p.a, toP)) < 0.7)) { e.dead = true; this.sfx('clink', e.lvl); this.ev({ t: 'block', pid: p.id }); return; }
+          if (def.guardOnly) { if (p.cls !== 'monk' && p.shUp && Math.abs(angDiff(p.a, toP)) < 0.7) { e.dead = true; this.sfx('clink', e.lvl); this.ev({ t: 'block', pid: p.id }); return; } } // only a raised shield (stand still, face it) stops this: no ward, no reflect, no Silk Arm
+          const guardArm = !def.guardOnly && def.blockable && this.armOn(p, 'guard'); // the Silk Arm's guard blocks from any side
+          if (!def.guardOnly && p.cls !== 'monk' && def.blockable && Math.abs(angDiff(p.a, toP)) < 0.7 && this.reflectOpen(p)) { this.reflectProj(e, p); return; }
+          if (!def.guardOnly && !def.blockable && Math.abs(angDiff(p.a, toP)) < 0.7 && this.wardReady(p)) { p.wardAt = this.time + WARD_TIME; e.dead = true; this.sfx('ward', e.lvl, p.x, p.y); this.ev({ t: 'block', pid: p.id, reflect: true }); return; } // the shield's ward stops what a shield can't
+          if (guardArm || (!def.guardOnly && p.cls !== 'monk' && def.blockable && Math.abs(angDiff(p.a, toP)) < 0.7)) { e.dead = true; this.sfx('clink', e.lvl); this.ev({ t: 'block', pid: p.id }); return; }
           if (def.chill && p.inv <= 0 && !p.god) p.chill = Math.max(p.chill || 0, def.chill);
           this.hurtPlayer(p, e.dmg, e); if (def.knock && p.alive) { const sp = Math.hypot(e.vx, e.vy) || 1; this.ev({ t: 'shove', pid: p.id, kx: e.vx / sp * def.knock, ky: e.vy / sp * def.knock }); } e.dead = true; return;
         }
@@ -1028,7 +1037,7 @@ class Sim {
       if (!e.gift && this.time < (p.buyReady || 0)) return; // one purchase per BUY_COOLDOWN, so standing on the counter can't drain your gems
       if (!e.gift) { p.gems -= e.price; p.buyReady = this.time + BUY_COOLDOWN; }
       this.giveItem(p, e.item, true);
-      if (e.gift) { this.team.taken[e.tk] = true; if (e.choose) { this.team.taken[e.choose] = true; for (const o of this.ents) if (o.choose === e.choose) o.dead = true; } e.dead = true; }
+      if (e.gift) { this.team.taken[e.tk] = true; if (e.choose) { this.team.taken[e.choose] = true; for (const o of this.ents) if (o.choose === e.choose) o.dead = true; } e.dead = true; if (e.choose && e.item === 'potion') { this.team.taken['refill:' + e.lvl] = true; this.openRefill(e.lvl); } }
       return;
     }
     if (e.tk) this.team.taken[e.tk] = true;
@@ -1093,7 +1102,7 @@ class Sim {
     const en = []; for (const e of this.ents) if (e.lvl === p.lvl) en.push(this.entView(e, p));
     const pl = []; for (const o of Object.values(this.players)) pl.push([o.id, o.lvl, Math.round(o.x * 100) / 100, Math.round(o.y * 100) / 100, Math.round(o.a * 100) / 100, o.color, o.armor, o.cls, o.alive ? 1 : 0, o.atk, o.name, Math.round(o.revive / REVIVE_TIME * 100) / 100, o.hp, o.maxHp, o.reviver || 0, o.z || 0]); // [15] z: feet height (ledges, the cloak's lift)
     const me = {}; for (const k of ['lvl', 'hp', 'maxHp', 'gems', 'bombs', 'maxBombs', 'arrows', 'maxArrows', 'swordMax', 'armorMax', 'arrowType', 'wandEl', 'sword', 'armor', 'items', 'favs', 'ring', 'armMode', 'potions', 'alive', 'cls', 'sel', 'color', 'name', 'dbg', 'god']) me[k] = p[k]; me.spellCd = Math.max(0, Math.round(((p.spellReady || 0) - this.time) * 10) / 10); me.chill = p.chill > 0 ? 1 : 0; me.mirror = this.reflectOpen(p) ? 1 : 0; me.webbed = p.webbed ? Math.round((this.time - p.webbed.at) * 10) / 10 : -1; me.silk = p.silk > 0 ? 1 : 0; me.armReady = this.time >= (p.armSwapAt || 0) ? 1 : 0; me.ward = this.wardReady(p) ? 1 : 0; me.poison = p.poisonTicks > 0 ? p.poisonTicks : 0; me.fly = this.flying(p) ? Math.round((p.flyUntil - this.time) * 10) / 10 : 0; me.respawnIn = p.alive ? 0 : Math.max(0, Math.ceil(RESPAWN_WAIT - (this.time - (p.downAt || 0))));
-    return { t: 's', paused: !!this.paused, pausedBy: this.pausedBy, me, pl, en, team: { keys: this.team.keys, maps: this.team.maps, comps: this.team.comps, shards: this.team.shards, done: this.team.done, relics: this.team.relics, fallen: !!this.team.fallen, grudge: this.team.grudge || 0 }, vp: this.ventPhase(), rg: this.rigCodes(p.lvl), fz: this.frozenList(p.lvl), mv: this.modVer, over: this.over > 0 };
+    return { t: 's', paused: !!this.paused, pausedBy: this.pausedBy, me, pl, en, team: { keys: this.team.keys, maps: this.team.maps, comps: this.team.comps, shards: this.team.shards, done: this.team.done, relics: this.team.relics, fallen: !!this.team.fallen, grudge: this.team.grudge || 0, refills: Object.keys(this.team.taken).filter(k => k.startsWith('refill:') && this.team.taken[k]).map(k => k.slice(7)) }, vp: this.ventPhase(), rg: this.rigCodes(p.lvl), fz: this.frozenList(p.lvl), mv: this.modVer, over: this.over > 0 };
   }
   // ---- save ----
   makeSave() {

@@ -23,8 +23,8 @@ Content.upgrades = [
   Object.assign({ id: 'lightninglance', group: 'WAND', desc: 'SHIFT + WAND (STORM): A PIERCING LANCE' }, flag('lightninglance')),
   Object.assign({ id: 'tandem', group: 'WAND', desc: 'CHANT THE SAME SPELL AS A FRIEND TO COMBINE IT' }, flag('tandem')),
   Object.assign({ id: 'galeslam', group: 'GALE CLOAK', desc: 'END A FLIGHT EARLY TO SLAM DOWN' }, flag('cloakslam')),
-  Object.assign({ id: 'bombbag', group: 'BOMBS', desc: 'CARRY 8 BOMBS' }, flag('bombbag')),
-  Object.assign({ id: 'bombbag2', group: 'BOMBS', desc: 'CARRY 16 BOMBS' }, flag('bombbag2')),
+  Object.assign({ id: 'bombbag', group: 'BOMBS', desc: 'HOLDS 8 BOMBS' }, flag('bombbag')),
+  Object.assign({ id: 'bombbag2', group: 'BOMBS', desc: 'HOLDS 8 MORE BOMBS' }, flag('bombbag2')),
 ];
 for (const r of Content.rings || []) Content.upgrades.push(Object.assign({ id: r.id, group: 'RINGS', desc: r.desc }, flag(r.id))); // every ring (items/rings.js)
 // the items those upgrades need, handed over by ALL ON

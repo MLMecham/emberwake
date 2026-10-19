@@ -35,4 +35,5 @@ function uid() { return _uid++; }
 const DEV_NAMES = ['MITCH', 'LOGAN'];
 const CANDLE_COOLDOWN = 2.5; // seconds between candle flames (items/candle.js)
 const ARROWS_START = 15; // arrows a hero can carry before any quiver (items/techniques.js)
+const POTION_PRICE = 300, POTION_REFILL = 40, POTION_GUARD = 3; // potions are dear; the heart-cave old man refills cheap if you took his (sim.openRefill); seconds nothing touches you after drinking
 function isDevName(name) { return DEV_NAMES.includes(String(name || '').trim().toUpperCase()); }
