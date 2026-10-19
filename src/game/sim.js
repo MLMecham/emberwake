@@ -51,7 +51,7 @@ const DISARM_STAGGER = 1.2;
 const KNIGHT_WINDUP = 0.45; // seconds a sword knight raises its blade before the counter lands (your cue to back off) // seconds a disarmed foe reels
 const WEB_HELPLESS = 1, ARM_DELAY = 0.12, ARM_MIRROR = 0.25, ARM_SWAP = 1.5; // stuck in a web: seconds before a slash frees you; the Silk Arm's mirror cut: delay, share of the hit; stance change time
 const GRUDGE_COOL = 180, THORN_RING_GRUDGE = 12; // the thorn-folk's grudge: seconds per point it cools; the most the root merchant forgives
-const OSSUARY_HITS = 7; // sword cuts that break a rib of a bone archmage's OSSUARY (a pommel strike or a bomb: one)
+const OSSUARY_HITS = 7; // sword cuts that break a rib of a bone archmage's OSSUARY (a bomb or a heavy pommel strike: one; a plain pommel strike: two)
 const MAX_HEARTS = 20; // heart containers and pieces stop here (the HUD shows two rows of 10)
 const REFLECT_TIME = 1, WARD_TIME = 8; // the Wardhold shield (content/wardhold.js): reflect window after it comes up; seconds between wards
 const TWIN_EYE_TIME = 0.55; // seconds a twin-eye gate's eye stays shut (content/gimmicks/twingate.js)
@@ -759,7 +759,7 @@ class Sim {
         if (p.cls === 'monk' && a.kind === 'punch3' && !def.boss) { const [v, t] = this.knockFor(e, def, 14); e.kb = [Math.cos(p.a) * v, Math.sin(p.a) * v]; e.kbT = t || 0.2; e.stun = 0.5; }
       }
     }
-    this.cutAt(L, p.x + Math.cos(p.a) * 0.75, p.y + Math.sin(p.a) * 0.75, p); this.cutAt(L, p.x + Math.cos(p.a) * 1.25, p.y + Math.sin(p.a) * 1.25, p);
+    if (!this.cutAt(L, p.x + Math.cos(p.a) * 0.75, p.y + Math.sin(p.a) * 0.75, p)) this.cutAt(L, p.x + Math.cos(p.a) * 1.25, p.y + Math.sin(p.a) * 1.25, p);
     // TODO(monk rework): remove. The martial artist has no pommel strike yet, so his punches split gourds instead (he'd be stuck in Bramble Keep otherwise).
     if (p.cls === 'monk') { for (const d of [0.6, 1.1]) this.breakGourd(L, p.x + Math.cos(p.a) * d, p.y + Math.sin(p.a) * d); }
     else for (const d of [0.6, 1.1]) { const i = L.idx(Math.floor(p.x + Math.cos(p.a) * d), Math.floor(p.y + Math.sin(p.a) * d)); if (Content.breakables[L.props[i]]) { this.sfx('thok', p.lvl, p.x, p.y); break; } } // a swing just bounces off
@@ -842,7 +842,7 @@ class Sim {
       if (e.armor > 0) { if (!(p.items.heavypommel && this.stripArmor(e, 'pommel', p))) this.damageEnemy(e, POMMEL_DMG, p, { pid: p.id, kbMul: 0.6, blunt: true }); continue; } // armor takes the blow: no stun
       if (this.damageEnemy(e, POMMEL_DMG, p, { pid: p.id, kbMul: 0.6, blunt: true }) && !def.boss && !e.dead) { e.stun = Math.max(e.stun || 0, POMMEL_STUN); e.stunFrom = this.time; }
     }
-    for (const d of [0.6, 1.1]) { this.breakGourd(L, p.x + Math.cos(p.a) * d, p.y + Math.sin(p.a) * d); this.hitRib(L, p.x + Math.cos(p.a) * d, p.y + Math.sin(p.a) * d, OSSUARY_HITS, p); }
+    let ribbed = false; for (const d of [0.6, 1.1]) { this.breakGourd(L, p.x + Math.cos(p.a) * d, p.y + Math.sin(p.a) * d); if (!ribbed) ribbed = this.hitRib(L, p.x + Math.cos(p.a) * d, p.y + Math.sin(p.a) * d, p.items.heavypommel ? OSSUARY_HITS : Math.ceil(OSSUARY_HITS / 2), p); } // a rib: one heavy pommel strike, or two plain ones
     this.sfx(hit ? 'pommel' : 'swing', p.lvl, p.x, p.y);
   }
   // Every third sword hit in a chain (hits less than CHAIN_GAP apart) readies a backswing. It fires on the first hit that
@@ -979,7 +979,7 @@ class Sim {
   clearRibs(o) { for (const t of this.tempTiles) if (t.lvl === o.lvl && o.ribs.includes(t.i)) t.at = this.time - 1; this.updateTempTiles(); const L = this.W.levels[o.lvl]; if (L.ribHits) for (const i of o.ribs) delete L.ribHits[i]; }
   cutAt(L, x, y, p) {
     const i = L.idx(Math.floor(x), Math.floor(y)); const ti = TINFO[L.tiles[i]];
-    if (ti && ti.rib) { this.hitRib(L, x, y, 1, p); return; }
+    if (ti && ti.rib) { this.hitRib(L, x, y, 1, p); return true; } // (true: the swing stops at the rib, so one swing is one cut)
     if (PR.COCOON != null && L.props[i] === PR.COCOON) { this.setTile(L.id, i, null, PR.HELM); this.spawn({ k: 'fx', lvl: L.id, x: Math.floor(x) + 0.5, y: Math.floor(y) + 0.5, spr: 'puff', life: 0.4, sc: 1 }); this.sfx('hit', L.id); } // cut open: empty armor
     if (PR.WEBLINE != null && L.props[i] === PR.WEBLINE && p) { this.setTile(L.id, i, null, 0); this.dropSpiders(p, 3); } // a cut strand shakes the whole web
     if (ti && ti.cuttable) { this.setTile(L.id, i, TL[ti.opensTo] != null ? TL[ti.opensTo] : TL.DFLOOR); this.spawn({ k: 'fx', lvl: L.id, x: Math.floor(x) + 0.5, y: Math.floor(y) + 0.5, spr: 'puff', life: 0.3, sc: 0.9 }); this.sfx('hit', L.id); }

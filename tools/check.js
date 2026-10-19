@@ -936,8 +936,12 @@ attempt('skeleton mages', () => {
   __ok(os && os.ribs.length >= 8 && os.ribs.every(i => TINFO[D.tiles[i]].rib && TINFO[D.tiles[i]].solid), 'ribs burst up around the hero');
   const rib = os.ribs[0], rx = rib % D.w + 0.5, ry = Math.floor(rib / D.w) + 0.5; for (let i = 0; i < 6; i++) sim.cutAt(D, rx, ry, p); __ok(TINFO[D.tiles[rib]].rib, 'six sword cuts are not enough');
   sim.cutAt(D, rx, ry, p); __ok(!TINFO[D.tiles[rib]].rib, 'the seventh breaks a rib');
-  const rib2 = os.ribs[1]; sim.hitRib(D, rib2 % D.w + 0.5, Math.floor(rib2 / D.w) + 0.5, 7, p); __ok(!TINFO[D.tiles[rib2]].rib, 'a pommel strike breaks one at once');
+  { const r4 = os.ribs[3]; p.x = r4 % D.w + 0.5; p.y = Math.floor(r4 / D.w) + 1.5; p.a = -Math.PI / 2; for (let i = 0; i < 4; i++) sim.playerAttack(p, { kind: 'sword' }); __ok(TINFO[D.tiles[r4]].rib && D.ribHits[r4] === 4, 'each sword swing counts as one cut'); p.x = os.cx; p.y = os.cy; }
+  const rib2 = os.ribs[1], rib3 = os.ribs[2]; const face = (i) => { p.x = i % D.w + 0.5; p.y = Math.floor(i / D.w) + 1.5; p.a = -Math.PI / 2; };
+  p.items.heavypommel = false; face(rib2); sim.pommelStrike(p, D); __ok(TINFO[D.tiles[rib2]].rib, 'one plain pommel strike is not enough'); sim.pommelStrike(p, D); __ok(!TINFO[D.tiles[rib2]].rib, 'two are');
+  p.items.heavypommel = true; face(rib3); sim.pommelStrike(p, D); __ok(!TINFO[D.tiles[rib3]].rib, 'one heavy pommel strike breaks a rib'); p.x = os.cx; p.y = os.cy;
   const hp1 = p.hp; p.inv = 0; sim.time += 3; Content.updateOssuaries(sim); __ok(p.hp < hp1 && !sim.ossuaries.length && os.ribs.every(i => !TINFO[D.tiles[i]].rib), 'whoever stays inside is crushed, and the cage falls apart');
+  __ok(sim.ents.filter(e => e.k === 'en' && !e.dead && e.type === 'skeleton_a3' && e.raisedBy === ba.id).length === 5, 'and five fully armored skeletons climb out of it');
   sim.damageEnemy(ba, 999, null, { ignoreIframes: true }); __ok(sim.ents.some(e => e.k === 'pick' && e.item === 'ring_hollow'), 'a bone archmage drops the Hollow Ring');
   __ok(['wizard_bare', 'wizard_fire_adept_bare', 'wizard_storm_arch_bare', 'wizard_bone_arch_bare', 'wizard_adept_a0', 'wizard_arch_a1'].every(id => !!SPR[id]), 'every mage has staffless and stripped looks');
 });

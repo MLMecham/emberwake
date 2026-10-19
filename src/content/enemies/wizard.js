@@ -17,7 +17,8 @@
 //             through you, then a lance down it. A reflected shot (the Wardhold shield) stuns it.
 //     BONE    three bone shards (physical: your shield stops them) | raises skeletons whose armor matches its tier (1, 2,
 //             full) | archmage: THE DEAD MARCH, five fully armored skeletons, and the combo THE OSSUARY: a ribcage
-//             bursts up around you and closes. Break a rib (a pommel strike, a bomb, or seven sword cuts) or fly out.
+//             bursts up around you (it blocks your view) and closes. Break a rib (a bomb or heavy pommel strike, two plain
+//             pommel strikes, or seven sword cuts) or fly out. When it falls, five fully armored skeletons climb out of it.
 //             Joiners change it: fire makes the ribs burn, storm arcs lightning inside, force closes it twice as fast.
 //             Bone mages take half from arrows (they pass through the ribs) and double from blunt hits (pommel, bombs).
 //             A bone archmage always drops the HOLLOW RING.
@@ -27,6 +28,7 @@
 const WIZ_BONE_CHANCE = 0.02;
 const MAGE_RESIST = [0, 0, 0.5, 0.7]; // by tier (1 mage, 2 adept, 3 archmage); a bone mage resists all magic, and from tier 1
 const OSSUARY_CLOSE = 2.6; // seconds from the cage rising to it crushing whoever is still inside
+const OSSUARY_DEAD = 5, OSSUARY_DEAD_MAX = 10; // fully armored skeletons that climb out as it falls (no more than OSSUARY_DEAD_MAX of the mage's own at once)
 // ---- the look: rows built from the tier (eyes, armor shown) ----
 const WIZ_BASE = [
   '.......kk.......',
@@ -145,11 +147,16 @@ function ossuary(sim, e, p, joined) {
 Content.updateOssuaries = function (sim) {
   if (!sim.ossuaries || !sim.ossuaries.length) return;
   sim.ossuaries = sim.ossuaries.filter(o => {
-    const inside = Object.values(sim.players).filter(pl => pl.alive && pl.lvl === o.lvl && !sim.flying(pl) && Math.max(Math.abs(pl.x - o.cx), Math.abs(pl.y - o.cy)) < 1.6);
+    const L = sim.W.levels[o.lvl]; const inside = Object.values(sim.players).filter(pl => pl.alive && pl.lvl === o.lvl && !sim.flying(pl) && Math.max(Math.abs(pl.x - o.cx), Math.abs(pl.y - o.cy)) < 1.6);
     if (o.storm && sim.time >= o.zapAt) { o.zapAt = sim.time + 0.55; for (const pl of inside) { sim.hurtPlayer(pl, 1, { k: 'proj', type: 'stormbolt', x: o.cx, y: o.cy }); sim.spawn({ k: 'fx', lvl: o.lvl, x: pl.x, y: pl.y, spr: 'zapfx', life: 0.2, sc: 1 }); } }
     if (sim.time < o.at) return true;
     for (const pl of inside) sim.hurtPlayer(pl, o.dmg, { k: 'proj', type: 'boneshard', x: o.cx, y: o.cy }); if (inside.length) sim.msg('CRUSHED!');
     sim.clearRibs(o); sim.sfx('boom', o.lvl, o.cx, o.cy);
+    // and as the cage falls, the dead climb out of where the ribs stood
+    const by = sim.ents.find(x => x.id === o.by && !x.dead); const mine = sim.ents.filter(x => x.k === 'en' && !x.dead && x.raisedBy === o.by).length;
+    const spots = o.ribs.slice().sort(() => Math.random() - 0.5).slice(0, Math.max(0, Math.min(OSSUARY_DEAD, OSSUARY_DEAD_MAX - mine)));
+    for (const i of spots) { const s = sim.spawnEnemy('skeleton_a3', o.lvl, i % L.w + 0.5, Math.floor(i / L.w) + 0.5, by ? { group: by.g, bounds: by.b } : {}); s.raisedBy = o.by; s.spawnFx = 0.15; s.tm = 0; s.f = Math.atan2(o.cy - s.y, o.cx - s.x); }
+    if (spots.length) sim.sfx('rattle', o.lvl, o.cx, o.cy);
     for (let k = 0; k < 8; k++) sim.fireProj('boneshard', o.lvl, o.cx, o.cy, k * TAU / 8, 'e', null, { dmg: 2 });
     return false;
   });
