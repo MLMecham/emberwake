@@ -455,7 +455,7 @@ function showToast(t) { const el = $('toast'); el.textContent = t; el.classList.
 function openPause() { if (G.state !== 'pause') G.pauseAt = performance.now(); G.state = 'pause'; showScreen('pauseScreen'); $('pSave').style.display = NET.role === 'host' ? '' : 'none'; $('pInvite').style.display = NET.role === 'host' ? '' : 'none'; updatePauseInfo(); }
 // ---- inventory (I) ----
 // Gear you can step down from (sword, tunic, arrow kind), every item-button item, and the upgrades and techniques you carry.
-const SWORD_NAMES = ['', 'WOODEN SWORD', 'SILVER SWORD', 'MYTHRIL SWORD', 'DAWNBLADE'], FIST_NAMES = ['', 'FISTS', 'IRON FISTS', 'MYTHRIL FISTS', 'DAWN FISTS'];
+const SWORD_NAMES = ['', 'WOODEN SWORD', 'IRON SWORD', 'MYTHRIL SWORD', 'DAWNBLADE'], FIST_NAMES = ['', 'FISTS', 'IRON FISTS', 'MYTHRIL FISTS', 'DAWN FISTS'];
 const TUNIC_NAMES = ['GREEN TUNIC', 'CHAIN TUNIC', 'PLATE TUNIC'], AURA_NAMES = ['NO AURA', 'BLUE AURA', 'GOLDEN AURA'];
 function spriteCanvas(id) { // a sprite as a small canvas for the menus
   const c = document.createElement('canvas'); const s = SPR[id]; if (!s) return c; c.width = s.w; c.height = s.h;

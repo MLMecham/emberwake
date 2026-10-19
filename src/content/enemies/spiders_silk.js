@@ -1,7 +1,7 @@
 // ===== content/enemies/spiders_silk.js (loads after spider.js) : the Silkwood's spiders (dungeon 13) and the Broodmother =====
 // SPIDERLING   small and quick, comes in swarms (egg sacs, the Broodmother, cut strands)
 // CRAWLER      the common one: lunges
-// SPITTER      keeps away and spits web globs: you wade for a moment (projectiles.js 'webglob')
+// SPINNER      keeps away and spits web globs: you wade for a moment (projectiles.js 'webglob')
 // DROPPER      hangs on the ceiling until you pass under; its shadow shows where it lands
 // EMBERBACK    carries a live ember. If it walks onto silk, the room burns, with you in it. Kill it on bare stone:
 //              if it dies on silk, the ember falls and lights it anyway.
@@ -18,7 +18,7 @@ const legs = { fps: 9, frames: (s, kit) => [s, kit.shearRows(kit.shearRows(s, 2,
 const kin = (o) => defineEnemy(Object.assign({ spiderkin: true, anim: legs, spawns: { dungeons: [13] } }, o));
 kin({ id: 'spiderling', title: 'SPIDERLING', hp: 1, spd: 3.6, dmg: 1, r: 0.26, sc: 0.55, ai: AI.lunge(0.35, 0.35, 0.8), sprite: SPIDER_ROWS, pal: { G: '#8a7a90', r: '#ff4040' } });
 kin({ id: 'spider_crawler', title: 'CRAWLER', hp: 3, spd: 3.0, dmg: 2, r: 0.42, sc: 1.0, ai: AI.lunge(0.5, 0.6, 1.2), sprite: SPIDER_ROWS, pal: { G: '#4a3a5a', r: '#ffd040' } });
-kin({ id: 'spider_spitter', title: 'SPITTER', hp: 3, spd: 1.6, dmg: 1, r: 0.4, sc: 0.95, ai: AI.shooter('webglob'), sprite: SPIDER_ROWS, pal: { G: '#3e5a4a', r: '#e0ffe0' } });
+kin({ id: 'spider_spitter', title: 'SPINNER', hp: 3, spd: 1.6, dmg: 1, r: 0.4, sc: 0.95, ai: AI.shooter('webglob'), sprite: SPIDER_ROWS, pal: { G: '#3e5a4a', r: '#e0ffe0' } });
 // DROPPER: st 0 = on the ceiling (out of reach); st 1 = falling toward (tx, ty) after tm; then a crawler
 kin({ id: 'spider_ceiling', title: 'DROPPER', hp: 3, spd: 3.0, dmg: 2, r: 0.42, sc: 1.0, sprite: SPIDER_ROWS, pal: { G: '#2a2430', r: '#ff2020' }, spawns: { dungeons: [13] },
   view: (e) => e.hz || 0,
