@@ -2634,6 +2634,8 @@ defineProjectile({ id: 'spear', spr: 'arrow', spd: 6, dmg: 1, z: 0.1, blockable:
 defineProjectile({ id: 'magic', elem: 'magic', spr: 'magic', spd: 4.5, dmg: 2, sc: 0.6 });
 defineProjectile({ id: 'fire', elem: 'fire', spr: 'fireball', spd: 4.5, dmg: 2 });
 defineProjectile({ id: 'stormbolt', elem: 'magic', spr: 'stormbolt', spd: 8, dmg: 2, sc: 0.6 }); // a storm mage's crackling bolt (enemies/wizard.js)
+defineProjectile({ id: 'forcepush', elem: 'magic', spr: 'forcebolt', spd: 6, dmg: 1, sc: 0.8, range: 4.5, knock: 15 }); // a force adept's push: it shoves (sim 'shove' event)
+defineProjectile({ id: 'elance', elem: 'magic', spr: 'beam', spd: 20, dmg: 3, sc: 1.1, range: 14 }); // a storm archmage's LIGHTNING LANCE
 defineProjectile({ id: 'boneshard', spr: 'boneshard', spd: 6, dmg: 2, sc: 0.55, blockable: true }); // a bone mage's shard: physical, so a shield stops it
 defineSprite('stormbolt', [
   '................', '................', '................', '.........y......', '........yw......', '.......ywy......', '......ywwy......', '.....yyyywy.....',
@@ -2655,13 +2657,13 @@ defineProjectile({ id: 'wave', spr: 'ki', spd: 9, dmg: 4, sc: 1.4, z: 0.1, playe
 defineProjectile({ id: 'arrow', spr: 'arrow', spd: 11, dmg: 2, z: 0.1, player: true, eyeHit: true }); // eyeHit: shuts eye targets (gimmicks/eyes.js)
 defineProjectile({ id: 'dawnbeam', spr: 'beam_dawn', spd: 11, dmg: 1, sc: 1.0, player: true, range: 9, beam: true, pierce: true, pierceShield: true });
 defineProjectile({ id: 'dart', spr: 'beam', spd: 12, dmg: 2, sc: 0.5, player: true, eyeHit: true });
-defineProjectile({ id: 'candle', spr: 'flame', spd: 4, dmg: 1, sc: 0.8, z: -0.05, player: true, range: 2.2, fire: true });
+defineProjectile({ id: 'candle', pelem: 'fire', spr: 'flame', spd: 4, dmg: 1, sc: 0.8, z: -0.05, player: true, range: 2.2, fire: true });
 defineProjectile({ id: 'palm', spr: 'flame', spd: 6, dmg: 2, sc: 1.1, z: -0.05, player: true, range: 3.5, fire: true, pierce: true });
-defineProjectile({ id: 'bolt', spr: 'beam', spd: 13, dmg: 2, sc: 0.9, player: true, chain: true, stun: 0.5, range: 9 }); // thunder rod: hops to the next foe (game/sim.js)
-defineProjectile({ id: 'forcebolt', spr: 'forcebolt', spd: 9, dmg: 0.5, sc: 0.7, player: true, stun: 0.6, range: 7 }); // magic wand, plain: a shove (kbMul from the wand)
-defineProjectile({ id: 'lance', spr: 'beam', spd: 22, dmg: 3, sc: 1.1, player: true, pierce: true, pierceShield: true, stun: 2, range: 10 }); // Lightning Lance: through everything in a line
-defineProjectile({ id: 'rodbolt', spr: 'magic', spd: 8, dmg: 3, player: true });
-defineProjectile({ id: 'thunder', spr: 'beam', spd: 14, dmg: 3, sc: 0.9, player: true, pierce: true, pierceShield: true, endFx: 'boom' });
+defineProjectile({ id: 'bolt', pelem: 'storm', spr: 'beam', spd: 13, dmg: 2, sc: 0.9, player: true, chain: true, stun: 0.5, range: 9 }); // thunder rod: hops to the next foe (game/sim.js)
+defineProjectile({ id: 'forcebolt', pelem: 'force', spr: 'forcebolt', spd: 9, dmg: 0.5, sc: 0.7, player: true, stun: 0.6, range: 7 }); // magic wand, plain: a shove (kbMul from the wand)
+defineProjectile({ id: 'lance', pelem: 'storm', spr: 'beam', spd: 22, dmg: 3, sc: 1.1, player: true, pierce: true, pierceShield: true, stun: 2, range: 10 }); // Lightning Lance: through everything in a line
+defineProjectile({ id: 'rodbolt', pelem: 'fire', spr: 'magic', spd: 8, dmg: 3, player: true });
+defineProjectile({ id: 'thunder', pelem: 'storm', spr: 'beam', spd: 14, dmg: 3, sc: 0.9, player: true, pierce: true, pierceShield: true, endFx: 'boom' });
 // the Thornseer's seed (enemies/thornling.js): slow, and it HOMES: it turns toward the nearest hero (homing: radians a second)
 // after a short delay. Outrun it around a corner, let it hit a wall, or block it with your shield.
 defineProjectile({ id: 'seed', spr: 'seedwisp', spd: 3.3, dmg: 1, sc: 0.55, blockable: true, range: 15, homing: 1.9, homeDelay: 0.25 });
@@ -4379,16 +4381,36 @@ defineHints(['THE THORN-FOLK ARE MORE THAN THORNLINGS. THE BIG ONES THROW TWO SP
 // ---- src/content/enemies/wizard.js ----
 (function () {
 // ===== content/enemies/wizard.js =====
-// SKELETON MAGES: bone faces and empty sockets under the hat. Each blinks next to you and casts; the robe tells you what:
-//   FORCE MAGE (purple, the old 'wizard' id) - a slow magic bolt
-//   FIRE MAGE (red) - a fireball (it burns what it lands on)
-//   STORM MAGE (blue) - a fast crackling bolt
-//   BONE MAGE (white, rare: WIZ_BONE_CHANCE of any mage that spawns) - a fan of three bone shards (physical: your shield
-//     stops them, unlike the others) and every third cast raises a skeleton beside it (two at most). Twice as tough.
-// A Heavy Pommel strike knocks the staff away (once any armor is off): no more spells, it blinks away and fights up close.
+// SKELETON MAGES. Bone faces under the hat; the robe tells you the element, and the eyes tell you the tier.
+//   Elements: FORCE (purple, the old 'wizard' id), FIRE (red), STORM (blue), BONE (white: WIZ_BONE_CHANCE of any mage that
+//   spawns is the bone mage of the same tier instead).
+//   Tiers:    MAGE    empty sockets. One spell.
+//             ADEPT   glowing eyes, bone plates on the shoulders (armor 1). Deeper in its own element (below); resists it
+//                     by half (bone: every kind of magic).
+//             ARCHMAGE  burning eyes and mouth, plates and a bone crown (armor 2). Resists its element by MAGE_RESIST[3].
+//                     Starts its element's COMBO, and any adept or archmage in the room can join it (game: they stop and
+//                     chant; every joiner makes it hit harder). Alone it still casts it.
+//   What each one does:
+//     FORCE   bolt | adept: a push that shoves you back, and SHIELD: it stands still holding a bubble over an ally that
+//             nothing gets through; hit the caster (anything) and the bubble breaks | combo FORCE WAVE: a ring that shoves
+//     FIRE    fireball | adept: burning patches where you stand | combo FLAME WALL: a line of fire across your path.
+//             Takes double from frost arrows (def.hot).
+//     STORM   fast bolt | adept: STORM STRIKE, a mark under your feet, then lightning | combo LIGHTNING LANCE: a line marked
+//             through you, then a lance down it. A reflected shot (the Wardhold shield) stuns it.
+//     BONE    three bone shards (physical: your shield stops them) | raises skeletons whose armor matches its tier (1, 2,
+//             full) | archmage: THE DEAD MARCH, five fully armored skeletons, and the combo THE OSSUARY: a ribcage
+//             bursts up around you and closes. Break a rib (a pommel strike, a bomb, or seven sword cuts) or fly out.
+//             Joiners change it: fire makes the ribs burn, storm arcs lightning inside, force closes it twice as fast.
+//             Bone mages take half from arrows (they pass through the ribs) and double from blunt hits (pommel, bombs).
+//             A bone archmage always drops the HOLLOW RING.
+// Armor blocks both physical and magic hits (ARMOR_STEP per level, game/sim.js). The Heavy Pommel takes the staff only
+// once the armor is off.
 'use strict';
 const WIZ_BONE_CHANCE = 0.02;
-const WIZ_ROWS = [
+const MAGE_RESIST = [0, 0, 0.5, 0.7]; // by tier (1 mage, 2 adept, 3 archmage); a bone mage resists all magic, and from tier 1
+const OSSUARY_CLOSE = 2.6; // seconds from the cage rising to it crushing whoever is still inside
+// ---- the look: rows built from the tier (eyes, armor shown) ----
+const WIZ_BASE = [
   '.......kk.......',
   '......kPPk......',
   '.....kPPPPk.....',
@@ -4406,37 +4428,178 @@ const WIZ_ROWS = [
   '...kkkkkkkkk....',
   '................',
 ];
-const WIZ_BARE = WIZ_ROWS.map((r, i) => i === 3 ? '....kPPyPPPk....' : i >= 4 && i <= 11 ? r.slice(0, 13) + '...' : r).map((r, i) => i === 8 ? '...kPpPPPPpPkz..' : r);
-const WIZ_PAL = {
-  wizard: null, // force: the palette's own purple
-  wizard_fire: { P: '#901c14', p: '#e0502c' },
-  wizard_storm: { P: '#1c3e8c', p: '#58b0f0' },
-  wizard_bone: { P: '#e4e0d4', p: '#9c968a', y: '#a0a0a8' },
+function wizRows(tier, armor, staff) {
+  const r = WIZ_BASE.slice();
+  if (tier === 2) r[5] = '....kzXzzXzk..n.';                                     // eyes lit in the sockets
+  if (tier === 3) { r[5] = '....kXYzzYXk..n.'; r[6] = '.....kzXXzk...n.'; }   // burning eyes, and the mouth too
+  if (armor >= 1) { r[7] = '....kzzPPzzk.kn.'; r[8] = '...kzzPPPPzzkzn.'; }   // bone plates on the shoulders
+  if (armor >= 2) { r[1] = '.....kzkkzk.....'; r[2] = '.....kzPPzk.....'; r[3] = '....kzzyzzzk..y.'; } // a bone crown
+  return staff ? r : r.map((row, i) => i === 3 ? row.slice(0, 13) + '...' : i >= 4 && i <= 11 ? row.slice(0, 13) + '...' : row);
+}
+const ELEM = {
+  force: { id: 'wizard', name: 'FORCE', pal: {}, eye: '#c060ff', core: '#ffe0ff', resist: ['force'] },
+  fire: { id: 'wizard_fire', name: 'FIRE', pal: { P: '#901c14', p: '#e0502c' }, eye: '#ff8020', core: '#fff0a0', resist: ['fire'] },
+  storm: { id: 'wizard_storm', name: 'STORM', pal: { P: '#1c3e8c', p: '#58b0f0' }, eye: '#60f0ff', core: '#ffffff', resist: ['storm'] },
+  bone: { id: 'wizard_bone', name: 'BONE', pal: { P: '#e4e0d4', p: '#9c968a', y: '#a0a0a8' }, eye: '#60ff80', core: '#e0ffe0', resist: ['force', 'fire', 'storm'] },
 };
-const bareSpr = (id) => id + '_bare';
-function disarmedAi(sim, e, dt, { p }) { // staff gone: it blinks away from you and only fights up close
-  if (e.tm > 0 || !p) return; const L = sim.W.levels[e.lvl];
-  for (let i = 0; i < 20; i++) { const a = Math.atan2(e.y - p.y, e.x - p.x) + (Math.random() - 0.5) * 2, r = 3 + Math.random() * 2; const x = p.x + Math.cos(a) * r, y = p.y + Math.sin(a) * r; if (AI.safeAt(L, x, y) && (!e.b || (x > e.b.x0 && x < e.b.x1 && y > e.b.y0 && y < e.b.y1))) { sim.puff(e, x, y); break; } }
-  e.tm = 1.8 + Math.random();
+const TIER_SUFFIX = ['', '', '_adept', '_arch'], TIER_NAME = ['', 'MAGE', 'ADEPT', 'ARCHMAGE'];
+const mageId = (el, tier) => ELEM[el].id + TIER_SUFFIX[tier];
+// ---- helpers ----
+function blink(sim, e, p, near) { // pop to a spot near (or, staffless, away from) the hero, inside the room
+  const L = sim.W.levels[e.lvl];
+  for (let i = 0; i < 20; i++) {
+    const a = near ? Math.random() * TAU : Math.atan2(e.y - p.y, e.x - p.x) + (Math.random() - 0.5) * 2, r = near ? 2.5 + Math.random() * 2 : 3 + Math.random() * 2;
+    const x = p.x + Math.cos(a) * r, y = p.y + Math.sin(a) * r;
+    if (AI.safeAt(L, x, y) && (!e.b || (x > e.b.x0 && x < e.b.x1 && y > e.b.y0 && y < e.b.y1))) { sim.puff(e, 0.8); e.x = x; e.y = y; return; }
+  }
 }
-function boneCast(sim, e, a) { // three shards, and every third cast a skeleton climbs out of the floor
-  AI.fan(sim, e, 'boneshard', a, 3, 0.5, { dmg: 2 * e.dmgMul }); sim.sfx('bonecast', e.lvl, e.x, e.y);
-  e.casts = (e.casts || 0) + 1;
-  if (e.casts % 3 === 0 && sim.ents.filter(o => o.k === 'en' && !o.dead && o.raisedBy === e.id).length < 2) { const s = sim.spawnMinion(e, 'skeleton'); if (s) { s.raisedBy = e.id; sim.sfx('rattle', e.lvl, s.x, s.y); } }
+function disarmedAi(sim, e, dt, { p }) { if (e.tm > 0 || !p) return; blink(sim, e, p, false); e.tm = 1.8 + Math.random(); }
+const isMage = (o) => o && o.k === 'en' && !o.dead && enemyDef(o.type).mage;
+const roomMates = (sim, e) => sim.ents.filter(o => o !== e && o.k === 'en' && !o.dead && o.lvl === e.lvl && (e.g ? o.g === e.g : dist2(o.x, o.y, e.x, e.y) < 64));
+const heroesNear = (sim, e, r) => Object.values(sim.players).filter(pl => pl.alive && pl.lvl === e.lvl && dist2(pl.x, pl.y, e.x, e.y) < r * r);
+function raise(sim, e, armor, cap) { // skeletons climb out of the floor beside a bone mage
+  const mine = sim.ents.filter(o => o.k === 'en' && !o.dead && o.raisedBy === e.id).length; if (mine >= cap) return 0;
+  const s = sim.spawnMinion(e, armor ? 'skeleton_a' + armor : 'skeleton'); if (!s) return 0; s.raisedBy = e.id; sim.sfx('rattle', e.lvl, s.x, s.y); return 1;
 }
-const mage = (id, title, opts) => defineEnemy(Object.assign({
-  id, title, hp: 4, spd: 0, dmg: 2, r: 0.32, sc: 0.9,
-  disarm: 'staff_drop', disarmedSprite: bareSpr(id), disarmText: 'THE STAFF GOES FLYING!', disarmedAi,
-  anim: { fps: 3, frames: (s, kit) => [s, kit.shiftCols(s, 13, 15, -1), kit.shiftCols(s, 13, 15, -2)] },
-  sprite: WIZ_ROWS, pal: WIZ_PAL[id] || undefined,
-  rare: id === 'wizard_bone' ? null : { type: 'wizard_bone', chance: WIZ_BONE_CHANCE },
-}, opts));
-mage('wizard', 'FORCE MAGE', { spawns: { dungeons: [6, 7, 8, 9] }, ai: AI.blinkCaster('magic', 2) });
-mage('wizard_fire', 'FIRE MAGE', { spawns: { dungeons: [7, 9] }, ai: AI.blinkCaster('fire', 2) });
-mage('wizard_storm', 'STORM MAGE', { spawns: { dungeons: [6, 8, 9] }, ai: AI.blinkCaster('stormbolt', 2) });
-mage('wizard_bone', 'BONE MAGE', { hp: 8, spawns: {}, ai: AI.blinkCaster(boneCast, 2) });
-for (const id of Object.keys(WIZ_PAL)) { if (WIZ_PAL[id]) defineSpriteVariant(bareSpr(id), 'wizard_bare', WIZ_PAL[id]); }
-defineSprite('wizard_bare', WIZ_BARE);
+function mark(sim, e, x, y, life, spr) { sim.spawn({ k: 'fx', lvl: e.lvl, x, y, spr: spr || 'strikemark', life, sc: 1.1, z: -0.36 }); }
+// ---- the spells ----
+const SPELL = {
+  bolt(sim, e, p, a) { const el = enemyDef(e.type).elem; const proj = { force: 'magic', fire: 'fire', storm: 'stormbolt' }[el];
+    if (el === 'bone') { AI.fan(sim, e, 'boneshard', a, 3, 0.5, { dmg: 2 * e.dmgMul }); sim.sfx('bonecast', e.lvl, e.x, e.y); return; }
+    sim.fireProj(proj, e.lvl, e.x, e.y, a, 'e', null, { dmg: 2 * e.dmgMul }); if (el === 'storm' && enemyDef(e.type).tier >= 2) sim.fireProj(proj, e.lvl, e.x, e.y, a + 0.18, 'e', null, { dmg: 2 * e.dmgMul });
+    sim.sfx(el === 'fire' ? 'fire' : el === 'storm' ? 'zap' : 'magic', e.lvl, e.x, e.y); },
+  push(sim, e, p, a) { AI.fan(sim, e, 'forcepush', a, 5, 1.0, { dmg: 1 * e.dmgMul }); sim.sfx('force', e.lvl, e.x, e.y); },
+  patches(sim, e, p) { // fire lands where you stand, and around it
+    for (let i = 0; i < 5; i++) { const a = i * TAU / 5, r = i ? 0.9 : 0; sim.spawn({ k: 'efire', lvl: e.lvl, x: p.x + Math.cos(a) * r, y: p.y + Math.sin(a) * r, life: 3.2, spr: 'flame', sc: 0.7, z: -0.05 }); }
+    sim.sfx('fire', e.lvl, p.x, p.y); },
+  strike(sim, e, p) { e.strikes = (e.strikes || []).concat([{ at: sim.time + 0.8, x: p.x, y: p.y }]); mark(sim, e, p.x, p.y, 0.8); sim.sfx('charge', e.lvl, p.x, p.y); },
+  shards(sim, e) { AI.ring(sim, e, 'boneshard', 8, Math.random(), { dmg: 2 * e.dmgMul }); sim.sfx('bonecast', e.lvl, e.x, e.y); },
+  raise(sim, e) { const t = enemyDef(e.type).tier; raise(sim, e, t, t === 3 ? 5 : 2); },
+  march(sim, e) { let n = 0; for (let i = 0; i < 5; i++) n += raise(sim, e, 3, 5); if (n) { sim.msg('THE DEAD MARCH!'); sim.ev({ t: 'shake', lvl: e.lvl, x: e.x, y: e.y }); } e.marchAt = sim.time + 16; },
+  shield(sim, e) { // hold a bubble over the ally nearest the hero; stand still while it lasts
+    const p = sim.nearestPlayer(e, 30); const allies = roomMates(sim, e).filter(o => !enemyDef(o.type).boss && !o.wardBy && !(o.channel != null));
+    if (!allies.length || !p) return false; allies.sort((a, b) => dist2(a.x, a.y, p.x, p.y) - dist2(b.x, b.y, p.x, p.y));
+    const o = allies[0]; o.wardBy = e.id; e.channel = o.id; e.channelUntil = sim.time + 6; sim.sfx('ward', e.lvl, o.x, o.y); return true;
+  },
+};
+// what a mage of each element and tier picks from (weights)
+const MOVES = {
+  force: [[['bolt', 1]], [['bolt', 2], ['push', 1], ['shield', 1.4]]],
+  fire: [[['bolt', 1]], [['bolt', 2], ['patches', 1.2]]],
+  storm: [[['bolt', 1]], [['bolt', 1.5], ['strike', 1.5]]],
+  bone: [[['bolt', 2], ['raise', 1]], [['bolt', 1.5], ['shards', 1], ['raise', 1]]],
+};
+function pick(list) { let t = 0; for (const [, w] of list) t += w; let r = Math.random() * t; for (const [m, w] of list) { r -= w; if (r <= 0) return m; } return list[0][0]; }
+// ---- combos (archmages start them, adepts and archmages join) ----
+const COMBO_WINDUP = 1.1;
+function startCombo(sim, e, p) {
+  const def = enemyDef(e.type); const joiners = roomMates(sim, e).filter(o => isMage(o) && enemyDef(o.type).tier >= 2 && !o.disarmed && o.channel == null && !o.joining && !o.combo);
+  for (const o of joiners) { o.joining = e.id; o.st = 0; }
+  e.combo = { kind: def.elem, at: sim.time + COMBO_WINDUP, x: p.x, y: p.y, a: Math.atan2(p.y - e.y, p.x - e.x), joined: joiners.map(o => enemyDef(o.type).elem) };
+  if (def.elem === 'storm') { for (let d = 1; d < 12; d += 0.8) mark(sim, e, e.x + Math.cos(e.combo.a) * d, e.y + Math.sin(e.combo.a) * d, COMBO_WINDUP, 'lancemark'); }
+  sim.sfx('chant', e.lvl, e.x, e.y); e.comboAt = sim.time + 9 + Math.random() * 3;
+}
+function releaseCombo(sim, e, p) {
+  const c = e.combo; e.combo = null; const n = c.joined.length; for (const o of sim.ents) if (o.joining === e.id) o.joining = null;
+  const L = sim.W.levels[e.lvl];
+  if (c.kind === 'force') { AI.ring(sim, e, 'forcepush', 16 + 4 * n, 0, { dmg: (1 + n) * e.dmgMul }); sim.sfx('force', e.lvl, e.x, e.y); sim.ev({ t: 'shake', lvl: e.lvl, x: e.x, y: e.y }); }
+  else if (c.kind === 'fire') { // across the line from the mage to where you stood
+    const tx = p ? p.x : c.x, ty = p ? p.y : c.y, a = Math.atan2(ty - e.y, tx - e.x) + Math.PI / 2, len = 5 + 2 * n;
+    for (let d = -len / 2; d <= len / 2; d += 0.6) { const x = tx + Math.cos(a) * d, y = ty + Math.sin(a) * d; if (!L.solidAt(x, y)) sim.spawn({ k: 'efire', lvl: e.lvl, x, y, life: 4, spr: 'flame', sc: 0.9, z: -0.05 }); }
+    sim.sfx('fire', e.lvl, tx, ty);
+  } else if (c.kind === 'storm') { sim.fireProj('elance', e.lvl, e.x, e.y, c.a, 'e', null, { dmg: (3 + n) * e.dmgMul }); sim.sfx('beam', e.lvl, e.x, e.y); sim.ev({ t: 'shake', lvl: e.lvl, x: e.x, y: e.y }); }
+  else if (c.kind === 'bone' && p) ossuary(sim, e, p, c.joined);
+}
+// THE OSSUARY: a ring of ribs (low walls: a Gale Cloak flies over them in a tall room) around the hero, closing
+function ossuary(sim, e, p, joined) {
+  const L = sim.W.levels[e.lvl]; const cx = Math.floor(p.x), cy = Math.floor(p.y); const hot = joined.includes('fire');
+  const ribs = []; for (let dy = -2; dy <= 2; dy++) for (let dx = -2; dx <= 2; dx++) {
+    if (Math.max(Math.abs(dx), Math.abs(dy)) !== 2) continue; const x = cx + dx, y = cy + dy; if (x < 0 || y < 0 || x >= L.w || y >= L.h) continue;
+    const i = L.idx(x, y); const ti = TINFO[L.tiles[i]]; if (ti.solid || ti.pit || ti.water || L.props[i]) continue;
+    if (sim.ents.some(o => o.k === 'en' && !o.dead && o.lvl === L.id && Math.floor(o.x) === x && Math.floor(o.y) === y)) continue;
+    sim.setTempTile(L.id, i, hot ? TL.BONERIB_HOT : TL.BONERIB, OSSUARY_CLOSE + 0.2); ribs.push(i);
+  }
+  L.ribHits = L.ribHits || {}; for (const i of ribs) L.ribHits[i] = 0;
+  sim.ossuaries = (sim.ossuaries || []).concat([{ lvl: L.id, cx: cx + 0.5, cy: cy + 0.5, ribs, by: e.id, dmg: 3 + joined.length, at: sim.time + (joined.includes('force') ? OSSUARY_CLOSE / 2 : OSSUARY_CLOSE), storm: joined.includes('storm'), zapAt: sim.time + 0.5 }]);
+  sim.sfx('rattle', L.id, p.x, p.y); sim.ev({ t: 'shake', lvl: L.id, x: p.x, y: p.y }); sim.msg('THE OSSUARY CLOSES!');
+}
+// called by game/sim.js every tick
+Content.updateOssuaries = function (sim) {
+  if (!sim.ossuaries || !sim.ossuaries.length) return;
+  sim.ossuaries = sim.ossuaries.filter(o => {
+    const inside = Object.values(sim.players).filter(pl => pl.alive && pl.lvl === o.lvl && !sim.flying(pl) && Math.max(Math.abs(pl.x - o.cx), Math.abs(pl.y - o.cy)) < 1.6);
+    if (o.storm && sim.time >= o.zapAt) { o.zapAt = sim.time + 0.55; for (const pl of inside) { sim.hurtPlayer(pl, 1, { k: 'proj', type: 'stormbolt', x: o.cx, y: o.cy }); sim.spawn({ k: 'fx', lvl: o.lvl, x: pl.x, y: pl.y, spr: 'zapfx', life: 0.2, sc: 1 }); } }
+    if (sim.time < o.at) return true;
+    for (const pl of inside) sim.hurtPlayer(pl, o.dmg, { k: 'proj', type: 'boneshard', x: o.cx, y: o.cy }); if (inside.length) sim.msg('CRUSHED!');
+    sim.clearRibs(o); sim.sfx('boom', o.lvl, o.cx, o.cy);
+    for (let k = 0; k < 8; k++) sim.fireProj('boneshard', o.lvl, o.cx, o.cy, k * TAU / 8, 'e', null, { dmg: 2 });
+    return false;
+  });
+};
+// ---- the brain ----
+function mageAi(sim, e, dt, { p }) {
+  const def = enemyDef(e.type);
+  for (const s of e.strikes || []) if (sim.time >= s.at) { s.done = true; sim.spawn({ k: 'fx', lvl: e.lvl, x: s.x, y: s.y, spr: 'zapfx', life: 0.3, sc: 1.6, z: 0 }); sim.sfx('thunder', e.lvl, s.x, s.y); for (const pl of Object.values(sim.players).filter(q => q.alive && q.lvl === e.lvl && dist2(q.x, q.y, s.x, s.y) < 0.75 * 0.75)) sim.hurtPlayer(pl, 2 * e.dmgMul, { k: 'proj', type: 'stormbolt', x: s.x, y: s.y }); }
+  if (e.strikes) e.strikes = e.strikes.filter(s => !s.done);
+  if (e.joining) { const lead = sim.ents.find(o => o.id === e.joining); if (!lead || lead.dead || !lead.combo) e.joining = null; else { if (Math.random() < dt * 6) sim.spawn({ k: 'fx', lvl: e.lvl, x: e.x, y: e.y, spr: 'chantfx', life: 0.3, sc: 0.8, z: 0.6 }); return; } }
+  if (e.channel != null) { // holding a shield over an ally
+    const o = sim.ents.find(x => x.id === e.channel);
+    if (!o || o.dead || sim.time > e.channelUntil) { if (o) o.wardBy = null; e.channel = null; e.tm = 1; }
+    else { if (Math.random() < dt * 8) { sim.spawn({ k: 'fx', lvl: e.lvl, x: o.x, y: o.y, spr: 'wardbubble', life: 0.18, sc: 1.4, z: 0.1 }); const t = Math.random(); sim.spawn({ k: 'fx', lvl: e.lvl, x: lerp(e.x, o.x, t), y: lerp(e.y, o.y, t), spr: 'chantfx', life: 0.2, sc: 0.4, z: 0.5 }); } return; }
+  }
+  if (e.combo) { if (Math.random() < dt * 8) sim.spawn({ k: 'fx', lvl: e.lvl, x: e.x, y: e.y, spr: 'chantfx', life: 0.3, sc: 1.1, z: 0.7 }); if (sim.time >= e.combo.at) { releaseCombo(sim, e, p); e.tm = 1.4; } return; }
+  if (e.tm > 0 || !p) return;
+  if (e.st === 0) { blink(sim, e, p, true); e.st = 1; e.tm = 0.7; return; }
+  e.st = 0; e.tm = 1.6 + Math.random() - (def.tier - 1) * 0.25;
+  const a = Math.atan2(p.y - e.y, p.x - e.x);
+  if (def.tier === 3 && def.elem === 'bone' && sim.time >= (e.marchAt || 0)) { SPELL.march(sim, e); return; }
+  if (def.tier === 3 && sim.time >= (e.comboAt != null ? e.comboAt : (e.comboAt = sim.time + 3))) { startCombo(sim, e, p); return; }
+  const move = pick(MOVES[def.elem][def.tier === 1 ? 0 : 1]);
+  if (move === 'shield') { if (SPELL.shield(sim, e)) return; SPELL.bolt(sim, e, p, a); return; }
+  SPELL[move](sim, e, p, a);
+}
+// ---- the mages ----
+for (const el of Object.keys(ELEM)) for (let tier = 1; tier <= 3; tier++) {
+  const E = ELEM[el], id = mageId(el, tier), bone = el === 'bone', pal = Object.assign({}, E.pal, { X: E.eye, Y: E.core });
+  const armor = tier - 1, res = {}; for (const k of E.resist) res[k] = Math.max(MAGE_RESIST[tier], bone ? 0.5 : 0);
+  const spawns = bone ? {} : { force: [{ dungeons: [6, 7, 8, 9] }, { dungeons: [8, 9] }, { dungeons: [9] }], fire: [{ dungeons: [7, 9] }, { dungeons: [9, 12] }, { dungeons: [12] }], storm: [{ dungeons: [6, 8, 9] }, { dungeons: [8, 9] }, { dungeons: [9] }] }[el][tier - 1];
+  const ids = { full: id, bare: id + '_bare' }; for (let a = 0; a < armor; a++) ids['a' + a] = id + '_a' + a;
+  defineEnemy({
+    id, title: E.name + ' ' + TIER_NAME[tier], mage: true, elem: el, tier, armor: armor || undefined,
+    hp: (bone ? [8, 10, 14] : [4, 6, 8])[tier - 1], spd: 0, dmg: 2, r: 0.32, sc: 0.9 + (tier - 1) * 0.05,
+    spawns, ai: mageAi, disarm: 'staff_drop', disarmedSprite: ids.bare, disarmText: 'THE STAFF GOES FLYING!', disarmedAi,
+    resist: res, hot: el === 'fire' || undefined, noElites: tier === 3 ? ['giant', 'splitter'] : undefined,
+    hitMul: bone ? (opt) => (opt.arrow ? 0.5 : opt.blunt ? 2 : 1) : el === 'storm' ? (opt, e) => { if (opt.reflected) e.stun = Math.max(e.stun || 0, 2); return 1; } : undefined,
+    onDamage(sim, e) { if (e.channel != null) { const o = sim.ents.find(x => x.id === e.channel); if (o) o.wardBy = null; e.channel = null; } }, // any hit breaks a shield it's holding
+    onDeath: bone && tier === 3 ? (sim, e) => { if (!sim.team.taken['bonearch:ring']) sim.spawn({ k: 'pick', lvl: e.lvl, x: e.x, y: e.y, item: 'ring_hollow', tk: 'bonearch:ring', perm: true, spr: itemSprite('ring_hollow'), sc: 0.55, z: 0.1, team: false }); else sim.dropItem('gems100', e.lvl, e.x, e.y, { perm: true }); } : undefined,
+    rare: bone ? null : { type: mageId('bone', tier), chance: WIZ_BONE_CHANCE },
+    sprFor: armor ? (e) => (e.armor >= armor || e.disarmed ? null : ids['a' + (e.armor || 0)]) : undefined,
+    anim: { fps: 3, frames: (s, kit) => [s, kit.shiftCols(s, 13, 15, -1), kit.shiftCols(s, 13, 15, -2)] },
+    sprite: wizRows(tier, armor, true), pal,
+  });
+  defineSprite(ids.bare, wizRows(tier, 0, false), pal);
+  for (let a = 0; a < armor; a++) defineSprite(ids['a' + a], wizRows(tier, a, true), pal);
+}
+// ---- effects and tiles ----
+defineSprite('strikemark', [
+  '................', '................', '................', '................', '.....yyyyyy.....', '...yy......yy...', '..y....ww....y..', '..y...wwww...y..',
+  '..y...wwww...y..', '..y....ww....y..', '...yy......yy...', '.....yyyyyy.....', '................', '................', '................', '................']);
+defineSprite('lancemark', [
+  '................', '................', '................', '................', '................', '................', '.......yy.......', '......ywwy......',
+  '......ywwy......', '.......yy.......', '................', '................', '................', '................', '................', '................']);
+defineSprite('zapfx', [
+  '........y.......', '.......yw.......', '......yw........', '.....ywy........', '......ywy.......', '.......yw.......', '......yw........', '.....ywwy.......',
+  '....yw..wy......', '...y......y.....', '................', '................', '................', '................', '................', '................']);
+defineSprite('chantfx', [
+  '................', '................', '................', '................', '................', '.......w........', '......wcw.......', '.......w........',
+  '................', '................', '................', '................', '................', '................', '................', '................']);
+defineSprite('wardbubble', [
+  '................', '.....cccccc.....', '...cc......cc...', '..c..........c..', '.c..w........c..', '.c.w..........c.', 'c..............c', 'c..............c',
+  'c..............c', 'c..............c', '.c............c.', '.c............c.', '..c..........c..', '...cc......cc...', '.....cccccc.....', '................']);
+defineTexture('ribwall', (x, y, r, ctx) => { const u = (x + Math.round(Math.sin(y * 0.2) * 2) + 64) % 8; return u >= 2 && u <= 5 ? ctx.vary(u === 2 ? [190, 182, 164] : [236, 228, 208], x, y, 0.06) : ctx.vary([22, 16, 24], x, y, 0.2); });
+defineTexture('ribwall_hot', (x, y, r, ctx) => { const u = (x + Math.round(Math.sin(y * 0.2) * 2) + 64) % 8; return u >= 2 && u <= 5 ? ctx.vary(u === 2 ? [220, 90, 30] : [255, 190, 90], x, y, 0.12) : ctx.vary([40, 12, 8], x, y, 0.3); });
+defineTile('BONERIB', { solid: true, wall: 'ribwall', tall: 1.5, low: true, rib: true, floor: 'dfloor' });
+defineTile('BONERIB_HOT', { solid: true, wall: 'ribwall_hot', tall: 1.5, low: true, rib: true, ribHot: true, floor: 'dfloor' });
 // without its staff (knocked away by a Heavy Pommel strike)
 defineSprite('staff_drop', [ // the wizard's staff, tumbling away
   '................', '................', '..........y.....', '.........yny....', '..........n.....', '.........n......', '........n.......', '.......n........',
@@ -4597,13 +4760,14 @@ defineEntity('bomb', {
     sim.spawn({ k: 'fx', lvl: e.lvl, x: e.x, y: e.y, spr: 'boom', life: 0.45, sc: R, z: 0.2 });
     sim.sfx('boom', e.lvl, e.x, e.y); sim.ev({ t: 'shake', lvl: e.lvl, x: e.x, y: e.y });
     // armored foes lose a piece of armor instead of taking damage, the first time a bomb (or bomb arrow) gets them
-    for (const en of sim.ents) if (en.k === 'en' && en.lvl === e.lvl && !en.dead && dist2(en.x, en.y, e.x, e.y) < R * R) { if (en.armor > 0 && sim.stripArmor(en, 'bomb', e)) continue; sim.damageEnemy(en, e.nova ? 6 : 4, e, { pid: e.pid, pierceShield: true, ignoreIframes: true }); } // a blast always lands, even right after another hit (a bomb arrow's own arrow)
+    for (const en of sim.ents) if (en.k === 'en' && en.lvl === e.lvl && !en.dead && dist2(en.x, en.y, e.x, e.y) < R * R) { if (en.armor > 0 && sim.stripArmor(en, 'bomb', e)) continue; sim.damageEnemy(en, e.nova ? 6 : 4, e, { pid: e.pid, pierceShield: true, ignoreIframes: true, blunt: true }); } // a blast always lands, even right after another hit (a bomb arrow's own arrow)
     // crack open bombable walls in range
     const tx = Math.floor(e.x), ty = Math.floor(e.y); let found = false;
     for (let dy = -2; dy <= 2; dy++) for (let dx = -2; dx <= 2; dx++) {
       const bx = tx + dx, by = ty + dy; if (bx < 0 || by < 0 || bx >= L.w || by >= L.h) continue;
       if (dist2(bx + 0.5, by + 0.5, e.x, e.y) > (R * 0.9) ** 2) continue;
       const i = L.idx(bx, by); const t = L.tiles[i];
+      if (TINFO[t].rib) { sim.hitRib(L, bx + 0.5, by + 0.5, OSSUARY_HITS, null); continue; } // a bomb breaks an Ossuary rib (enemies/wizard.js)
       if (TINFO[t].bomb) { let nt = TINFO[t].opensTo ? TL[TINFO[t].opensTo] : TL.OPENDOOR; if (t === TL.ROCK_BOMB) nt = (L.secretReveal[i] && L.secretReveal[i].tile) || TL.CAVE; if (t === TL.CWALL_BOMB) nt = TL.CFLOOR; sim.setTile(L.id, i, nt); found = true; }
     }
     if (found) sim.sfx('secret', L.id);
@@ -5105,7 +5269,7 @@ function castSpell(sim, spell, ps, lead) {
     for (const e of sim.ents) {
       if (e.k !== 'en' || e.lvl !== lead.lvl || e.dead || e.sub || dist2(e.x, e.y, cx, cy) > R * R) continue; const def = enemyDef(e.type);
       if (n > 1 && def.disarm && !e.disarmed && !def.boss) sim.disarmEnemy(e, { x: cx, y: cy });
-      if (sim.damageEnemy(e, n > 1 ? n : 1, { x: cx, y: cy }, { pid: lead.id, kbMul: n > 1 ? 3.5 : 2.5, pierceShield: true, ignoreIframes: true }) && !def.boss && !e.dead) { e.stun = Math.max(e.stun || 0, n > 1 ? 2.5 : 1); e.stunFrom = sim.time; }
+      if (sim.damageEnemy(e, n > 1 ? n : 1, { x: cx, y: cy }, { pid: lead.id, kbMul: n > 1 ? 3.5 : 2.5, pierceShield: true, ignoreIframes: true, elem: 'force' }) && !def.boss && !e.dead) { e.stun = Math.max(e.stun || 0, n > 1 ? 2.5 : 1); e.stunFrom = sim.time; }
     }
     for (const p of ps) if (p !== lead) p.spellReady = sim.time + 1; // joining costs nothing
     return;
@@ -6138,6 +6302,7 @@ const DISARM_STAGGER = 1.2;
 const KNIGHT_WINDUP = 0.45; // seconds a sword knight raises its blade before the counter lands (your cue to back off) // seconds a disarmed foe reels
 const WEB_HELPLESS = 1, ARM_DELAY = 0.12, ARM_MIRROR = 0.25, ARM_SWAP = 1.5; // stuck in a web: seconds before a slash frees you; the Silk Arm's mirror cut: delay, share of the hit; stance change time
 const GRUDGE_COOL = 180, THORN_RING_GRUDGE = 12; // the thorn-folk's grudge: seconds per point it cools; the most the root merchant forgives
+const OSSUARY_HITS = 7; // sword cuts that break a rib of a bone archmage's OSSUARY (a pommel strike or a bomb: one)
 const MAX_HEARTS = 20; // heart containers and pieces stop here (the HUD shows two rows of 10)
 const REFLECT_TIME = 1, WARD_TIME = 8; // the Wardhold shield (content/wardhold.js): reflect window after it comes up; seconds between wards
 const TWIN_EYE_TIME = 0.55; // seconds a twin-eye gate's eye stays shut (content/gimmicks/twingate.js)
@@ -6565,6 +6730,7 @@ class Sim {
       if (ambush.has(ei)) { const bushes = []; for (let yy = b.y0; yy < b.y1; yy++) for (let xx = b.x0; xx < b.x1; xx++) if (L.props[L.idx(xx, yy)] === PR.BUSH) { const d = dist2(xx + 0.5, yy + 0.5, p.x, p.y); if (d > 9 && d < 64) bushes.push([xx + 0.5, yy + 0.5]); }
         if (bushes.length) { const [bx2, by2] = bushes[Math.floor(rnd() * bushes.length)]; const a = Math.atan2(p.y - by2, p.x - bx2); const ax = bx2 + Math.cos(a) * 0.7, ay = by2 + Math.sin(a) * 0.7; if (!L.solidAt(ax, ay)) { x = ax; y = ay; this.sfx('rustle', L.id, ax, ay); } } } // out of the bushes
       const e = this.spawn({ k: 'en', type, lvl: L.id, x, y, hp, maxHp: hp, f: rnd() * TAU, b, g: key, st: 0, tm: rnd() * 2, stun: 0, hurt: 0, spawnFx: 0.5, dmgMul: L.kind === 'dungeon' ? Math.ceil(Math.min(9, L.dnum) / 3) : 1 + Math.floor(room.tier / 2) });
+      if (def.armor && e.armor == null) e.armor = def.armor; // (armored knights spawned in rooms used to arrive without their plate)
       if (!def.boss) { const ch = L.kind === 'dungeon' ? 0.05 + Math.min(9, L.dnum) * 0.015 : 0.06 + room.tier * 0.03; if (rnd() < ch) this.makeElite(e, rnd); }
       g.ents.push(e);
     });
@@ -6789,7 +6955,10 @@ class Sim {
       if (e.stun > 0) { if (this.time - (e.stunFrom != null ? e.stunFrom : this.time) < STUN_LOCK) e.stun = Math.max(e.stun, BOOMERANG_STUN); else { e.stunImmune = this.time + e.stun + 1.2; } return true; }
       e.stun = BOOMERANG_STUN; e.stunFrom = this.time; if (def.boomerangKills) dmg = Math.max(dmg, e.hp); // bats and the like drop to one throw
     }
+    if (e.wardBy) { const c = this.ents.find(o => o.id === e.wardBy); if (c && !c.dead && c.channel === e.id) { this.sfx('clink', e.lvl, e.x, e.y); this.spawn({ k: 'fx', lvl: e.lvl, x: e.x, y: e.y, spr: 'wardbubble', life: 0.25, sc: 1.5, z: 0.1 }); return false; } e.wardBy = null; } // a force mage's SHIELD (enemies/wizard.js)
     if (e.armor > 0) dmg *= 1 - ARMOR_STEP * Math.min(3, e.armor);
+    if (opt.elem && def.resist && def.resist[opt.elem]) dmg *= 1 - def.resist[opt.elem]; // mages shrug off their own element (opt.elem: 'force' | 'fire' | 'storm' | 'frost')
+    if (def.hitMul) dmg *= def.hitMul(opt, e); // e.g. a bone mage: arrows pass through, blunt hits shatter
     if (def.onDamage && def.onDamage(this, e, dmg, opt) === false) return true;
     e.hp -= dmg; e.hurt = 0.35; this.sfx('hit', e.lvl, e.x, e.y); if (opt.pid) e.lastPid = opt.pid;
     if (def.dummy) { e.total = (this.time - (e.hitAt != null ? e.hitAt : -99) < DUMMY_RESET ? e.total || 0 : 0) + dmg; this.ev({ t: 'pow', lvl: e.lvl, x: e.x, y: e.y, num: true, word: fmtDmg(dmg) + '  (' + fmtDmg(e.total) + ')' }); } // training dummy: show the numbers
@@ -6921,10 +7090,10 @@ class Sim {
       if (d > 1.25 + this.enemyRadius(e)) continue; if (d > 0.5 && Math.abs(angDiff(p.a, Math.atan2(e.y - p.y, e.x - p.x))) > 0.6) continue;
       hit = true;
       if (p.items.heavypommel && def.disarm && !e.disarmed && !def.boss && !(e.armor > 0)) { this.disarmEnemy(e, p); continue; } // knocks the shield (or staff) clean away; armor has to come off first
-      if (e.armor > 0) { if (!(p.items.heavypommel && this.stripArmor(e, 'pommel', p))) this.damageEnemy(e, POMMEL_DMG, p, { pid: p.id, kbMul: 0.6 }); continue; } // armor takes the blow: no stun
-      if (this.damageEnemy(e, POMMEL_DMG, p, { pid: p.id, kbMul: 0.6 }) && !def.boss && !e.dead) { e.stun = Math.max(e.stun || 0, POMMEL_STUN); e.stunFrom = this.time; }
+      if (e.armor > 0) { if (!(p.items.heavypommel && this.stripArmor(e, 'pommel', p))) this.damageEnemy(e, POMMEL_DMG, p, { pid: p.id, kbMul: 0.6, blunt: true }); continue; } // armor takes the blow: no stun
+      if (this.damageEnemy(e, POMMEL_DMG, p, { pid: p.id, kbMul: 0.6, blunt: true }) && !def.boss && !e.dead) { e.stun = Math.max(e.stun || 0, POMMEL_STUN); e.stunFrom = this.time; }
     }
-    for (const d of [0.6, 1.1]) this.breakGourd(L, p.x + Math.cos(p.a) * d, p.y + Math.sin(p.a) * d);
+    for (const d of [0.6, 1.1]) { this.breakGourd(L, p.x + Math.cos(p.a) * d, p.y + Math.sin(p.a) * d); this.hitRib(L, p.x + Math.cos(p.a) * d, p.y + Math.sin(p.a) * d, OSSUARY_HITS, p); }
     this.sfx(hit ? 'pommel' : 'swing', p.lvl, p.x, p.y);
   }
   // Every third sword hit in a chain (hits less than CHAIN_GAP apart) readies a backswing. It fires on the first hit that
@@ -7026,7 +7195,7 @@ class Sim {
           if (!def.blockable && Math.abs(angDiff(p.a, toP)) < 0.7 && this.wardReady(p)) { p.wardAt = this.time + WARD_TIME; e.dead = true; this.sfx('ward', e.lvl, p.x, p.y); this.ev({ t: 'block', pid: p.id, reflect: true }); return; } // the shield's ward stops what a shield can't
           if (guardArm || (p.cls !== 'monk' && def.blockable && Math.abs(angDiff(p.a, toP)) < 0.7)) { e.dead = true; this.sfx('clink', e.lvl); this.ev({ t: 'block', pid: p.id }); return; }
           if (def.chill && p.inv <= 0 && !p.god) p.chill = Math.max(p.chill || 0, def.chill);
-          this.hurtPlayer(p, e.dmg, e); e.dead = true; return;
+          this.hurtPlayer(p, e.dmg, e); if (def.knock && p.alive) { const sp = Math.hypot(e.vx, e.vy) || 1; this.ev({ t: 'shove', pid: p.id, kx: e.vx / sp * def.knock, ky: e.vy / sp * def.knock }); } e.dead = true; return;
         }
       }
     } else {
@@ -7035,7 +7204,7 @@ class Sim {
         const r = this.enemyRadius(en) + 0.2;
         if (dist2(en.x, en.y, e.x, e.y) < r * r) {
           e.hitSet[en.id] = 1;
-          const landed = this.damageEnemy(en, e.dmg * (e.frost && enemyDef(en.type).hot ? 2 : 1), { x: e.x - e.vx * 0.1, y: e.y - e.vy * 0.1 }, { pid: e.pid, silver: e.silver, noKb: !!e.frost, pierceShield: def.pierceShield, ignoreIframes: def.pierce, kbMul: e.kbMul, shieldBreak: e.shieldBreak ? e.dmg / (e.shieldBreak === true ? 2 : e.shieldBreak) : 0, breakNocks: e.shieldBreak === true ? 2 : e.shieldBreak || 0 }); // a loaded shot jars a shield for one arrow's damage
+          const landed = this.damageEnemy(en, e.dmg * (e.frost && enemyDef(en.type).hot ? 2 : 1), { x: e.x - e.vx * 0.1, y: e.y - e.vy * 0.1 }, { pid: e.pid, silver: e.silver, elem: e.frost ? 'frost' : def.pelem || (e.fireTrail ? 'fire' : null), arrow: e.type === 'arrow' || /^arrow/.test(e.type), reflected: !!e.reflected, noKb: !!e.frost, pierceShield: def.pierceShield, ignoreIframes: def.pierce, kbMul: e.kbMul, shieldBreak: e.shieldBreak ? e.dmg / (e.shieldBreak === true ? 2 : e.shieldBreak) : 0, breakNocks: e.shieldBreak === true ? 2 : e.shieldBreak || 0 }); // a loaded shot jars a shield for one arrow's damage
           if (e.frost && landed && !en.dead) { en.stun = Math.max(en.stun, enemyDef(en.type).boss ? 0.6 : 2.5); this.spawn({ k: 'fx', lvl: e.lvl, x: en.x, y: en.y, spr: 'icefx', life: 0.4, sc: 1 }); this.sfx('freeze', e.lvl, en.x, en.y); }
           if (def.fire) this.spawn({ k: 'fire', lvl: e.lvl, x: e.x, y: e.y, life: 0.8, spr: 'flame', sc: 0.8, z: -0.05, pid: e.pid });
           if (def.stun && landed && !en.dead && !enemyDef(en.type).boss) en.stun = Math.max(en.stun, def.stun);
@@ -7049,8 +7218,19 @@ class Sim {
     }
   }
   // tiles with cuttable: true (brambles) open when a sword or fist hits them
+  // THE OSSUARY's ribs (enemies/wizard.js): seven sword cuts break one, a pommel strike or a bomb at once. A burning rib bites back.
+  hitRib(L, x, y, n, p) {
+    const i = L.idx(Math.floor(x), Math.floor(y)); const ti = TINFO[L.tiles[i]]; if (!ti || !ti.rib) return false;
+    if (p && ti.ribHot) this.hurtPlayer(p, 1, { k: 'efire', x, y }, 'fire');
+    L.ribHits = L.ribHits || {}; L.ribHits[i] = (L.ribHits[i] || 0) + n; this.sfx('clank', L.id, x, y);
+    if (L.ribHits[i] < OSSUARY_HITS) return true;
+    for (const t of this.tempTiles) if (t.lvl === L.id && t.i === i) t.at = this.time - 1; this.updateTempTiles(); delete L.ribHits[i];
+    this.spawn({ k: 'fx', lvl: L.id, x: Math.floor(x) + 0.5, y: Math.floor(y) + 0.5, spr: 'armorbits', life: 0.45, sc: 1, z: 0.3 }); this.sfx('rattle', L.id, x, y); return true;
+  }
+  clearRibs(o) { for (const t of this.tempTiles) if (t.lvl === o.lvl && o.ribs.includes(t.i)) t.at = this.time - 1; this.updateTempTiles(); const L = this.W.levels[o.lvl]; if (L.ribHits) for (const i of o.ribs) delete L.ribHits[i]; }
   cutAt(L, x, y, p) {
     const i = L.idx(Math.floor(x), Math.floor(y)); const ti = TINFO[L.tiles[i]];
+    if (ti && ti.rib) { this.hitRib(L, x, y, 1, p); return; }
     if (PR.COCOON != null && L.props[i] === PR.COCOON) { this.setTile(L.id, i, null, PR.HELM); this.spawn({ k: 'fx', lvl: L.id, x: Math.floor(x) + 0.5, y: Math.floor(y) + 0.5, spr: 'puff', life: 0.4, sc: 1 }); this.sfx('hit', L.id); } // cut open: empty armor
     if (PR.WEBLINE != null && L.props[i] === PR.WEBLINE && p) { this.setTile(L.id, i, null, 0); this.dropSpiders(p, 3); } // a cut strand shakes the whole web
     if (ti && ti.cuttable) { this.setTile(L.id, i, TL[ti.opensTo] != null ? TL[ti.opensTo] : TL.DFLOOR); this.spawn({ k: 'fx', lvl: L.id, x: Math.floor(x) + 0.5, y: Math.floor(y) + 0.5, spr: 'puff', life: 0.3, sc: 0.9 }); this.sfx('hit', L.id); }
@@ -7082,7 +7262,7 @@ class Sim {
     }
   }
   fireHits(e) {
-    for (const en of this.ents) if (en.k === 'en' && en.lvl === e.lvl && !en.dead && dist2(en.x, en.y, e.x, e.y) < 0.5) this.damageEnemy(en, 1, e, { pid: e.pid });
+    for (const en of this.ents) if (en.k === 'en' && en.lvl === e.lvl && !en.dead && dist2(en.x, en.y, e.x, e.y) < 0.5) this.damageEnemy(en, 1, e, { pid: e.pid, elem: 'fire' });
     this.burnAt(this.W.levels[e.lvl], e.x, e.y);
   }
   pickup(p, e) {
@@ -7129,7 +7309,7 @@ class Sim {
     if (d.team) for (const o of Object.values(this.players)) d.give(this, o, ctx); else d.give(this, p, ctx);
   }
   tick(dt) {
-    this.update(dt); this.updateGourds(); this.updateTempTiles(); this.updateTwinGates();
+    this.update(dt); if (Content.updateOssuaries) Content.updateOssuaries(this); this.updateGourds(); this.updateTempTiles(); this.updateTwinGates();
     if (this.pendingExit && this.time > this.pendingExit.at) {
       const L = this.W.levels[this.pendingExit.lvl];
       for (const p of Object.values(this.players)) if (p.lvl === L.id) { p.alive = true; p.hp = p.maxHp; this.teleport(p, 'ow', L.exit.x, L.exit.y, L.exit.a); }
@@ -8345,6 +8525,7 @@ function handleEvent(e) {
     case 'sfx': if (e.lvl && e.lvl !== Lc.lvl) break; { let v = 1; if (e.x != null) v = clamp(1.3 - Math.sqrt(dist2(e.x, e.y, Lc.x, Lc.y)) / 14, 0.1, 1); sfx(e.s, v); } break;
     case 'poison': if (e.pid === me) { Lc.flash = 0.3; Lc.flashC = rgb(150, 60, 210); pushMsg('POISONED!', 1.5); } break;
     case 'poisontick': if (e.pid === me) { Lc.flash = 0.18; Lc.flashC = rgb(120, 220, 60); } break;
+    case 'shove': if (e.pid === me) { Lc.kx = e.kx; Lc.ky = e.ky; } break; // a force mage's push (enemies/wizard.js)
     case 'hurt': if (e.pid === me) { Lc.kx = e.kx; Lc.ky = e.ky; Lc.flash = 0.25; Lc.flashC = rgb(255, 40, 40); Lc.shake = 0.2; sfx('hurt'); if (navigator.vibrate) try { navigator.vibrate(60); } catch (er) { } } break;
     case 'block': if (e.pid === me) { Lc.blockT = 0.32; if (e.reflect) { Lc.flash = 0.12; Lc.flashC = rgb(255, 240, 180); } } break;
     case 'tp': if (e.pid === me) { Lc.lvl = e.lvl; Lc.x = e.x; Lc.y = e.y; Lc.a = e.a; Lc.fade = 0; Lc.pitch = 0; G.smooth = {}; Lc.npcTalked = {}; Lc.z = heightAt(G.world.levels[e.lvl], e.x, e.y); Lc.vz = 0; Lc.lift = 0; } break;

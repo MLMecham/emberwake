@@ -73,6 +73,7 @@ function handleEvent(e) {
     case 'sfx': if (e.lvl && e.lvl !== Lc.lvl) break; { let v = 1; if (e.x != null) v = clamp(1.3 - Math.sqrt(dist2(e.x, e.y, Lc.x, Lc.y)) / 14, 0.1, 1); sfx(e.s, v); } break;
     case 'poison': if (e.pid === me) { Lc.flash = 0.3; Lc.flashC = rgb(150, 60, 210); pushMsg('POISONED!', 1.5); } break;
     case 'poisontick': if (e.pid === me) { Lc.flash = 0.18; Lc.flashC = rgb(120, 220, 60); } break;
+    case 'shove': if (e.pid === me) { Lc.kx = e.kx; Lc.ky = e.ky; } break; // a force mage's push (enemies/wizard.js)
     case 'hurt': if (e.pid === me) { Lc.kx = e.kx; Lc.ky = e.ky; Lc.flash = 0.25; Lc.flashC = rgb(255, 40, 40); Lc.shake = 0.2; sfx('hurt'); if (navigator.vibrate) try { navigator.vibrate(60); } catch (er) { } } break;
     case 'block': if (e.pid === me) { Lc.blockT = 0.32; if (e.reflect) { Lc.flash = 0.12; Lc.flashC = rgb(255, 240, 180); } } break;
     case 'tp': if (e.pid === me) { Lc.lvl = e.lvl; Lc.x = e.x; Lc.y = e.y; Lc.a = e.a; Lc.fade = 0; Lc.pitch = 0; G.smooth = {}; Lc.npcTalked = {}; Lc.z = heightAt(G.world.levels[e.lvl], e.x, e.y); Lc.vz = 0; Lc.lift = 0; } break;

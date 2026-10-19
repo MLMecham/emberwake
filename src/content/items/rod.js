@@ -75,7 +75,7 @@ function castSpell(sim, spell, ps, lead) {
     for (const e of sim.ents) {
       if (e.k !== 'en' || e.lvl !== lead.lvl || e.dead || e.sub || dist2(e.x, e.y, cx, cy) > R * R) continue; const def = enemyDef(e.type);
       if (n > 1 && def.disarm && !e.disarmed && !def.boss) sim.disarmEnemy(e, { x: cx, y: cy });
-      if (sim.damageEnemy(e, n > 1 ? n : 1, { x: cx, y: cy }, { pid: lead.id, kbMul: n > 1 ? 3.5 : 2.5, pierceShield: true, ignoreIframes: true }) && !def.boss && !e.dead) { e.stun = Math.max(e.stun || 0, n > 1 ? 2.5 : 1); e.stunFrom = sim.time; }
+      if (sim.damageEnemy(e, n > 1 ? n : 1, { x: cx, y: cy }, { pid: lead.id, kbMul: n > 1 ? 3.5 : 2.5, pierceShield: true, ignoreIframes: true, elem: 'force' }) && !def.boss && !e.dead) { e.stun = Math.max(e.stun || 0, n > 1 ? 2.5 : 1); e.stunFrom = sim.time; }
     }
     for (const p of ps) if (p !== lead) p.spellReady = sim.time + 1; // joining costs nothing
     return;

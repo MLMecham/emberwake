@@ -37,13 +37,14 @@ defineEntity('bomb', {
     sim.spawn({ k: 'fx', lvl: e.lvl, x: e.x, y: e.y, spr: 'boom', life: 0.45, sc: R, z: 0.2 });
     sim.sfx('boom', e.lvl, e.x, e.y); sim.ev({ t: 'shake', lvl: e.lvl, x: e.x, y: e.y });
     // armored foes lose a piece of armor instead of taking damage, the first time a bomb (or bomb arrow) gets them
-    for (const en of sim.ents) if (en.k === 'en' && en.lvl === e.lvl && !en.dead && dist2(en.x, en.y, e.x, e.y) < R * R) { if (en.armor > 0 && sim.stripArmor(en, 'bomb', e)) continue; sim.damageEnemy(en, e.nova ? 6 : 4, e, { pid: e.pid, pierceShield: true, ignoreIframes: true }); } // a blast always lands, even right after another hit (a bomb arrow's own arrow)
+    for (const en of sim.ents) if (en.k === 'en' && en.lvl === e.lvl && !en.dead && dist2(en.x, en.y, e.x, e.y) < R * R) { if (en.armor > 0 && sim.stripArmor(en, 'bomb', e)) continue; sim.damageEnemy(en, e.nova ? 6 : 4, e, { pid: e.pid, pierceShield: true, ignoreIframes: true, blunt: true }); } // a blast always lands, even right after another hit (a bomb arrow's own arrow)
     // crack open bombable walls in range
     const tx = Math.floor(e.x), ty = Math.floor(e.y); let found = false;
     for (let dy = -2; dy <= 2; dy++) for (let dx = -2; dx <= 2; dx++) {
       const bx = tx + dx, by = ty + dy; if (bx < 0 || by < 0 || bx >= L.w || by >= L.h) continue;
       if (dist2(bx + 0.5, by + 0.5, e.x, e.y) > (R * 0.9) ** 2) continue;
       const i = L.idx(bx, by); const t = L.tiles[i];
+      if (TINFO[t].rib) { sim.hitRib(L, bx + 0.5, by + 0.5, OSSUARY_HITS, null); continue; } // a bomb breaks an Ossuary rib (enemies/wizard.js)
       if (TINFO[t].bomb) { let nt = TINFO[t].opensTo ? TL[TINFO[t].opensTo] : TL.OPENDOOR; if (t === TL.ROCK_BOMB) nt = (L.secretReveal[i] && L.secretReveal[i].tile) || TL.CAVE; if (t === TL.CWALL_BOMB) nt = TL.CFLOOR; sim.setTile(L.id, i, nt); found = true; }
     }
     if (found) sim.sfx('secret', L.id);
