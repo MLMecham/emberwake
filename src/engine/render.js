@@ -65,7 +65,7 @@ function renderWorld(cam, L, ents, players, myId) {
   const dirX = Math.cos(cam.a), dirY = Math.sin(cam.a); const fov = 0.66 * (W / H) / 1.78;
   const plX = -dirY * fov, plY = dirX * fov;
   const hz = Math.round(H / 2 + cam.pitch); const eye = cam.eye;
-  const kind = L.kind; const outdoor = kind === 'ow';
+  const kind = L.kind; const outdoor = kind === 'ow' || !!L.outdoor;
   const fogR = 168, fogG = 208, fogB = 248;
   const wf = Math.floor(t * 4) % 4;
   // --- sky / ceiling ---
@@ -93,6 +93,10 @@ function renderWorld(cam, L, ents, players, myId) {
         // smoke drifting up out of the crater
         if (wE > 0.6) for (let dy = 1; dy < 46 * u; dy++) { const y = top - dy; if (y < 0) break; const off = 0.02 * Math.sin(t * 0.7 + dy * 0.12 / u) + dy * 0.004 / u; const sw = 0.025 + dy * 0.0011 / u; if (Math.abs(dA - off) < sw && ((dy / u + t * 6) % 9) < 6) { const k = y * W + x; const v = buf[k]; buf[k] = rgb(((v & 255) + 110) >> 1, (((v >> 8) & 255) + 100) >> 1, (((v >> 16) & 255) + 100) >> 1); } }
       }
+      // the King's castle on its island, far out to sea due south (content/south.js): a faint shape from the ground, plain from the lookout
+      if (kind === 'ow') { const dC = angDiff(ang, Math.PI / 2); if (Math.abs(dC) < 0.075) { const up = clamp((cam.eye - 0.6) / 2.6, 0, 1), sc2 = (3 + 11 * up) * u, a2 = Math.abs(dC);
+        let hC = a2 < 0.045 ? 1 : 0; if (a2 >= 0.06) hC = 0.75; if (a2 < 0.012) hC = 1.9 - a2 * 40; if (Math.abs(a2 - 0.03) < 0.006) hC = 1.35; if (hC > 0 && a2 < 0.045 && ((Math.floor(ang * 900)) & 3) === 0 && hC <= 1) hC += 0.12; // keep, side towers, a spire, battlements
+        if (hC > 0) { const k = 0.35 + 0.5 * up; col(hC * sc2 + 3 * u, rgb(lerp(110, 34, k) | 0, lerp(160, 30, k) | 0, lerp(140, 46, k) | 0)); } } }
       const cl = Math.sin(ang * 5 + t * 0.03) + Math.sin(ang * 11) * 0.5;
       if (cl > 0.9) { const cy = hz - 48 * u - Math.round(Math.sin(ang * 2) * 8); for (let y = cy; y < cy + Math.round((cl - 0.9) * 14); y++) if (y >= 0 && y < hz) buf[y * W + x] = rgb(250, 250, 255); }
     }

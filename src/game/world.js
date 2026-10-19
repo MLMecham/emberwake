@@ -27,7 +27,7 @@ class Level {
       if (rid != null) { const r = this.rooms[rid]; const x0 = r.rx * DSX, y0 = r.ry * DSY; const inside = opts.mx > x0 + 1 && opts.mx < x0 + DSX && opts.my > y0 + 1 && opts.my < y0 + DSY; if (!inside) return false; } // inside = your center is past the doorway: from in there the shutter is a wall (your body can't push your center back into the doorway), while someone still standing in the doorway can step either way
     }
     // high in the air on the Gale Cloak (opts.high): over everything a tile tall (hedges, rocks, trees); the tall walls still stop you
-    if (opts && opts.high && ((ti.wall && !ti.tall && this.kind === 'ow') || ti.raised || ti.low)) return false; // (indoors the walls reach the ceiling)
+    if (opts && opts.high && ((ti.wall && !ti.tall && (this.kind === 'ow' || this.outdoor)) || ti.raised || ti.low)) return false; // (indoors the walls reach the ceiling)
     if (ti.solid) return true;
     if (ti.raised && ti.raised > ((opts && opts.z) || 0) + STEP_UP) return true; // a step or ledge too high to step up onto
     if (opts && opts.high) return false;
@@ -93,7 +93,9 @@ function genWorld(seed, mode) {
   if (Content.dungeons[13]) genSilkPlaces(W, mulberry32(seed * 101 + 13)); // before the dungeons: the Silkwood's gate and its far mouth
   for (let d = 1; d <= NDUNGEONS(); d++) genDungeon(W, d, mulberry32(seed * 31 + d * 977));
   if (W.levels.d13) finishSilkPass(W);
+  genLookout(W, mulberry32(seed * 61 + 7)); // the stair by the Hearthgate (content/south.js)
   genGrottos(W, mulberry32(seed * 17 + 5));
+  genIsle(W, mulberry32(seed * 67 + 3)); // the King's island, empty for now
   genTestZone(W);
   return W;
 }
@@ -265,6 +267,52 @@ function genTunnel(W, biome, rnd) {
 // ---------- DEBUG TEST ZONE ----------
 // One open hall with a strip of every hazard, an eye-drained moat, a sealed eye, a bomb wall and vents, plus open floor
 // for the debug enemy spawner. Only dev names can warp here (pause menu > TEST ZONE). Fixed layout, no randomness.
+// ---------- THE WAY SOUTH (content/south.js) ----------
+// THE LOOKOUT: a 5x5 stone stair beside the Hearthgate. The outer ring climbs LOOK_STEPS steps clockwise; the 3x3 middle is
+// the summit, one step above the last. Placed on open ground in the gate's region, never cutting the way to the gate.
+function genLookout(W, rnd) {
+  const L = W.levels.ow, g = W.dungeons[12]; if (!g || TL.LOOKTOP == null) return;
+  for (const r of [owRegionAt(L, g.x + 0.5, g.y + 0.5), owRegionAt(L, g.x + 0.5, g.y + RSY + 0.5)]) if (placeLookout(W, L, g, r, rnd)) return; // the gate's region, else the one below it
+}
+function placeLookout(W, L, g, r, rnd) {
+  const { x0, y0, x1, y1 } = regionInterior(r);
+  const ring = []; for (let x = -2; x <= 2; x++) ring.push([x, 2]); for (let y = 1; y >= -2; y--) ring.push([-2, y]); for (let x = -1; x <= 2; x++) ring.push([x, -2]); for (let y = -1; y <= 1; y++) ring.push([2, y]); // from the bottom-left, up the left side, across the top, down the right
+  const open = (x, y) => x > x0 && y > y0 && x < x1 - 1 && y < y1 - 1 && (L.get(x, y) === TL.GRASS || L.get(x, y) === TL.FLOWERS || L.get(x, y) === TL.SAND || L.get(x, y) === TL.PATH) && [0, PR.TREE, PR.PINE, PR.BUSH, PR.BOULDER, PR.SNOWPINE, PR.DEADTREE, PR.CACTUS].includes(L.props[L.idx(x, y)]) && !L.portals[L.idx(x, y)]; // trees and bushes make way
+  const reachAll = () => { // from the first door: every other door, and (in the gate's region) the gate
+    const q = [[r.doors[0][0], r.doors[0][1]]], seen = new Set([q[0].join()]);
+    while (q.length) { const [x, y] = q.shift(); for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { const nx = x + dx, ny = y + dy, k = nx + ',' + ny; if (seen.has(k) || nx < x0 - 1 || ny < y0 - 1 || nx > x1 || ny > y1 || L.solidAt(nx + 0.5, ny + 0.5)) continue; seen.add(k); q.push([nx, ny]); } }
+    const gateIn = g.x >= x0 - 1 && g.x <= x1 && g.y >= y0 - 1 && g.y <= y1;
+    return r.doors.every(([x, y]) => seen.has(x + ',' + y)) && (!gateIn || [-1, 0, 1].some(d => seen.has((g.x + d) + ',' + (g.y + 1))));
+  };
+  const spots = []; for (let cy = y0 + 3; cy < y1 - 3; cy++) for (let cx = x0 + 3; cx < x1 - 3; cx++) if (Math.abs(cx - g.x) >= 5 || cy - g.y >= 5) spots.push([cx, cy, Math.abs(cx - g.x) + Math.abs(cy - g.y) + rnd() * 3]);
+  spots.sort((a, b) => a[2] - b[2]);
+  for (const [cx, cy] of spots) {
+    let ok = open(cx - 2, cy + 3) || open(cx - 3, cy + 2); for (let dy = -2; dy <= 2 && ok; dy++) for (let dx = -2; dx <= 2; dx++) if (!open(cx + dx, cy + dy)) { ok = false; break; } if (!ok) continue;
+    const was = []; for (let dy = -2; dy <= 2; dy++) for (let dx = -2; dx <= 2; dx++) { const i = L.idx(cx + dx, cy + dy); was.push([cx + dx, cy + dy, L.get(cx + dx, cy + dy), L.props[i]]); L.props[i] = 0; }
+    ring.forEach(([dx, dy], i) => L.set(cx + dx, cy + dy, TL['LOOK' + (i + 1)])); for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) L.set(cx + dx, cy + dy, TL.LOOKTOP);
+    if (r.doors.length && reachAll()) { W.lookout = { x: cx, y: cy }; r.features.push({ type: 'lookout', x: cx, y: cy }); return true; }
+    for (const [x, y, t, pr] of was) { L.set(x, y, t); L.props[L.idx(x, y)] = pr; }
+  }
+}
+// THE ISLE: the King's island past the rough sea (empty for now). An outdoor level of its own (L.outdoor: sky, sea at the edges).
+function genIsle(W, rnd) {
+  if (TL.CASTLEWALL == null) return;
+  const w = 96, h = 72; const L = new Level('isle', 'isle', w, h); L.outdoor = true; W.levels.isle = L;
+  const cx = 48, cy = 38; const n = (x, y) => Math.sin(x * 0.21 + rnd() * 0.0) * 0.06 + Math.sin(y * 0.17 + x * 0.05) * 0.05;
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+    const d = Math.hypot((x - cx) / 38, (y - cy) / 28) + n(x, y);
+    L.set(x, y, d > 1 ? TL.OCEAN : d > 0.88 ? TL.SAND : (rnd() < 0.05 ? TL.FLOWERS : TL.GRASS));
+    if (d < 0.86 && d > 0.2 && rnd() < 0.012) L.set(x, y, TL.ROCK); else if (d < 0.84 && rnd() < 0.02 && L.get(x, y) === TL.GRASS) L.props[L.idx(x, y)] = rnd() < 0.5 ? PR.DEADTREE : PR.BOULDER;
+  }
+  // the castle: a dark keep on the island's south half, gate facing north (where you'll come ashore)
+  const kx0 = 36, kx1 = 60, ky0 = 40, ky1 = 58;
+  for (let y = ky0 - 2; y <= ky1 + 1; y++) for (let x = kx0 - 2; x <= kx1 + 2; x++) { L.set(x, y, TL.GRASS); L.props[L.idx(x, y)] = 0; }
+  for (let y = ky0; y <= ky1; y++) for (let x = kx0; x <= kx1; x++) L.set(x, y, TL.CASTLEWALL);
+  L.set(48, ky0, TL.CASTLEGATE); for (let y = 12; y < ky0; y++) L.set(48, y, TL.PATH);
+  for (const [x, y] of [[kx0, ky0], [kx1, ky0], [kx0, ky1], [kx1, ky1]]) L.props[L.idx(x, y + (y === ky0 ? -1 : 1))] = PR.STATUE;
+  L.spawn = { x: 48.5, y: 12.5, a: Math.PI / 2 };
+  for (let y = 9; y <= 14; y++) for (let x = 45; x <= 51; x++) { if (L.get(x, y) === TL.OCEAN) L.set(x, y, TL.SAND); L.props[L.idx(x, y)] = 0; }
+}
 function genTestZone(W) {
   const w = 36, h = 23; const L = new Level('dbg', 'cave', w, h); W.levels.dbg = L; L.theme = 'd3'; L.signText = {};
   for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) L.set(x, y, (x === 0 || y === 0 || x === w - 1 || y === h - 1) ? TL.BRICK : TL.DFLOOR);
@@ -820,7 +868,7 @@ function bossEyeAlcove(L, r, items) {
 const STEP_UP = 0.3;
 function heightAt(L, x, y) { const ti = TINFO[L.get(Math.floor(x), Math.floor(y))]; return ti.wall ? 0 : (ti.raised || 0); }
 // can the Gale Cloak lift you a whole level here? Outdoors (open sky), or in a room at least two tiles tall
-function skyRoom(L) { return L.kind === 'ow' || (L.ceilH || 1) >= 2; }
+function skyRoom(L) { return L.kind === 'ow' || !!L.outdoor || (L.ceilH || 1) >= 2; }
 function dungeonRoomAt(L, x, y) { const rx = Math.floor(x / DSX), ry = Math.floor(y / DSY); const r = L.rooms[ry * (L.gw || DGW) + rx]; return r && r.mergeInto != null ? L.rooms[r.mergeInto] : r; } // mergeInto: a cell that is part of a bigger room // L.gw: a wider room grid (the frontier tunnels)
 function owRegionAt(L, x, y) { const rx = clamp(Math.floor(x / RSX), 0, RW - 1), ry = clamp(Math.floor(y / RSY), 0, RH - 1); return L.regions[ry * RW + rx]; }
 function roomBounds(L, room) {

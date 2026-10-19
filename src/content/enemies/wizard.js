@@ -115,7 +115,9 @@ const SPELL = {
   shards(sim, e) { AI.ring(sim, e, 'boneshard', 8, Math.random(), { dmg: 2 * e.dmgMul }); sim.sfx('bonecast', e.lvl, e.x, e.y); },
   raise(sim, e) { const t = enemyDef(e.type).tier; raise(sim, e, t, t === 3 ? 5 : 2); },
   march(sim, e) { let n = 0; for (let i = 0; i < 5; i++) n += raise(sim, e, 3, 5); if (n) { sim.msg('THE DEAD MARCH!'); sim.ev({ t: 'shake', lvl: e.lvl, x: e.x, y: e.y }); } e.marchAt = sim.time + 16; },
-  shield(sim, e) { // hold a bubble over the ally nearest the hero; stand still while it lasts
+  shield(sim, e) { // hold a bubble over the ally nearest the hero; stand still while it lasts. A guard (e.guard: summoned by a boss) shields its master.
+    const master = e.guard && sim.ents.find(o => o.id === e.guard && !o.dead);
+    if (master) { if (master.wardBy && sim.ents.some(o => o.id === master.wardBy && !o.dead && o.channel === master.id)) return false; master.wardBy = e.id; e.channel = master.id; e.channelUntil = sim.time + 4; sim.sfx('ward', e.lvl, master.x, master.y); return true; }
     const p = sim.nearestPlayer(e, 30); const allies = roomMates(sim, e).filter(o => !enemyDef(o.type).boss && !o.wardBy && !(o.channel != null));
     if (!allies.length || !p) return false; allies.sort((a, b) => dist2(a.x, a.y, p.x, p.y) - dist2(b.x, b.y, p.x, p.y));
     const o = allies[0]; o.wardBy = e.id; e.channel = o.id; e.channelUntil = sim.time + 6; sim.sfx('ward', e.lvl, o.x, o.y); return true;
@@ -207,6 +209,7 @@ function mageAi(sim, e, dt, { p }) {
   if (def.tier === 3 && def.elem === 'bone' && sim.time >= (e.marchAt || 0)) { SPELL.march(sim, e); return; }
   if (def.tier === 3 && sim.time >= (e.comboAt != null ? e.comboAt : (e.comboAt = sim.time + 3))) { startCombo(sim, e, p); return; }
   const move = pick(MOVES[def.elem][def.tier === 1 ? 0 : 1]);
+  if (e.guard && sim.time >= (e.shieldAt || 0) && Math.random() < 0.7) { e.shieldAt = sim.time + 7; if (SPELL.shield(sim, e)) return; } // a boss's guard keeps him covered
   if (move === 'shield') { if (SPELL.shield(sim, e)) return; SPELL.bolt(sim, e, p, a); return; }
   SPELL[move](sim, e, p, a);
 }

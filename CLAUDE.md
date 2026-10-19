@@ -65,7 +65,7 @@ Read this first in a new chat. It's the context from the long first build sessio
   | 6 | Tideglass Halls | glass floors, glass-tutorial opening | raft (boss: spider) |
   | 7 | Iron Cathedral | statues | plate tunic (on a lake island; needs the raft) |
   | 8 | Starless Deep | darkness | silver arrows |
-  | 9 | Hollow Crown | final dungeon | (Hollow King; only silver arrows finish him) |
+  | 9 | Hollow Crown | final dungeon | (Hollow King; only silver arrows finish him; at 2/3 and 1/3 health he calls two force adepts (`guard`) who SHIELD him) |
 
   The optional frontier dungeons:
 
@@ -123,6 +123,7 @@ Read this first in a new chat. It's the context from the long first build sessio
 - **Favorites** (the inventory stars) live on the hero (`p.favs`, the `fav` action) and are saved with them, so each save has its own.
 - **Bombs:** carry 1 without a bag; each bag holds 8, in either order: the Bramble Keep BOMB BAG and the DIGGER'S BOMB BAG (`bombbag2`) from the hidden grotto shop (`bombshop` cave). `bombCap` in sim.js.
 - **Potions** (`items/potion.js`, `POTION_PRICE`/`POTION_REFILL`/`POTION_GUARD` in core/util.js, `drinkPotion`/`openRefill` in sim.js): drinking (or the automatic save when you'd fall) heals fully, clears poison and chill, and gives `POTION_GUARD` = 3 s of hit protection. Every shop sells them at `POTION_PRICE` = 300 (blue, two doses, 560). The one cheap way: take the potion instead of the heart in a heart cave; that old man then refills one for `POTION_REFILL` = 40 (`team.taken['refill:<cave>']`, saved; `snap.team.refills`), says `Content.refillText`, and the overworld map marks his cave with a little potion.
+- **The way south** (`content/south.js`; `genLookout`/`genIsle` in world.js): THE LOOKOUT, a 5x5 stone stair beside the Hearthgate (`W.lookout`; its ring climbs 16 steps of 0.2 (`LOOK1..16`) to a 3x3 summit at 3.4, `LOOKTOP`; placed in the gate's region or the one below, trees cleared, never cutting a door or the gate off). The renderer draws the King's castle as a silhouette due south on the horizon (`render.js`, overworld only): faint from the ground, plain from the summit (it grows with `cam.eye`). THE ISLE (level `isle`, kind `isle`, `L.outdoor` = sky and outdoor rules, music DREAD): empty for now, beaches, grass, rocks and the castle (`CASTLEWALL`, `CASTLEGATE` shut with a `sealedMsg`); debug warp only. The plan for the island is in docs/IDEAS.md.
 - **Wind Whistle** has its own sprite (a reed pipe with a swirl), no longer the key's.
 - **Items of note:**
   - Quivers: 15 to start, Big Quiver 30, Great Quiver 50 (`quiver50`, debug only so far).

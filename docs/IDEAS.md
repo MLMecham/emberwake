@@ -60,6 +60,41 @@ Not built yet. Parked here so they don't get lost. Newest at the bottom.
 ## Lore
 - The hollow king can offer one of the players a deal. if they accept they can kill their teamates for an alternate ending?
 
+## The south: the King's island (plan, from Mitch)
+- **It's an island, not a continent**, out past the rough southern sea (the raft can't cross rough water). Its castle shows on the
+  southern horizon all game: faint from the ground, plain from THE LOOKOUT, the stone stair by the Hearthgate (BUILT: content/south.js,
+  `genLookout`; the island itself is BUILT empty as level `isle`, debug warp only).
+- **The way across: the Gale Cloak.** 4 s of flight can't cross a sea, so a chain of sea stacks runs south with updrafts on some of them
+  that refill the flight: hop, glide, catch the wind. The King in dungeon 9 wears the cloak (that's how he crossed) and drops it.
+- **The fake ending:** beating dungeon 9 rolls credits as if it's over. You wake in the start cave; the tunnels are still getting
+  colder, one old man says "HE WAS NEVER ALL HERE. LOOK SOUTH, WHERE THE WIND GOES.", and you hold a cloak you've never used. Keep the
+  clues fair: obvious if you're paying attention, missable if you rush.
+- **Progression:** the north is the first half (dungeons 1-9, the frontier, the Silkwood) and tops out at adepts and armored knights.
+  The island is the second half: archmages (never random spawns: bosses and minibosses only), champions in numbers, bone mages, and
+  the unplaced items (Gale Cloak aside: the Skeleton Key, most rings, the wand's scrolls). Move difficulty and rewards south, not
+  the dungeons we have.
+- **Three wizard towers, one per element (force, fire, storm).** Each is a 9x9 shell with a hollow middle: every floor is a corridor
+  two tiles wide around an open shaft, with a stair up at the end of each loop, mages the whole way, 4-5 floors. The shaft is a real
+  drop: a push or a Force Wave can knock you down a floor (the stand-still block matters here). On top: THREE archmages, buffed, at
+  once (bone, the tower's element, and one more). Super endgame, very hard.
+  - They hold up the King's ward but DON'T lock the castle (the 8 shards do). Every tower left standing sends its archmages to the
+    room before the King. You can skip them; it's a bad idea.
+  - Rewards: the element's super-spell scroll (Force Wave, Flame Wall, Lightning Lance); the first bone archmage drops the Hollow
+    Ring; all three cleared gives Tandem Casting.
+- **The King, phase two: the stolen head.** When he falls, the Hearthwyrm's third head rises in bone, burning with the stolen fire
+  (pale, wrong-colored). Bone mages circle it, raising skeletons and holding SHIELDS over it: kill them to open it up.
+- **Two endings.** Normal: the King falls, the dead stop marching, but the Hearth stays cold (bittersweet). True: carry the freed fire
+  back north to the Hearth (dungeon 12); its third lock ("ONE THAT WAS STOLEN LONG AGO") opens and it lights again.
+- **The betrayal (co-op).** The King whispers a deal to one player ("never be cold again"), probably whoever has gone down the most.
+  Whispers only on that player's screen, a few lines through the island; there's no way to refuse before the end. At the stolen
+  head's last stand only they get YES/NO: YES heals the head and turns them on the party (needs player-vs-player damage, which
+  doesn't exist yet: the biggest piece of work here), with its own ending. Solo: YES is simply the bad ending.
+- **Rings for the north (first pass):** Rime (Rimefang Hollow), Cinder (Cinder Caldera), Moth (Starless Deep, hidden room), Echo
+  (Whispering Vault, hidden room), Wardhold Signet (Iron Cathedral), Second Wind (the Lament grotto), Mender's (the warm spring),
+  Shepherd's (a co-op side quest), Gale (the sea stacks), Hollow Silver and Glass (the towers). Side quests could give others.
+- Wizard bosses in the north still to do: a storm archmage boss (dungeon 5, Storm Orb) and a fire archmage boss (dungeon 8, Flame
+  Orb), each bringing adepts, replacing the repeated Orb boss there.
+
 ## Open questions (from Mitch, to decide)
 - **Lakes: drain or dive?** Draining reuses the eye/tide machinery: a sluice eye on the shore of two lake regions drains them for good and shows a cave on the lakebed. It's cheap, but it's another eye puzzle. Diving would be a new item: swim under deep fresh water, with a blue underwater view and caves under the surface. It's more novel, but it would be the fourth way across water (raft, frost arrows, cloak). Leaning: drain now, dive later if a water dungeon wants it.
 - **Shield techniques.** Perfect block is the Wardhold shield's (built). The Mirror Guard scroll (reflected shots x3) still needs a place in the world. Still open:

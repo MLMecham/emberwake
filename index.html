@@ -2674,6 +2674,25 @@ defineSprite('webglob', ['................', '................', '..............
 defineProjectile({ id: 'webglob', spr: 'webglob', spd: 5, dmg: 1, sc: 0.6, blockable: true, silk: 1.6 });
 
 })();
+// ---- src/content/south.js ----
+(function () {
+// ===== content/south.js : the way south (first pieces) =====
+// THE LOOKOUT: a stone stair that winds up 3.4 tiles beside the Hearthgate (game/world.js genLookout). From the top you see
+//   over the whole land to the southern horizon, where the King's castle stands on its island (engine/render.js: a dark
+//   silhouette due south, faint from the ground, plain from up here). Nobody says a word about it.
+// THE ISLE (level 'isle', genIsle): the King's island beyond the rough sea. Empty for now: beaches, grass, rocks and the
+//   castle, its gate shut. Reached only by debug warp until the way across (the Gale Cloak and the sea stacks) is built.
+//   Plan: docs/IDEAS.md 'The south'.
+'use strict';
+const LOOK_STEPS = 16, LOOK_RISE = 0.2; // the spiral: 16 steps of 0.2 around a 3x3 summit at LOOK_STEPS * LOOK_RISE + 0.2
+for (let i = 1; i <= LOOK_STEPS; i++) defineTile('LOOK' + i, { floor: 'path', side: 'rock', raised: +(i * LOOK_RISE).toFixed(2) });
+defineTile('LOOKTOP', { floor: 'path', side: 'rock', raised: +(LOOK_STEPS * LOOK_RISE + 0.2).toFixed(2) });
+defineTexture('castlewall', (x, y, r, ctx) => { const by = y % 8, bx = (x + (Math.floor(y / 8) & 1) * 8) % 16; if (by === 7 || bx === 15) return [24, 22, 30]; return ctx.vary([62, 58, 72], x, y, 0.12); });
+defineTexture('castlegate', (x, y, r, ctx) => { if (x < 6 || x > 25 || y < 6) return ctx.texPx('castlewall', x, y); if (Math.hypot(x - 15.5, y - 14) < 10 && y < 14 || y >= 14) return (x % 5 === 0 || y % 6 === 0) ? [30, 24, 20] : [70, 46, 30]; return ctx.texPx('castlewall', x, y); });
+defineTile('CASTLEWALL', { solid: true, wall: 'castlewall', tall: 4.2, jag: 'battlement' });
+defineTile('CASTLEGATE', { solid: true, wall: 'castlegate', tall: 4.2, jag: 'battlement', sealedMsg: 'THE GATE IS SHUT. SOMETHING ON THE OTHER SIDE IS WAITING.' });
+
+})();
 // ---- src/content/wardhold.js ----
 (function () {
 // ===== content/wardhold.js : the old man of the first cave, and the Wardhold shield =====
@@ -3681,12 +3700,21 @@ defineEnemy({
 (function () {
 // ===== content/enemies/king.js =====
 // The Hollow King, final boss of level 9. Teleports, fires rings and fans, summons minions. Only silver arrows can finish him.
+// At two thirds and one third health he calls two force adepts that hold SHIELDS over him (break them by hitting the caster).
+// (The real King waits across the southern sea: docs/STORY.md, docs/IDEAS.md 'The south: the King's castle'.)
 'use strict';
+const KING_GUARD_AT = [2 / 3, 1 / 3]; // health fractions where he calls his two shielding adepts
 defineEnemy({
   id: 'king',
   hp: 30, spd: 0, dmg: 3, r: 0.6, sc: 1.6, boss: true, fixedHp: true,
   bossOf: [9],
   ai: (sim, e, dt, { p }) => {
+    // at two thirds and one third of his health he calls two force adepts (enemies/wizard.js) who hold SHIELDS over him:
+    // nothing hurts him while one holds; hit the caster to break it
+    for (const [at, k] of [[KING_GUARD_AT[0], 'g1'], [KING_GUARD_AT[1], 'g2']]) if (!e[k] && e.hp <= e.maxHp * at) { e[k] = true;
+      const alive = sim.ents.filter(o => o.k === 'en' && !o.dead && o.guard === e.id).length;
+      for (let i = alive; i < 2; i++) { const g = sim.spawnMinion(e, 'wizard_adept'); if (g) { g.guard = e.id; g.shieldAt = sim.time + 1 + i; g.dmgMul = e.dmgMul || 1; } }
+      sim.msg('"SHIELD YOUR KING."'); sim.sfx('cast_force', e.lvl, e.x, e.y); }
     if (e.tm > 0 || !p) return;
     e.st = (e.st + 1) % 3; // cycle: teleport, fire ring, aimed volley
     if (e.st === 0) { AI.teleportInRoom(sim, e, p, 6); e.tm = 0.8; }
@@ -4531,7 +4559,9 @@ const SPELL = {
   shards(sim, e) { AI.ring(sim, e, 'boneshard', 8, Math.random(), { dmg: 2 * e.dmgMul }); sim.sfx('bonecast', e.lvl, e.x, e.y); },
   raise(sim, e) { const t = enemyDef(e.type).tier; raise(sim, e, t, t === 3 ? 5 : 2); },
   march(sim, e) { let n = 0; for (let i = 0; i < 5; i++) n += raise(sim, e, 3, 5); if (n) { sim.msg('THE DEAD MARCH!'); sim.ev({ t: 'shake', lvl: e.lvl, x: e.x, y: e.y }); } e.marchAt = sim.time + 16; },
-  shield(sim, e) { // hold a bubble over the ally nearest the hero; stand still while it lasts
+  shield(sim, e) { // hold a bubble over the ally nearest the hero; stand still while it lasts. A guard (e.guard: summoned by a boss) shields its master.
+    const master = e.guard && sim.ents.find(o => o.id === e.guard && !o.dead);
+    if (master) { if (master.wardBy && sim.ents.some(o => o.id === master.wardBy && !o.dead && o.channel === master.id)) return false; master.wardBy = e.id; e.channel = master.id; e.channelUntil = sim.time + 4; sim.sfx('ward', e.lvl, master.x, master.y); return true; }
     const p = sim.nearestPlayer(e, 30); const allies = roomMates(sim, e).filter(o => !enemyDef(o.type).boss && !o.wardBy && !(o.channel != null));
     if (!allies.length || !p) return false; allies.sort((a, b) => dist2(a.x, a.y, p.x, p.y) - dist2(b.x, b.y, p.x, p.y));
     const o = allies[0]; o.wardBy = e.id; e.channel = o.id; e.channelUntil = sim.time + 6; sim.sfx('ward', e.lvl, o.x, o.y); return true;
@@ -4623,6 +4653,7 @@ function mageAi(sim, e, dt, { p }) {
   if (def.tier === 3 && def.elem === 'bone' && sim.time >= (e.marchAt || 0)) { SPELL.march(sim, e); return; }
   if (def.tier === 3 && sim.time >= (e.comboAt != null ? e.comboAt : (e.comboAt = sim.time + 3))) { startCombo(sim, e, p); return; }
   const move = pick(MOVES[def.elem][def.tier === 1 ? 0 : 1]);
+  if (e.guard && sim.time >= (e.shieldAt || 0) && Math.random() < 0.7) { e.shieldAt = sim.time + 7; if (SPELL.shield(sim, e)) return; } // a boss's guard keeps him covered
   if (move === 'shield') { if (SPELL.shield(sim, e)) return; SPELL.bolt(sim, e, p, a); return; }
   SPELL[move](sim, e, p, a);
 }
@@ -5540,7 +5571,7 @@ class Level {
       if (rid != null) { const r = this.rooms[rid]; const x0 = r.rx * DSX, y0 = r.ry * DSY; const inside = opts.mx > x0 + 1 && opts.mx < x0 + DSX && opts.my > y0 + 1 && opts.my < y0 + DSY; if (!inside) return false; } // inside = your center is past the doorway: from in there the shutter is a wall (your body can't push your center back into the doorway), while someone still standing in the doorway can step either way
     }
     // high in the air on the Gale Cloak (opts.high): over everything a tile tall (hedges, rocks, trees); the tall walls still stop you
-    if (opts && opts.high && ((ti.wall && !ti.tall && this.kind === 'ow') || ti.raised || ti.low)) return false; // (indoors the walls reach the ceiling)
+    if (opts && opts.high && ((ti.wall && !ti.tall && (this.kind === 'ow' || this.outdoor)) || ti.raised || ti.low)) return false; // (indoors the walls reach the ceiling)
     if (ti.solid) return true;
     if (ti.raised && ti.raised > ((opts && opts.z) || 0) + STEP_UP) return true; // a step or ledge too high to step up onto
     if (opts && opts.high) return false;
@@ -5606,7 +5637,9 @@ function genWorld(seed, mode) {
   if (Content.dungeons[13]) genSilkPlaces(W, mulberry32(seed * 101 + 13)); // before the dungeons: the Silkwood's gate and its far mouth
   for (let d = 1; d <= NDUNGEONS(); d++) genDungeon(W, d, mulberry32(seed * 31 + d * 977));
   if (W.levels.d13) finishSilkPass(W);
+  genLookout(W, mulberry32(seed * 61 + 7)); // the stair by the Hearthgate (content/south.js)
   genGrottos(W, mulberry32(seed * 17 + 5));
+  genIsle(W, mulberry32(seed * 67 + 3)); // the King's island, empty for now
   genTestZone(W);
   return W;
 }
@@ -5778,6 +5811,52 @@ function genTunnel(W, biome, rnd) {
 // ---------- DEBUG TEST ZONE ----------
 // One open hall with a strip of every hazard, an eye-drained moat, a sealed eye, a bomb wall and vents, plus open floor
 // for the debug enemy spawner. Only dev names can warp here (pause menu > TEST ZONE). Fixed layout, no randomness.
+// ---------- THE WAY SOUTH (content/south.js) ----------
+// THE LOOKOUT: a 5x5 stone stair beside the Hearthgate. The outer ring climbs LOOK_STEPS steps clockwise; the 3x3 middle is
+// the summit, one step above the last. Placed on open ground in the gate's region, never cutting the way to the gate.
+function genLookout(W, rnd) {
+  const L = W.levels.ow, g = W.dungeons[12]; if (!g || TL.LOOKTOP == null) return;
+  for (const r of [owRegionAt(L, g.x + 0.5, g.y + 0.5), owRegionAt(L, g.x + 0.5, g.y + RSY + 0.5)]) if (placeLookout(W, L, g, r, rnd)) return; // the gate's region, else the one below it
+}
+function placeLookout(W, L, g, r, rnd) {
+  const { x0, y0, x1, y1 } = regionInterior(r);
+  const ring = []; for (let x = -2; x <= 2; x++) ring.push([x, 2]); for (let y = 1; y >= -2; y--) ring.push([-2, y]); for (let x = -1; x <= 2; x++) ring.push([x, -2]); for (let y = -1; y <= 1; y++) ring.push([2, y]); // from the bottom-left, up the left side, across the top, down the right
+  const open = (x, y) => x > x0 && y > y0 && x < x1 - 1 && y < y1 - 1 && (L.get(x, y) === TL.GRASS || L.get(x, y) === TL.FLOWERS || L.get(x, y) === TL.SAND || L.get(x, y) === TL.PATH) && [0, PR.TREE, PR.PINE, PR.BUSH, PR.BOULDER, PR.SNOWPINE, PR.DEADTREE, PR.CACTUS].includes(L.props[L.idx(x, y)]) && !L.portals[L.idx(x, y)]; // trees and bushes make way
+  const reachAll = () => { // from the first door: every other door, and (in the gate's region) the gate
+    const q = [[r.doors[0][0], r.doors[0][1]]], seen = new Set([q[0].join()]);
+    while (q.length) { const [x, y] = q.shift(); for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { const nx = x + dx, ny = y + dy, k = nx + ',' + ny; if (seen.has(k) || nx < x0 - 1 || ny < y0 - 1 || nx > x1 || ny > y1 || L.solidAt(nx + 0.5, ny + 0.5)) continue; seen.add(k); q.push([nx, ny]); } }
+    const gateIn = g.x >= x0 - 1 && g.x <= x1 && g.y >= y0 - 1 && g.y <= y1;
+    return r.doors.every(([x, y]) => seen.has(x + ',' + y)) && (!gateIn || [-1, 0, 1].some(d => seen.has((g.x + d) + ',' + (g.y + 1))));
+  };
+  const spots = []; for (let cy = y0 + 3; cy < y1 - 3; cy++) for (let cx = x0 + 3; cx < x1 - 3; cx++) if (Math.abs(cx - g.x) >= 5 || cy - g.y >= 5) spots.push([cx, cy, Math.abs(cx - g.x) + Math.abs(cy - g.y) + rnd() * 3]);
+  spots.sort((a, b) => a[2] - b[2]);
+  for (const [cx, cy] of spots) {
+    let ok = open(cx - 2, cy + 3) || open(cx - 3, cy + 2); for (let dy = -2; dy <= 2 && ok; dy++) for (let dx = -2; dx <= 2; dx++) if (!open(cx + dx, cy + dy)) { ok = false; break; } if (!ok) continue;
+    const was = []; for (let dy = -2; dy <= 2; dy++) for (let dx = -2; dx <= 2; dx++) { const i = L.idx(cx + dx, cy + dy); was.push([cx + dx, cy + dy, L.get(cx + dx, cy + dy), L.props[i]]); L.props[i] = 0; }
+    ring.forEach(([dx, dy], i) => L.set(cx + dx, cy + dy, TL['LOOK' + (i + 1)])); for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) L.set(cx + dx, cy + dy, TL.LOOKTOP);
+    if (r.doors.length && reachAll()) { W.lookout = { x: cx, y: cy }; r.features.push({ type: 'lookout', x: cx, y: cy }); return true; }
+    for (const [x, y, t, pr] of was) { L.set(x, y, t); L.props[L.idx(x, y)] = pr; }
+  }
+}
+// THE ISLE: the King's island past the rough sea (empty for now). An outdoor level of its own (L.outdoor: sky, sea at the edges).
+function genIsle(W, rnd) {
+  if (TL.CASTLEWALL == null) return;
+  const w = 96, h = 72; const L = new Level('isle', 'isle', w, h); L.outdoor = true; W.levels.isle = L;
+  const cx = 48, cy = 38; const n = (x, y) => Math.sin(x * 0.21 + rnd() * 0.0) * 0.06 + Math.sin(y * 0.17 + x * 0.05) * 0.05;
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+    const d = Math.hypot((x - cx) / 38, (y - cy) / 28) + n(x, y);
+    L.set(x, y, d > 1 ? TL.OCEAN : d > 0.88 ? TL.SAND : (rnd() < 0.05 ? TL.FLOWERS : TL.GRASS));
+    if (d < 0.86 && d > 0.2 && rnd() < 0.012) L.set(x, y, TL.ROCK); else if (d < 0.84 && rnd() < 0.02 && L.get(x, y) === TL.GRASS) L.props[L.idx(x, y)] = rnd() < 0.5 ? PR.DEADTREE : PR.BOULDER;
+  }
+  // the castle: a dark keep on the island's south half, gate facing north (where you'll come ashore)
+  const kx0 = 36, kx1 = 60, ky0 = 40, ky1 = 58;
+  for (let y = ky0 - 2; y <= ky1 + 1; y++) for (let x = kx0 - 2; x <= kx1 + 2; x++) { L.set(x, y, TL.GRASS); L.props[L.idx(x, y)] = 0; }
+  for (let y = ky0; y <= ky1; y++) for (let x = kx0; x <= kx1; x++) L.set(x, y, TL.CASTLEWALL);
+  L.set(48, ky0, TL.CASTLEGATE); for (let y = 12; y < ky0; y++) L.set(48, y, TL.PATH);
+  for (const [x, y] of [[kx0, ky0], [kx1, ky0], [kx0, ky1], [kx1, ky1]]) L.props[L.idx(x, y + (y === ky0 ? -1 : 1))] = PR.STATUE;
+  L.spawn = { x: 48.5, y: 12.5, a: Math.PI / 2 };
+  for (let y = 9; y <= 14; y++) for (let x = 45; x <= 51; x++) { if (L.get(x, y) === TL.OCEAN) L.set(x, y, TL.SAND); L.props[L.idx(x, y)] = 0; }
+}
 function genTestZone(W) {
   const w = 36, h = 23; const L = new Level('dbg', 'cave', w, h); W.levels.dbg = L; L.theme = 'd3'; L.signText = {};
   for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) L.set(x, y, (x === 0 || y === 0 || x === w - 1 || y === h - 1) ? TL.BRICK : TL.DFLOOR);
@@ -6333,7 +6412,7 @@ function bossEyeAlcove(L, r, items) {
 const STEP_UP = 0.3;
 function heightAt(L, x, y) { const ti = TINFO[L.get(Math.floor(x), Math.floor(y))]; return ti.wall ? 0 : (ti.raised || 0); }
 // can the Gale Cloak lift you a whole level here? Outdoors (open sky), or in a room at least two tiles tall
-function skyRoom(L) { return L.kind === 'ow' || (L.ceilH || 1) >= 2; }
+function skyRoom(L) { return L.kind === 'ow' || !!L.outdoor || (L.ceilH || 1) >= 2; }
 function dungeonRoomAt(L, x, y) { const rx = Math.floor(x / DSX), ry = Math.floor(y / DSY); const r = L.rooms[ry * (L.gw || DGW) + rx]; return r && r.mergeInto != null ? L.rooms[r.mergeInto] : r; } // mergeInto: a cell that is part of a bigger room // L.gw: a wider room grid (the frontier tunnels)
 function owRegionAt(L, x, y) { const rx = clamp(Math.floor(x / RSX), 0, RW - 1), ry = clamp(Math.floor(y / RSY), 0, RH - 1); return L.regions[ry * RW + rx]; }
 function roomBounds(L, room) {
@@ -7540,7 +7619,7 @@ function renderWorld(cam, L, ents, players, myId) {
   const dirX = Math.cos(cam.a), dirY = Math.sin(cam.a); const fov = 0.66 * (W / H) / 1.78;
   const plX = -dirY * fov, plY = dirX * fov;
   const hz = Math.round(H / 2 + cam.pitch); const eye = cam.eye;
-  const kind = L.kind; const outdoor = kind === 'ow';
+  const kind = L.kind; const outdoor = kind === 'ow' || !!L.outdoor;
   const fogR = 168, fogG = 208, fogB = 248;
   const wf = Math.floor(t * 4) % 4;
   // --- sky / ceiling ---
@@ -7568,6 +7647,10 @@ function renderWorld(cam, L, ents, players, myId) {
         // smoke drifting up out of the crater
         if (wE > 0.6) for (let dy = 1; dy < 46 * u; dy++) { const y = top - dy; if (y < 0) break; const off = 0.02 * Math.sin(t * 0.7 + dy * 0.12 / u) + dy * 0.004 / u; const sw = 0.025 + dy * 0.0011 / u; if (Math.abs(dA - off) < sw && ((dy / u + t * 6) % 9) < 6) { const k = y * W + x; const v = buf[k]; buf[k] = rgb(((v & 255) + 110) >> 1, (((v >> 8) & 255) + 100) >> 1, (((v >> 16) & 255) + 100) >> 1); } }
       }
+      // the King's castle on its island, far out to sea due south (content/south.js): a faint shape from the ground, plain from the lookout
+      if (kind === 'ow') { const dC = angDiff(ang, Math.PI / 2); if (Math.abs(dC) < 0.075) { const up = clamp((cam.eye - 0.6) / 2.6, 0, 1), sc2 = (3 + 11 * up) * u, a2 = Math.abs(dC);
+        let hC = a2 < 0.045 ? 1 : 0; if (a2 >= 0.06) hC = 0.75; if (a2 < 0.012) hC = 1.9 - a2 * 40; if (Math.abs(a2 - 0.03) < 0.006) hC = 1.35; if (hC > 0 && a2 < 0.045 && ((Math.floor(ang * 900)) & 3) === 0 && hC <= 1) hC += 0.12; // keep, side towers, a spire, battlements
+        if (hC > 0) { const k = 0.35 + 0.5 * up; col(hC * sc2 + 3 * u, rgb(lerp(110, 34, k) | 0, lerp(160, 30, k) | 0, lerp(140, 46, k) | 0)); } } }
       const cl = Math.sin(ang * 5 + t * 0.03) + Math.sin(ang * 11) * 0.5;
       if (cl > 0.9) { const cy = hz - 48 * u - Math.round(Math.sin(ang * 2) * 8); for (let y = cy; y < cy + Math.round((cl - 0.9) * 14); y++) if (y >= 0 && y < hz) buf[y * W + x] = rgb(250, 250, 255); }
     }
@@ -8844,7 +8927,7 @@ function updateLocal(dt, inp) {
   // low hp beep
   if (me.hp <= 4 && me.hp > 0) { Lc.lowT -= dt; if (Lc.lowT <= 0) { Lc.lowT = 0.5; sfx('lowhp'); } }
   // music
-  let track = me && me.webbed >= 0 ? 'dread' : L.kind === 'ow' ? 'ow' : L.kind === 'cave' ? (L.fallen || L.caveKind === 'g_psalm' ? 'dread' : 'cave') : L.dnum === 13 ? 'deep' : L.kind === 'tunnel' ? (((dungeonRoomAt(L, Lc.x, Lc.y) || {}).miniboss && snap.en.some(e => e[8] >= 0)) ? 'boss' : L.tunnelBiome === 'snow' ? 'tunnel_cold' : 'tunnel_ember') : L.dnum === 10 ? 'frost' : L.dnum === 11 ? 'fire' : L.dnum === 12 ? 'hearth' : (L.dnum >= 5 && L.dnum <= 8 ? 'deep' : 'dungeon');
+  let track = me && me.webbed >= 0 ? 'dread' : L.kind === 'isle' ? 'dread' : L.kind === 'ow' ? 'ow' : L.kind === 'cave' ? (L.fallen || L.caveKind === 'g_psalm' ? 'dread' : 'cave') : L.dnum === 13 ? 'deep' : L.kind === 'tunnel' ? (((dungeonRoomAt(L, Lc.x, Lc.y) || {}).miniboss && snap.en.some(e => e[8] >= 0)) ? 'boss' : L.tunnelBiome === 'snow' ? 'tunnel_cold' : 'tunnel_ember') : L.dnum === 10 ? 'frost' : L.dnum === 11 ? 'fire' : L.dnum === 12 ? 'hearth' : (L.dnum >= 5 && L.dnum <= 8 ? 'deep' : 'dungeon');
   if (L.kind === 'ow') { const rg = owRegionAt(L, Lc.x, Lc.y); if (rg.biome === 'snow') track = 'frost'; else if (rg.biome === 'ash') track = 'fire'; }
   if (L.kind === 'dungeon') { const r = dungeonRoomAt(L, Lc.x, Lc.y); if (r && r.boss && snap.en.some(e => e[8] >= 0)) track = L.dnum === 9 ? 'final' : L.dnum >= 10 ? 'dragon' : 'boss'; }
   musicPlay(track);
@@ -9104,7 +9187,7 @@ function updatePauseInfo() {
     { const o = document.createElement('option'); o.value = ''; o.textContent = 'NORMAL'; $('pDbgElite').appendChild(o); } for (const el of Content.elites) { const o = document.createElement('option'); o.value = el.id; o.textContent = el.name; $('pDbgElite').appendChild(o); }
     for (let d = 1; d <= NDUNGEONS(); d++) { const b = document.createElement('button'); b.textContent = d <= 9 ? 'BOSS ' + d : 'BOSS ' + (Content.dungeons[d].mapLabel || d); b.onclick = () => { sendAction({ t: 'dbgboss', d }); resume(); }; $('pDbgBosses').appendChild(b); }
   }
-  if (dOn && !$('pWarps').childElementCount) { const mk = (label, to) => { const b = document.createElement('button'); b.textContent = label; b.onclick = () => { sendAction({ t: 'warp', to }); resume(); }; $('pWarps').appendChild(b); }; mk('WILDS', 'ow'); for (let d = 1; d <= NDUNGEONS(); d++) if (G.world && G.world.levels['d' + d]) mk(d <= 9 ? 'L' + d : (Content.dungeons[d].mapLabel || 'L' + d), 'd' + d); }
+  if (dOn && !$('pWarps').childElementCount) { const mk = (label, to) => { const b = document.createElement('button'); b.textContent = label; b.onclick = () => { sendAction({ t: 'warp', to }); resume(); }; $('pWarps').appendChild(b); }; mk('WILDS', 'ow'); if (G.world && G.world.levels.isle) mk('ISLE', 'isle'); for (let d = 1; d <= NDUNGEONS(); d++) if (G.world && G.world.levels['d' + d]) mk(d <= 9 ? 'L' + d : (Content.dungeons[d].mapLabel || 'L' + d), 'd' + d); }
   const kinds = NET.role === 'host' ? Object.values(NET.conns).map(c => c.kind).filter(Boolean) : NET.kind ? [NET.kind] : [];
   $('pInfo').title = kinds.length ? 'Connection: ' + kinds.join(', ') : '';
   $('pInfo').textContent = (NET.role === 'host' ? 'HOSTING' : NET.role === 'client' ? 'CONNECTED' : 'SOLO') + ' - ' + n + ' PLAYER' + (n > 1 ? 'S' : '') + (me ? ' - ' + (me.cls === 'monk' ? 'MARTIAL ARTIST' : 'SWORD') : '') + (kinds.length ? ' - ' + [...new Set(kinds)].join('/') : '');

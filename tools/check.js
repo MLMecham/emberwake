@@ -913,6 +913,24 @@ attempt('bomb bags and potions', () => {
   p.hp = 4; p.poisonTicks = 3; p.chill = 2; p.inv = 0; sim.useItem(p, 'potion'); __ok(p.hp === p.maxHp && !p.poisonTicks && !p.chill && p.inv >= POTION_GUARD - 0.1, 'a potion heals fully, cures poison and chill, and shields you for a moment');
   __ok(Content.items.whistle.sprite === 'whistle' && !!SPR.whistle, 'the Wind Whistle has its own look');
 });
+attempt('the lookout and the isle', () => {
+  let placed = 0; for (let s = 1; s <= 20; s++) { const W = genWorld(s * 7919, 'adv'); if (W.lookout) placed++; }
+  __ok(placed >= 19, 'the lookout stands by the Hearthgate in (almost) every world: ' + placed + '/20');
+  const W = genWorld(7919, 'adv'); const L = W.levels.ow, o = W.lookout; __ok(!!o, 'lookout placed');
+  if (o) { const hs = []; for (let i = 1; i <= 16; i++) hs.push(TINFO[TL['LOOK' + i]].raised); __ok(hs.every((h, i) => i === 0 || Math.abs(h - hs[i - 1] - 0.2) < 1e-6) && TINFO[TL.LOOKTOP].raised - hs[15] <= STEP_UP, 'every step is one you can take');
+    __ok(TINFO[L.get(o.x, o.y)].raised > 3 && heightAt(L, o.x + 0.5, o.y + 0.5) > 3, 'the summit stands over three tiles up'); }
+  const I = W.levels.isle; __ok(I && I.outdoor && skyRoom(I) && I.tiles.includes(TL.CASTLEGATE) && TINFO[TL.CASTLEGATE].sealedMsg, 'the isle: open sky, and the castle gate shut');
+  __ok(!I.solidAt(I.spawn.x, I.spawn.y), 'you come ashore on open ground');
+});
+attempt('the King calls his adepts', () => {
+  const sim = freshSim(); const p = sim.players.p1; sim.teleport(p, 'dbg', 20.5, 20.5, 0); for (const e of sim.ents) if (e.k === 'en') e.dead = true;
+  const k = sim.spawnEnemy('king', 'dbg', 23.5, 18.5, {}); k.spawnFx = 0; k.hp = 19; k.maxHp = 30; enemyDef('king').ai(sim, k, 1 / 60, { p });
+  const gs = sim.ents.filter(e => e.k === 'en' && !e.dead && e.guard === k.id); __ok(gs.length === 2 && gs.every(g => g.type === 'wizard_adept'), 'below two thirds he calls two force adepts');
+  const g = gs[0]; g.spawnFx = 0; g.shieldAt = 0; for (let i = 0; i < 40 && g.channel == null; i++) { g.st = 1; g.tm = 0; enemyDef(g.type).ai(sim, g, 1 / 60, { p }); }
+  __ok(g.channel === k.id && k.wardBy === g.id, 'an adept shields the King'); const hp = k.hp; __ok(sim.damageEnemy(k, 2, null, { ignoreIframes: true, silver: true }) === false && k.hp === hp, 'nothing gets through');
+  sim.damageEnemy(g, 1, null, { ignoreIframes: true }); __ok(sim.damageEnemy(k, 2, null, { ignoreIframes: true }) && k.hp < hp, 'hit the adept and the King is open');
+  enemyDef('king').ai(sim, k, 1 / 60, { p }); __ok(sim.ents.filter(e => e.k === 'en' && !e.dead && e.guard === k.id).length === 2, 'and he calls them only once per third');
+});
 attempt('ceiling spiders', () => {
   const sim = freshSim(); const p = sim.players.p1; p.god = false; p.hp = p.maxHp = 40; const D = sim.W.levels.d13; const r = Object.values(D.rooms).find(r => !r.boss && !r.silk && r !== D.startRoom);
   const cx = r.rx * DSX + 6.5, cy = r.ry * DSY + 6.5; sim.teleport(p, 'd13', cx, cy + 3, -Math.PI / 2); for (const e of sim.ents) if (e.k === 'en') e.dead = true;
