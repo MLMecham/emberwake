@@ -4387,7 +4387,7 @@ defineHints(['THE THORN-FOLK ARE MORE THAN THORNLINGS. THE BIG ONES THROW TWO SP
 //   Tiers:    MAGE    empty sockets. One spell.
 //             ADEPT   glowing eyes, bone plates on the shoulders (armor 1). Deeper in its own element (below); resists it
 //                     by half (bone: every kind of magic).
-//             ARCHMAGE  burning eyes and mouth, plates and a bone crown (armor 2). Resists its element by MAGE_RESIST[3].
+//             ARCHMAGE  burning eyes and mouth, plates and a bone crown (armor 2). Floats (def.fly): pits and lava can't take it. Resists its element by MAGE_RESIST[3].
 //                     Starts its element's COMBO, and any adept or archmage in the room can join it (game: they stop and
 //                     chant; every joiner makes it hit harder). Alone it still casts it.
 //   What each one does:
@@ -4399,7 +4399,7 @@ defineHints(['THE THORN-FOLK ARE MORE THAN THORNLINGS. THE BIG ONES THROW TWO SP
 //             through you, then a lance down it. A reflected shot (the Wardhold shield) stuns it.
 //     BONE    three bone shards (physical: your shield stops them) | raises skeletons whose armor matches its tier (1, 2,
 //             full) | archmage: THE DEAD MARCH, five fully armored skeletons, and the combo THE OSSUARY: a ribcage
-//             bursts up around you (it blocks your view) and closes. Break a rib (a bomb or heavy pommel strike, two plain
+//             bursts up around you (it blocks your view) and closes. Crossed bones on the floor show where during the chant. Break a rib (a bomb or heavy pommel strike, two plain
 //             pommel strikes, or seven sword cuts) or fly out. When it falls, five fully armored skeletons climb out of it.
 //             Joiners change it: fire makes the ribs burn, storm arcs lightning inside, force closes it twice as fast.
 //             Bone mages take half from arrows (they pass through the ribs) and double from blunt hits (pommel, bombs).
@@ -4409,7 +4409,8 @@ defineHints(['THE THORN-FOLK ARE MORE THAN THORNLINGS. THE BIG ONES THROW TWO SP
 'use strict';
 const WIZ_BONE_CHANCE = 0.02;
 const MAGE_RESIST = [0, 0, 0.5, 0.7]; // by tier (1 mage, 2 adept, 3 archmage); a bone mage resists all magic, and from tier 1
-const OSSUARY_CLOSE = 2.6; // seconds from the cage rising to it crushing whoever is still inside
+const OSSUARY_CLOSE = 5; // seconds from the cage rising to it crushing whoever is still inside
+const OSSUARY_WINDUP = 1.8; // the archmage's chant: bones rattle on the floor where the ribs will rise (you can step out)
 const OSSUARY_DEAD = 5, OSSUARY_DEAD_MAX = 10; // fully armored skeletons that climb out as it falls (no more than OSSUARY_DEAD_MAX of the mage's own at once)
 // ---- the look: rows built from the tier (eyes, armor shown) ----
 const WIZ_BASE = [
@@ -4463,7 +4464,7 @@ function raise(sim, e, armor, cap) { // skeletons climb out of the floor beside 
   const mine = sim.ents.filter(o => o.k === 'en' && !o.dead && o.raisedBy === e.id).length; if (mine >= cap) return 0;
   const s = sim.spawnMinion(e, armor ? 'skeleton_a' + armor : 'skeleton'); if (!s) return 0; s.raisedBy = e.id; sim.sfx('rattle', e.lvl, s.x, s.y); return 1;
 }
-function mark(sim, e, x, y, life, spr) { sim.spawn({ k: 'fx', lvl: e.lvl, x, y, spr: spr || 'strikemark', life, sc: 1.1, z: -0.36 }); }
+function mark(sim, e, x, y, life, spr, sc) { sim.spawn({ k: 'fx', lvl: e.lvl, x, y, spr: spr || 'strikemark', life, sc: sc || 1.1, z: -0.36 }); }
 // ---- the spells ----
 const SPELL = {
   bolt(sim, e, p, a) { const el = enemyDef(e.type).elem; const proj = { force: 'magic', fire: 'fire', storm: 'stormbolt' }[el];
@@ -4497,7 +4498,9 @@ const COMBO_WINDUP = 1.1;
 function startCombo(sim, e, p) {
   const def = enemyDef(e.type); const joiners = roomMates(sim, e).filter(o => isMage(o) && enemyDef(o.type).tier >= 2 && !o.disarmed && o.channel == null && !o.joining && !o.combo);
   for (const o of joiners) { o.joining = e.id; o.st = 0; }
-  e.combo = { kind: def.elem, at: sim.time + COMBO_WINDUP, x: p.x, y: p.y, a: Math.atan2(p.y - e.y, p.x - e.x), joined: joiners.map(o => enemyDef(o.type).elem) };
+  const wind = def.elem === 'bone' ? OSSUARY_WINDUP : COMBO_WINDUP;
+  e.combo = { kind: def.elem, at: sim.time + wind, x: p.x, y: p.y, a: Math.atan2(p.y - e.y, p.x - e.x), joined: joiners.map(o => enemyDef(o.type).elem) };
+  if (def.elem === 'bone') { const cx = Math.floor(p.x), cy = Math.floor(p.y); for (let dy = -2; dy <= 2; dy++) for (let dx = -2; dx <= 2; dx++) if (Math.max(Math.abs(dx), Math.abs(dy)) === 2) mark(sim, e, cx + dx + 0.5, cy + dy + 0.5, wind, 'bonemark', 0.6); }
   if (def.elem === 'storm') { for (let d = 1; d < 12; d += 0.8) mark(sim, e, e.x + Math.cos(e.combo.a) * d, e.y + Math.sin(e.combo.a) * d, COMBO_WINDUP, 'lancemark'); }
   sim.sfx('chant', e.lvl, e.x, e.y); e.comboAt = sim.time + 9 + Math.random() * 3;
 }
@@ -4510,7 +4513,7 @@ function releaseCombo(sim, e, p) {
     for (let d = -len / 2; d <= len / 2; d += 0.6) { const x = tx + Math.cos(a) * d, y = ty + Math.sin(a) * d; if (!L.solidAt(x, y)) sim.spawn({ k: 'efire', lvl: e.lvl, x, y, life: 4, spr: 'flame', sc: 0.9, z: -0.05 }); }
     sim.sfx('fire', e.lvl, tx, ty);
   } else if (c.kind === 'storm') { sim.fireProj('elance', e.lvl, e.x, e.y, c.a, 'e', null, { dmg: (3 + n) * e.dmgMul }); sim.sfx('beam', e.lvl, e.x, e.y); sim.ev({ t: 'shake', lvl: e.lvl, x: e.x, y: e.y }); }
-  else if (c.kind === 'bone' && p) ossuary(sim, e, p, c.joined);
+  else if (c.kind === 'bone') ossuary(sim, e, { x: c.x, y: c.y }, c.joined); // where you stood when the chant began
 }
 // THE OSSUARY: a ring of ribs (low walls: a Gale Cloak flies over them in a tall room) around the hero, closing
 function ossuary(sim, e, p, joined) {
@@ -4530,7 +4533,7 @@ Content.updateOssuaries = function (sim) {
   if (!sim.ossuaries || !sim.ossuaries.length) return;
   sim.ossuaries = sim.ossuaries.filter(o => {
     const L = sim.W.levels[o.lvl]; const inside = Object.values(sim.players).filter(pl => pl.alive && pl.lvl === o.lvl && !sim.flying(pl) && Math.max(Math.abs(pl.x - o.cx), Math.abs(pl.y - o.cy)) < 1.6);
-    if (o.storm && sim.time >= o.zapAt) { o.zapAt = sim.time + 0.55; for (const pl of inside) { sim.hurtPlayer(pl, 1, { k: 'proj', type: 'stormbolt', x: o.cx, y: o.cy }); sim.spawn({ k: 'fx', lvl: o.lvl, x: pl.x, y: pl.y, spr: 'zapfx', life: 0.2, sc: 1 }); } }
+    if (o.storm && sim.time >= o.zapAt) { o.zapAt = sim.time + 0.9; for (const pl of inside) { sim.hurtPlayer(pl, 1, { k: 'proj', type: 'stormbolt', x: o.cx, y: o.cy }); sim.spawn({ k: 'fx', lvl: o.lvl, x: pl.x, y: pl.y, spr: 'zapfx', life: 0.2, sc: 1 }); } }
     if (sim.time < o.at) return true;
     for (const pl of inside) sim.hurtPlayer(pl, o.dmg, { k: 'proj', type: 'boneshard', x: o.cx, y: o.cy }); if (inside.length) sim.msg('CRUSHED!');
     sim.clearRibs(o); sim.sfx('boom', o.lvl, o.cx, o.cy);
@@ -4573,6 +4576,7 @@ for (const el of Object.keys(ELEM)) for (let tier = 1; tier <= 3; tier++) {
   const ids = { full: id, bare: id + '_bare' }; for (let a = 0; a < armor; a++) ids['a' + a] = id + '_a' + a;
   defineEnemy({
     id, title: E.name + ' ' + TIER_NAME[tier], mage: true, elem: el, tier, armor: armor || undefined,
+    fly: tier === 3 || undefined, z: tier === 3 ? 0.3 : undefined, // archmages float: no knocking them into a pit or lava
     hp: (bone ? [8, 10, 14] : [4, 6, 8])[tier - 1], spd: 0, dmg: 2, r: 0.32, sc: 0.9 + (tier - 1) * 0.05,
     spawns, ai: mageAi, disarm: 'staff_drop', disarmedSprite: ids.bare, disarmText: 'THE STAFF GOES FLYING!', disarmedAi,
     resist: res, hot: el === 'fire' || undefined, noElites: tier === 3 ? ['giant', 'splitter'] : undefined,
@@ -4597,6 +4601,9 @@ defineSprite('lancemark', [
 defineSprite('zapfx', [
   '........y.......', '.......yw.......', '......yw........', '.....ywy........', '......ywy.......', '.......yw.......', '......yw........', '.....ywwy.......',
   '....yw..wy......', '...y......y.....', '................', '................', '................', '................', '................', '................']);
+defineSprite('bonemark', [
+  '................', '................', '................', '................', '................', '................', '.....kk...kk....', '....kzzk.kzzk...',
+  '.....kzzkzzk....', '......kzzzk.....', '.....kzzkzzk....', '....kzzk.kzzk...', '.....kk...kk....', '................', '................', '................']);
 defineSprite('chantfx', [
   '................', '................', '................', '................', '................', '.......w........', '......wcw.......', '.......w........',
   '................', '................', '................', '................', '................', '................', '................', '................']);

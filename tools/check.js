@@ -909,6 +909,7 @@ attempt('skeleton mages', () => {
   const raised = sim.ents.filter(e => e.k === 'en' && !e.dead && e.raisedBy === bm.id); __ok(raised.length >= 1 && raised.length <= 2 && raised.every(r => r.type === 'skeleton_a1'), 'a bone mage raises up to two skeletons in one piece of armor');
   __ok(shots().some(e => e.type === 'boneshard') && Content.projectiles.boneshard.blockable && !Content.projectiles.stormbolt.blockable, 'bone shards fly, and a shield can stop them');
   __ok(['wizard', 'wizard_fire_adept', 'wizard_storm_arch'].every(t => enemyDef(t).rare && enemyDef(t).rare.type === 'wizard_bone' + ['', '', '_adept', '_arch'][enemyDef(t).tier] && enemyDef(t).rare.chance === 0.02), 'one mage in fifty is the bone mage of its tier');
+  __ok(['wizard_arch', 'wizard_fire_arch', 'wizard_storm_arch', 'wizard_bone_arch'].every(t => enemyDef(t).fly) && !enemyDef('wizard_adept').fly, 'archmages float, so they cannot be knocked into a pit');
   __ok(!enemyDef('wizard').armor && enemyDef('wizard_adept').armor === 1 && enemyDef('wizard_fire_arch').armor === 2, 'adepts wear one piece of armor, archmages two');
   const hit = (type, dmg, opt) => { clear(); const m = mk(type); m.hp = 50; sim.damageEnemy(m, dmg, null, Object.assign({ ignoreIframes: true }, opt)); return 50 - m.hp; };
   __ok(hit('wizard_fire', 4, { elem: 'fire' }) === 4 && hit('wizard_fire_adept', 4, { elem: 'fire' }) === 1.5 && Math.abs(hit('wizard_fire_arch', 4, { elem: 'fire' }) - 0.6) < 1e-9, 'resisting their own element: none, half, 70% (on top of armor)');
@@ -932,7 +933,7 @@ attempt('skeleton mages', () => {
   // THE DEAD MARCH and THE OSSUARY
   clear(); const ba = mk('wizard_bone_arch'); ba.marchAt = 0; cast(ba); __ok(sim.ents.filter(e => e.k === 'en' && !e.dead && e.raisedBy === ba.id && e.type === 'skeleton_a3').length === 5, 'a bone archmage raises five fully armored skeletons');
   for (const e of sim.ents) if (e.raisedBy === ba.id) e.dead = true; ba.marchAt = 1e9; ba.comboAt = 0; cast(ba); __ok(ba.combo && ba.combo.kind === 'bone', 'then calls the Ossuary');
-  const D = sim.W.levels.dbg; sim.time += 1.2; enemyDef(ba.type).ai(sim, ba, 1 / 60, { p }); const os = sim.ossuaries[0];
+  const D = sim.W.levels.dbg; sim.time += 1.2; enemyDef(ba.type).ai(sim, ba, 1 / 60, { p }); __ok(!sim.ossuaries.length && sim.ents.filter(e => e.k === 'fx' && e.spr === 'bonemark').length >= 8, 'during the chant, bones on the floor show where the cage will rise'); sim.time += 0.7; enemyDef(ba.type).ai(sim, ba, 1 / 60, { p }); const os = sim.ossuaries[0];
   __ok(os && os.ribs.length >= 8 && os.ribs.every(i => TINFO[D.tiles[i]].rib && TINFO[D.tiles[i]].solid), 'ribs burst up around the hero');
   const rib = os.ribs[0], rx = rib % D.w + 0.5, ry = Math.floor(rib / D.w) + 0.5; for (let i = 0; i < 6; i++) sim.cutAt(D, rx, ry, p); __ok(TINFO[D.tiles[rib]].rib, 'six sword cuts are not enough');
   sim.cutAt(D, rx, ry, p); __ok(!TINFO[D.tiles[rib]].rib, 'the seventh breaks a rib');
@@ -940,7 +941,7 @@ attempt('skeleton mages', () => {
   const rib2 = os.ribs[1], rib3 = os.ribs[2]; const face = (i) => { p.x = i % D.w + 0.5; p.y = Math.floor(i / D.w) + 1.5; p.a = -Math.PI / 2; };
   p.items.heavypommel = false; face(rib2); sim.pommelStrike(p, D); __ok(TINFO[D.tiles[rib2]].rib, 'one plain pommel strike is not enough'); sim.pommelStrike(p, D); __ok(!TINFO[D.tiles[rib2]].rib, 'two are');
   p.items.heavypommel = true; face(rib3); sim.pommelStrike(p, D); __ok(!TINFO[D.tiles[rib3]].rib, 'one heavy pommel strike breaks a rib'); p.x = os.cx; p.y = os.cy;
-  const hp1 = p.hp; p.inv = 0; sim.time += 3; Content.updateOssuaries(sim); __ok(p.hp < hp1 && !sim.ossuaries.length && os.ribs.every(i => !TINFO[D.tiles[i]].rib), 'whoever stays inside is crushed, and the cage falls apart');
+  const hp1 = p.hp; p.inv = 0; sim.time += 3; Content.updateOssuaries(sim); __ok(sim.ossuaries.length === 1, 'the cage holds you for five seconds'); sim.time += 2.1; Content.updateOssuaries(sim); __ok(p.hp < hp1 && !sim.ossuaries.length && os.ribs.every(i => !TINFO[D.tiles[i]].rib), 'whoever stays inside is crushed, and the cage falls apart');
   __ok(sim.ents.filter(e => e.k === 'en' && !e.dead && e.type === 'skeleton_a3' && e.raisedBy === ba.id).length === 5, 'and five fully armored skeletons climb out of it');
   sim.damageEnemy(ba, 999, null, { ignoreIframes: true }); __ok(sim.ents.some(e => e.k === 'pick' && e.item === 'ring_hollow'), 'a bone archmage drops the Hollow Ring');
   __ok(['wizard_bare', 'wizard_fire_adept_bare', 'wizard_storm_arch_bare', 'wizard_bone_arch_bare', 'wizard_adept_a0', 'wizard_arch_a1'].every(id => !!SPR[id]), 'every mage has staffless and stripped looks');
