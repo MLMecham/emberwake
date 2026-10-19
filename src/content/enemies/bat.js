@@ -46,7 +46,7 @@ defineEnemy({
     if (sim.time >= e.shriekAt) { e.shriekAt = sim.time + NW.shriekEvery; sim.sfx('shriek', e.lvl, e.x, e.y); const n = sim.ents.filter(o => o.k === 'en' && !o.dead && o.type === 'bat' && o.lvl === e.lvl).length; for (let i = n; i < Math.min(NW.brood, n + 3); i++) sim.spawnMinion(e, 'bat'); }
     if (sim.time >= e.diveAt) { e.st = 1; e.goAt = sim.time + NW.windup; e.tx = p.x; e.ty = p.y; }
   },
-  onDeath(sim, e) { sim.team.taken['climb:roost'] = true; for (const o of sim.ents) if (o.k === 'npc' && o.after === 'climb:roost') o.text = o.textAfter; sim.msg('THE ROOST FALLS SILENT.'); },
+  onDeath(sim, e) { sim.team.taken['climb:roost'] = true; for (const o of sim.ents) if (o.k === 'npc' && o.after === 'climb:roost') { o.text = o.textAfter; o.heard = { said: 'masterTaught' }; } sim.msg('THE ROOST FALLS SILENT.'); },
   anim: { fps: 8, frames: (s, kit) => [s, kit.shiftCols(kit.shiftCols(s, 0, 4, -3), 11, 15, -3), kit.shiftCols(kit.shiftCols(s, 0, 4, 2), 11, 15, 2)] },
   pal: { P: '#3a2440', p: '#7a4a6a' },
   sprite: [

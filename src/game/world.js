@@ -310,7 +310,7 @@ function genClimb(W, rnd) {
     const r = main[N - ROOST]; fight.links[r.id] = r.links[fight.id] = 1; const si = L.idx(gx + 1, gy + 2); L.props[si] = PR.SIGN; L.signText[si] = 'THE GATE OPENS ONLY WHEN IT IS NOT SEEN.'; }
   // the master's cave: a cracked wall off the climb (a bomb opens it), hard to spot
   { const r = main[N - 5], cy = r.ry * DSY + 4, ci = L.idx(3 * DSX, cy); L.set(3 * DSX, cy, TL.CLIFFCRACK); L.wallZ[ci] = r.base; master.links[r.id] = r.links[master.id] = 1;
-    const mx0 = master.rx * DSX, my0 = master.ry * DSY; L.npcs.push({ x: mx0 + 8.5, y: my0 + 3.5, spr: 'swordmaster', text: Content.master.wait, after: 'climb:roost', textAfter: Content.master.taught });
+    const mx0 = master.rx * DSX, my0 = master.ry * DSY; L.npcs.push({ x: mx0 + 8.5, y: my0 + 3.5, spr: 'swordmaster', text: Content.master.wait, after: 'climb:roost', textAfter: Content.master.taught, talk: 'master' }); // what he says next: Content.talkFns.master
     L.shop.push({ x: mx0 + 5.5, y: my0 + 4.5, item: 'lunge', price: 0, gift: true, cond: 'roost', condShow: true, condText: Content.master.locked });
     for (const [dx, dy] of [[2, 2], [9, 6]]) L.props[L.idx(mx0 + dx, my0 + dy)] = PR.FLAME; }
   // who's on the way up: bats all the way, magmites where the lava runs, frostlings where it's frozen, a snow wolf near the top
@@ -754,7 +754,10 @@ function genCave(W, id, kind, exit, rnd) {
     const item = Array.isArray(s.item) ? rnd.pick(s.item) : s.item; // a list means "one of these, chosen per world"
     L.shop.push({ x: s.x + 0.5, y: 4.5, item, price: s.price, gift: s.gift, needHearts: s.needHearts, unique: s.unique, cond: s.cond, choose: s.choose ? 'h' + id : undefined });
   }
-  if (c.npc) L.npcs.push({ x: 6.5, y: 2.5, spr: c.npc, text: c.text || rnd.pick(c.lore && Content.lore ? Content.lore : Content.hints) }); // lore: a line of the land's passing talk (content/grottos.js)
+  if (c.npc) { // lore: a line of the land's passing talk (content/grottos.js). lines: what they say on later visits (sim.rotateTalk)
+    const src = c.lore && Content.lore ? Content.lore : Content.hints; const text = c.text || rnd.pick(src);
+    const lines = c.noTalk ? null : c.text ? [c.text, ...(c.talk || []), ...((Content.talkPool || {})[c.npc] || (/^oldman|^hermit/.test(c.npc) ? Content.talkPool.oldman : []) || [])] : [...src.slice(src.indexOf(text)), ...src.slice(0, src.indexOf(text))];
+    L.npcs.push({ x: 6.5, y: 2.5, spr: c.npc, text, lines }); }
 }
 
 // ---------- DUNGEONS ----------

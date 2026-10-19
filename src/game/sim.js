@@ -229,8 +229,8 @@ class Sim {
   }
   // ---- teleport ----
   teleport(p, lvl, x, y, a) {
-    p.lvl = lvl; p.x = x; p.y = y; p.a = a; p.webbed = null; this.ev({ t: 'tp', pid: p.id, lvl, x, y, a });
-    this.initLevel(lvl);
+    const from = p.lvl; p.lvl = lvl; p.x = x; p.y = y; p.a = a; p.webbed = null; this.ev({ t: 'tp', pid: p.id, lvl, x, y, a });
+    this.initLevel(lvl); if (from !== lvl && !Object.values(this.players).some(o => o !== p && o.lvl === lvl)) this.rotateTalk(lvl);
     if (this.W.levels[lvl] && this.W.levels[lvl].kind === 'tunnel') { const T = this.W.levels[lvl]; this.ev({ t: 'title', pid: p.id, text: T.label, sub: T.sub || (T.tunnelBiome === 'snow' ? 'TO THE FROZEN REACH' : 'TO THE CINDER WASTES') }); }
     if (lvl === 'dbg') { this.ev({ t: 'title', pid: p.id, text: 'TEST ZONE', sub: 'DEBUG' }); // and its training dummies (world.js genTestZone L.dummies)
       for (const [type, x, y] of (this.W.levels.dbg.dummies || [])) if (!this.ents.some(e => e.k === 'en' && e.lvl === 'dbg' && e.type === type && !e.dead)) { const d = this.spawnEnemy(type, 'dbg', x, y, {}); d.spawnFx = 0; d.f = Math.PI / 2; } }
@@ -352,11 +352,30 @@ class Sim {
     if (this.levelInit[L.id]) { for (const n of L.npcs) this.spawn({ k: 'npc', lvl: L.id, x: n.x, y: n.y, spr: n.spr, text: n.text, sc: 0.95 }); this.layWardShield(L); }
   }
   layWardShield(L) { const tk = L.id + ':wardshield'; if (this.team.taken[tk] || this.ents.some(e => e.tk === tk && !e.dead)) return; this.spawn({ k: 'pick', lvl: L.id, x: 8.3, y: 2.8, item: 'wardshield', tk, perm: true, spr: 'wardshield', sc: 0.6, z: 0.02, team: true }); }
+  // ---- ROTATING TALK: keepers and old men move on to their next line each time someone walks in (content/caves.js talk,
+  // world.js genCave lines; team.talk counts visits, saved). One-off lines (the Wardhold line, the grudge, refills) win.
+  // A line { t, mark } marks a place on the Wilds map once someone has stood beside them while it's being said (updateHeard).
+  rotateTalk(lvl) {
+    const tk = this.team.talk = this.team.talk || {};
+    for (const e of this.ents) {
+      if (e.k !== 'npc' || e.lvl !== lvl || e.dead || e.restoreAt || this.team.taken['refill:' + lvl] || !e.talkKey) continue;
+      let line = null;
+      if (e.talk && Content.talkFns && Content.talkFns[e.talk]) line = Content.talkFns[e.talk](this, e);
+      else if (e.lines && e.lines.length > 1) { const k = tk[e.talkKey] = tk[e.talkKey] == null ? 0 : tk[e.talkKey] + 1; line = e.lines[k % e.lines.length]; }
+      if (!line) continue; if (typeof line === 'string') line = { t: line };
+      e.text = line.t; e.heard = (line.mark || line.said) ? { mark: line.mark, said: line.said } : null;
+    }
+  }
+  updateHeard(plist) {
+    for (const e of this.ents) { if (e.k !== 'npc' || !e.heard || e.dead) continue; const p = plist.find(q => q.alive && q.lvl === e.lvl && dist2(q.x, q.y, e.x, e.y) < 2.45 * 2.45); if (!p) continue;
+      const h = e.heard; e.heard = null; if (h.said) (this.team.said = this.team.said || {})[h.said] = true;
+      if (h.mark) { const m = this.team.marks = this.team.marks || []; if (!m.includes(h.mark)) { m.push(h.mark); this.sfx('secret', e.lvl); this.ev({ t: 'hint', pid: p.id, text: 'MARKED ON YOUR MAP' }); } } }
+  }
   // ---- level init (static entities) ----
   initLevel(id) {
     if (this.levelInit[id]) return; this.levelInit[id] = true;
     const L = this.W.levels[id];
-    for (const n of L.npcs) this.spawn({ k: 'npc', lvl: id, x: n.x, y: n.y, spr: n.spr, text: this.team.taken['refill:' + id] ? Content.refillText : n.after && this.team.taken[n.after] ? n.textAfter : n.text, after: n.after, textAfter: n.textAfter, sc: 0.95 });
+    L.npcs.forEach((n, ni) => this.spawn({ k: 'npc', lvl: id, x: n.x, y: n.y, spr: n.spr, text: this.team.taken['refill:' + id] ? Content.refillText : n.after && this.team.taken[n.after] ? n.textAfter : n.text, after: n.after, textAfter: n.textAfter, lines: n.lines, talk: n.talk, talkKey: id + ':' + ni, sc: 0.95 }));
     if (id === this.W.startCave && this.team.fallen) this.layWardShield(L);
     if (this.team.taken['refill:' + id]) this.openRefill(id);
     L.shop.forEach((s, i) => {
@@ -398,7 +417,7 @@ class Sim {
     // groups activation
     for (const p of plist) if (p.alive) this.activateGroupFor(p);
     this.updateGroups(dt, plist);
-    this.updateFirstDoor(plist); this.coolGrudge(dt);
+    this.updateFirstDoor(plist); this.updateHeard(plist); this.coolGrudge(dt);
     // entities
     for (const e of this.ents) { if (!active.has(e.lvl)) continue; this.updateEnt(e, dt); }
     this.ents = this.ents.filter(e => !e.dead);
@@ -1112,7 +1131,7 @@ class Sim {
     const en = []; for (const e of this.ents) if (e.lvl === p.lvl) en.push(this.entView(e, p));
     const pl = []; for (const o of Object.values(this.players)) pl.push([o.id, o.lvl, Math.round(o.x * 100) / 100, Math.round(o.y * 100) / 100, Math.round(o.a * 100) / 100, o.color, o.armor, o.cls, o.alive ? 1 : 0, o.atk, o.name, Math.round(o.revive / REVIVE_TIME * 100) / 100, o.hp, o.maxHp, o.reviver || 0, o.z || 0]); // [15] z: feet height (ledges, the cloak's lift)
     const me = {}; for (const k of ['lvl', 'hp', 'maxHp', 'gems', 'bombs', 'maxBombs', 'arrows', 'maxArrows', 'swordMax', 'armorMax', 'arrowType', 'wandEl', 'sword', 'armor', 'items', 'favs', 'ring', 'armMode', 'potions', 'alive', 'cls', 'sel', 'color', 'name', 'dbg', 'god']) me[k] = p[k]; me.spellCd = Math.max(0, Math.round(((p.spellReady || 0) - this.time) * 10) / 10); me.chill = p.chill > 0 ? 1 : 0; me.mirror = this.reflectOpen(p) ? 1 : 0; me.webbed = p.webbed ? Math.round((this.time - p.webbed.at) * 10) / 10 : -1; me.silk = p.silk > 0 ? 1 : 0; me.armReady = this.time >= (p.armSwapAt || 0) ? 1 : 0; me.ward = this.wardReady(p) ? 1 : 0; me.poison = p.poisonTicks > 0 ? p.poisonTicks : 0; me.fly = this.flying(p) ? Math.round((p.flyUntil - this.time) * 10) / 10 : 0; me.respawnIn = p.alive ? 0 : Math.max(0, Math.ceil(RESPAWN_WAIT - (this.time - (p.downAt || 0))));
-    return { t: 's', paused: !!this.paused, pausedBy: this.pausedBy, me, pl, en, team: { keys: this.team.keys, maps: this.team.maps, comps: this.team.comps, shards: this.team.shards, done: this.team.done, relics: this.team.relics, fallen: !!this.team.fallen, grudge: this.team.grudge || 0, refills: Object.keys(this.team.taken).filter(k => k.startsWith('refill:') && this.team.taken[k]).map(k => k.slice(7)) }, vp: this.ventPhase(), rg: this.rigCodes(p.lvl), fz: this.frozenList(p.lvl), mv: this.modVer, over: this.over > 0 };
+    return { t: 's', paused: !!this.paused, pausedBy: this.pausedBy, me, pl, en, team: { keys: this.team.keys, maps: this.team.maps, comps: this.team.comps, shards: this.team.shards, done: this.team.done, relics: this.team.relics, fallen: !!this.team.fallen, grudge: this.team.grudge || 0, marks: this.team.marks || [], refills: Object.keys(this.team.taken).filter(k => k.startsWith('refill:') && this.team.taken[k]).map(k => k.slice(7)) }, vp: this.ventPhase(), rg: this.rigCodes(p.lvl), fz: this.frozenList(p.lvl), mv: this.modVer, over: this.over > 0 };
   }
   // ---- save ----
   makeSave() {
@@ -1122,7 +1141,7 @@ class Sim {
     const tileNames = []; for (const k in TL) tileNames[TL[k]] = k;
     let mods = this.mods; if (this.tempTiles.length) { mods = JSON.parse(JSON.stringify(this.mods)); for (const t of this.tempTiles) if (mods[t.lvl] && mods[t.lvl][t.i]) mods[t.lvl][t.i][0] = t.orig; } // temporary tiles are saved as they'll end up
     const propNames = PROPS.slice();
-    return { v: SAVE_VERSION, tileNames, propNames, seed: this.W.seed, mode: this.W.mode, team: { keys: this.team.keys, maps: this.team.maps, comps: this.team.comps, shards: this.team.shards, done: this.team.done, relics: this.team.relics, taken: this.team.taken, cleared: cl, fallen: !!this.team.fallen, wardLine: !!this.team.wardLine, grudge: this.team.grudge || 0, grudgePeak: this.team.grudgePeak || 0, said: this.team.said || {} }, mods, players, time: Date.now() };
+    return { v: SAVE_VERSION, tileNames, propNames, seed: this.W.seed, mode: this.W.mode, team: { keys: this.team.keys, maps: this.team.maps, comps: this.team.comps, shards: this.team.shards, done: this.team.done, relics: this.team.relics, taken: this.team.taken, cleared: cl, fallen: !!this.team.fallen, wardLine: !!this.team.wardLine, grudge: this.team.grudge || 0, grudgePeak: this.team.grudgePeak || 0, said: this.team.said || {}, talk: this.team.talk || {}, marks: this.team.marks || [] }, mods, players, time: Date.now() };
   }
   loadSave(s) {
     s = migrateSave(s);

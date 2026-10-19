@@ -59,8 +59,9 @@ defineCave('g_spring', { name: 'WARM SPRING', grotto: true, npc: null, spring: t
 defineCave('g_cache', { name: 'ROOT CACHE', grotto: true, npc: null, sign: 'SCRATCHED INTO A ROOT: FOR WHOEVER COMES UP NEXT. TAKE IT. WE HAVE ENOUGH DOWN THERE.', stock: [{ x: 4, item: 'arrows', price: 0, gift: true }, { x: 6, item: 'gems50', price: 0, gift: true }, { x: 8, item: 'bombs', price: 0, gift: true }] });
 defineCave('g_hermit', { name: 'MOSS HERMIT', grotto: true, npc: 'hermit_moss', lore: true, stock: [] });
 defineCave('g_roots', { name: 'ROOT MERCHANT', grotto: true, npc: 'hermit_moss', text: 'CUSTOMERS! UNDER A TREE! WHAT A WORLD. EVERYTHING CHEAP. COIN IS NO USE TO ME, BUT I LIKE THE SOUND.', stock: [{ x: 3, item: 'arrows', price: 18 }, { x: 5, item: 'heart', price: 5 }, { x: 7, item: 'potion', price: POTION_PRICE }, { x: 9, item: 'ring_thorn', price: 150, cond: 'kindToThorns' }] }); // the Thorn Ring only while the thorn-folk aren't angry (game/sim.js shopCond)
+Content.caves.g_roots.talk = ['THE THORN-FOLK BRING ME BERRIES. I DON\'T ASK WHERE FROM. THEY DON\'T ASK WHERE MY FIRE WENT.', 'BUY TWO, I\'LL PRETEND IT WAS ONE. NOBODY\'S COUNTING DOWN HERE.'];
 // LAMENT: an old man by two grave markers, singing a psalm for the living buried by the dead. Pages split on '|'.
-defineCave('g_psalm', { name: 'THE LAMENT', grotto: true, npc: 'hermit_ash', graves: true, stock: [],
+defineCave('g_psalm', { name: 'THE LAMENT', grotto: true, npc: 'hermit_ash', graves: true, stock: [], noTalk: true,
   text: 'HEAR ME, ROOTS, FOR NO ONE ELSE WILL LISTEN. WE LAID OUR DEAD IN THE COOL EARTH. WE SANG OVER THEM, AND WENT HOME TO OUR FIRES.' +
     '|NOW THE DEAD WALK IN THE SUN, AND THE LIVING LIE DOWN IN THE DARK. THEY HAVE TAKEN OUR FIELDS, AND WE HAVE TAKEN THEIR GRAVES.' +
     '|WE DIG OUR HOMES WHERE WE ONCE DUG THEIR RESTING PLACES. OUR CHILDREN ARE BORN UNDER STONE. THEY NAME THE ROOTS THE WAY WE NAMED THE STARS.' +

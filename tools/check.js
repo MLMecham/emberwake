@@ -947,6 +947,26 @@ attempt('the Ascent', () => {
   __ok(Content.rings.some(r => r.id === 'ring_bat') && !Content.rings.some(r => r.id === 'ring_moth'), 'the Bats Ear replaced the Moth Ring');
   const I = W.levels.isle; __ok(I && I.outdoor && skyRoom(I) && I.tiles.includes(TL.CASTLEGATE), 'the isle: open sky, and the castle gate shut');
 });
+attempt('rotating talk and map marks', () => {
+  const W = genWorld(7919, 'adv'); const O = W.levels.ow; const caves = []; for (const r of O.regions) for (const f of r.features) if (f.type === 'cave') caves.push(f);
+  const sim = new Sim(W, null); const p = sim.addPlayer('p1', 'A', 'GREEN', 'sword'); p.god = true;
+  const visit = (id) => { sim.teleport(p, 'ow', O.spawn.x, O.spawn.y, 0); sim.teleport(p, id, 6.5, 6.5, 0); return sim.ents.find(e => e.k === 'npc' && e.lvl === id && !e.dead); };
+  const shop = caves.find(f => f.kind === 'shop1'); __ok(!!shop, 'a first shop in the world');
+  const t1 = visit(shop.id).text, n2 = visit(shop.id); __ok(t1 === Content.caves.shop1.text && n2.text !== t1 && /SWORDSMAN/.test(n2.text), 'the first shop opens with its old line, then tells you about the swordsman');
+  __ok(!(sim.team.marks || []).includes('master'), 'nothing marked until someone hears it'); p.x = n2.x; p.y = n2.y + 1; sim.tick(1 / 60); __ok(sim.team.marks.includes('master'), 'hearing it marks the master on the map');
+  const seen = new Set(); for (let i = 0; i < 6; i++) seen.add(visit(shop.id).text); __ok(seen.size >= 3, 'the shopkeeper goes round his lines: ' + seen.size);
+  const hint = caves.find(f => f.kind === 'hint'); if (hint) { const hs = new Set(); for (let i = 0; i < 4; i++) hs.add(visit(hint.id).text); __ok(hs.size === 4, 'a hint cave goes through its hints'); }
+  __ok(Content.caves.g_psalm.noTalk && (W.levels[(O.grottos || []).find(g => g.kind === 'g_psalm') ? O.grottos.find(g => g.kind === 'g_psalm').id : 'none'] || { npcs: [{}] }).npcs[0].lines == null, 'the Lament always sings the same psalm');
+  // the master: waits, teaches, then hints at what you lack, then gives up the dojo
+  const C = W.levels.climb, M = Content.master; const at = () => { const m = sim.ents.find(e => e.k === 'npc' && e.lvl === 'climb' && !e.dead); return m; };
+  const climbIn = () => { sim.teleport(p, 'ow', O.spawn.x, O.spawn.y, 0); sim.teleport(p, 'climb', C.spawn.x, C.spawn.y, 0); return at(); };
+  __ok(climbIn().text === M.wait, 'he waits while the Nightwing lives'); sim.team.taken['climb:roost'] = true;
+  let m = climbIn(); __ok(m.text === M.taught, 'then he teaches'); p.x = m.x; p.y = m.y + 1; sim.tick(1 / 60); p.x = C.spawn.x; p.y = C.spawn.y;
+  m = climbIn(); __ok(m.text === M.hints[0][1], 'next he points at the first technique you lack (the Wide Throw)'); m = climbIn(); __ok(M.idle.includes(m.text), 'then he just talks');
+  for (const [id] of M.hints) p.items[id] = true; m = climbIn(); __ok(m.text === M.dojo, 'with every technique he gives up the dojo'); p.x = m.x; p.y = m.y + 1; sim.tick(1 / 60);
+  __ok(sim.team.marks.includes('dojo') && caves.some(f => f.kind === 'dojo'), 'and marks it');
+  const sv = sim.makeSave(); const s2 = new Sim(genWorld(7919, 'adv'), sv); __ok(s2.team.marks.includes('dojo') && s2.team.talk && Object.keys(s2.team.talk).length > 0, 'the marks and where everyone is in their talk are saved');
+});
 attempt('the King calls his adepts', () => {
   const sim = freshSim(); const p = sim.players.p1; sim.teleport(p, 'dbg', 20.5, 20.5, 0); for (const e of sim.ents) if (e.k === 'en') e.dead = true;
   const k = sim.spawnEnemy('king', 'dbg', 23.5, 18.5, {}); k.spawnFx = 0; k.hp = 19; k.maxHp = 30; enemyDef('king').ai(sim, k, 1 / 60, { p });

@@ -2114,6 +2114,9 @@ const AI = {
 // name: shown on the map while you're inside. npc: sprite id. text: what they say. stock: items on the counter, each { x (column 1-11), item, price }.
 //   gift: free.  needHearts: requires that many hearts.  choose: picking one removes the others with the same tag.
 //   unique: the martial artist can't take it.
+//   talk: more lines. Every time someone walks into the cave the keeper moves on to the next one: text first, then talk, then
+//   the common lines for their kind (Content.talkPool). A line can be { t, mark } to mark a place on the map once heard
+//   (Content.mapMarks). noTalk: always the same line. Hint and lore caves go round their whole list.
 // Which caves appear on the map is the CAVE_MIX list in game/world.js.
 'use strict';
 defineCave('sword0', { name: 'OLD MAN', npc: 'oldman', text: 'THE DARK IS LONG, WAYFARER. STEEL IS BETTER COMPANY THAN COURAGE ALONE.', stock: [{ x: 6, item: 'sword1', price: 0, gift: true }] });
@@ -2137,6 +2140,29 @@ defineHints([
   'KNIGHTS GUARD THEIR FRONT. STRIKE THEM FROM THE SIDE.',
   'IN THE MOUNTAINS, A MASTER WAITS BEHIND STONE. SEEK THE ONE WHO FIGHTS WITH OPEN HANDS.',
 ]);
+
+// ---- rotating talk (game/sim.js rotateTalk) ----
+const talk = (kind, lines) => { Content.caves[kind].talk = lines; };
+talk('sword0', ['SWING, STEP BACK, SWING AGAIN. THAT IS ALL A SWORD IS.', 'THE WILDS GET COLDER EVERY YEAR. NOBODY SAYS WHY.']);
+talk('sword1', ['A BLADE THAT HEAVY WANTS A HEART TO MATCH IT. COME BACK STRONGER.']);
+talk('sword2', ['THE MYTHRIL REMEMBERS EVERY HAND THAT FAILED IT. DON\'T BE ONE MORE.']);
+talk('shop1', [{ t: 'THERE\'S AN OLD SWORDSMAN UP THE STORM MOUNTAIN, PAST THE HIGH WOOD AT THE TOP OF THE WILDS. TAUGHT ME TO HOLD A KNIFE. HERE, I\'LL MARK IT ON YOUR MAP. NOW BUY SOMETHIN\'!', mark: 'master' },
+  'BOMBS CRACK WALLS. CANDLES BURN BUSHES. HEARTS... WELL, HEARTS ARE HEARTS.']);
+talk('shop2', ['ARROWS DON\'T GROW ON TREES. WELL. THE STICKS DO.', 'THE POTION\'S DEAR, I KNOW. SO\'S A FUNERAL.']);
+talk('armor', ['CHAIN TURNS A BITE INTO A BRUISE. MOSTLY.', 'PLATE? HAH. FIND IT YOURSELF. I SELL TO PEOPLE WHO COME BACK.']);
+talk('potion', ['RED FOR ONE GULP, BLUE FOR TWO. DON\'T ASK WHAT\'S IN THEM.', 'IF YOU FEEL THE COLD IN YOUR BONES, DRINK. IF YOU FEEL NOTHING, DRINK FASTER.']);
+talk('heart', ['ONLY ONE. THE OTHER WAITS FOR WHOEVER FINDS ME NEXT.']);
+talk('gift', ['YOU AGAIN? THE SECRET\'S BEEN KEPT. GO ON, GET.', 'I\'D GIVE YOU MORE, BUT THEN IT WOULDN\'T BE A SECRET. IT\'D BE A SHOP.']);
+talk('bombshop', ['DIGGING\'S HONEST WORK. BLOWING THINGS UP IS MORE FUN.', 'WATCH THE CEILING ON YOUR WAY OUT. I DID SAY BOMBS.']);
+talk('dojo', ['OPEN HANDS, OPEN EYES. THE REST IS BREATHING.', 'THE OLD BLADE ON THE MOUNTAIN SENT YOU? HOH! HE STILL OWES ME A FIGHT.']);
+// the common lines, by who's talking
+Content.talkPool = {
+  merchant: ['COME BACK WHEN YOU\'RE RICHER. OR NOW. NOW\'S GOOD TOO.', 'GEMS SPEND THE SAME, NO MATTER WHOSE POCKET THEY FELL OUT OF.'],
+  oldman: ['IT\'S DANGEROUS OUT THERE. YOU KNOW THAT BY NOW.', 'SIT A WHILE. NO? NOBODY EVER SITS.'],
+};
+// places a line can mark on the Wilds map (engine/render.js draws them; team.marks)
+Content.mapMarks = ['master', 'dojo'];
+
 
 })();
 // ---- src/content/drops.js ----
@@ -2470,6 +2496,8 @@ defineCave('frosthint', { name: 'HERMIT', npc: 'oldman_frost',
 defineCave('firehint', { name: 'HERMIT', npc: 'oldman_fire',
   text: 'THE PATRIARCH BROODS IN THE CINDER CALDERA. THE VENTS BREATHE EVERY FEW HEARTBEATS: WATCH THEM GLOW, THEN STEP. COLD ARROWS BITE FIRE-BORN THINGS TWICE AS DEEP.',
   stock: [{ x: 4, item: 'potion', price: POTION_PRICE }, { x: 8, item: 'bombs', price: 25 }] });
+Content.caves.frosthint.talk = ['THE COLD ROAD IS LONG. EAT BEFORE YOU GO. OR AFTER. NOBODY EATS ON IT.', 'ICE REMEMBERS WEIGHT. STEP LIGHT NEAR THE EDGES.'];
+Content.caves.firehint.talk = ['THE ASH FALLS UP HERE, NOT DOWN. DON\'T THINK ABOUT IT TOO LONG.', 'MAGMA BOOTS? IF YOU FIND THEM, I NEVER SAW YOU.'];
 defineHints([
   'BEYOND THE WESTERN PEAKS THE GROUND IS GLASS. WHAT SLIDES, STOPS ONLY WHEN SOMETHING STOPS IT.',
   'THE HEARTH HAS THREE LOCKS: A FANG OF FROST, A HEART OF EMBER, AND ONE THAT WAS STOLEN LONG AGO.',
@@ -2576,8 +2604,9 @@ defineCave('g_spring', { name: 'WARM SPRING', grotto: true, npc: null, spring: t
 defineCave('g_cache', { name: 'ROOT CACHE', grotto: true, npc: null, sign: 'SCRATCHED INTO A ROOT: FOR WHOEVER COMES UP NEXT. TAKE IT. WE HAVE ENOUGH DOWN THERE.', stock: [{ x: 4, item: 'arrows', price: 0, gift: true }, { x: 6, item: 'gems50', price: 0, gift: true }, { x: 8, item: 'bombs', price: 0, gift: true }] });
 defineCave('g_hermit', { name: 'MOSS HERMIT', grotto: true, npc: 'hermit_moss', lore: true, stock: [] });
 defineCave('g_roots', { name: 'ROOT MERCHANT', grotto: true, npc: 'hermit_moss', text: 'CUSTOMERS! UNDER A TREE! WHAT A WORLD. EVERYTHING CHEAP. COIN IS NO USE TO ME, BUT I LIKE THE SOUND.', stock: [{ x: 3, item: 'arrows', price: 18 }, { x: 5, item: 'heart', price: 5 }, { x: 7, item: 'potion', price: POTION_PRICE }, { x: 9, item: 'ring_thorn', price: 150, cond: 'kindToThorns' }] }); // the Thorn Ring only while the thorn-folk aren't angry (game/sim.js shopCond)
+Content.caves.g_roots.talk = ['THE THORN-FOLK BRING ME BERRIES. I DON\'T ASK WHERE FROM. THEY DON\'T ASK WHERE MY FIRE WENT.', 'BUY TWO, I\'LL PRETEND IT WAS ONE. NOBODY\'S COUNTING DOWN HERE.'];
 // LAMENT: an old man by two grave markers, singing a psalm for the living buried by the dead. Pages split on '|'.
-defineCave('g_psalm', { name: 'THE LAMENT', grotto: true, npc: 'hermit_ash', graves: true, stock: [],
+defineCave('g_psalm', { name: 'THE LAMENT', grotto: true, npc: 'hermit_ash', graves: true, stock: [], noTalk: true,
   text: 'HEAR ME, ROOTS, FOR NO ONE ELSE WILL LISTEN. WE LAID OUR DEAD IN THE COOL EARTH. WE SANG OVER THEM, AND WENT HOME TO OUR FIRES.' +
     '|NOW THE DEAD WALK IN THE SUN, AND THE LIVING LIE DOWN IN THE DARK. THEY HAVE TAKEN OUR FIELDS, AND WE HAVE TAKEN THEIR GRAVES.' +
     '|WE DIG OUR HOMES WHERE WE ONCE DUG THEIR RESTING PLACES. OUR CHILDREN ARE BORN UNDER STONE. THEY NAME THE ROOTS THE WAY WE NAMED THE STARS.' +
@@ -2728,6 +2757,27 @@ Content.master = {
   wait: 'YOU CLIMBED. GOOD. I TEACH THE BLADE, BUT NOT WITH THAT THING SCREAMING OVER MY HEAD. IT ROOSTS ABOVE, BEHIND THE GATE THAT WON\'T BE WATCHED. MAKE IT QUIET.',
   taught: 'QUIET AT LAST. HOLD THE GRIP UNTIL IT RINGS, THEN GO. ...THE LIVING WENT UNDER THE ROOTS, YOU KNOW. THERE ARE OTHERS LIKE ME, HIDING. FIND THEM.',
   locked: 'HE WAVES YOU OFF. "NOT WITH THAT SHRIEKING. MAKE IT QUIET FIRST."',
+  // after the Lunge, every other visit he points you at the first technique nobody has yet, in this order; with all of
+  // them he gives up his old friend's hidden dojo (and marks it); in between, he just talks
+  hints: [
+    ['widethrow', 'THE THING THAT ROOSTED ABOVE ME HOARDED A SCROLL. A THROW THAT CUTS A WIDE ARC. IF YOU LEFT IT IN HER NEST, GO BACK UP.'],
+    ['loadedshot', 'A BOW CAN HOLD MORE THAN ONE ARROW, IF YOU ARE PATIENT. THE KEEP OF BRAMBLES HIDES THE TRICK IN ITS LAST ROOM, BEHIND AN EYE.'],
+    ['tripleshot', 'PATIENCE TWICE OVER. ON THE COLD ROAD A WING SITS BEHIND A GATE THAT HATES BEING WATCHED. WHAT GUARDS IT GUARDS THE THIRD ARROW.'],
+  ],
+  dojo: 'YOU KNOW WHAT I KNOW, AND WHERE THE REST WAS HIDDEN. ONE MORE: AN OLD FRIEND WHO FIGHTS WITH OPEN HANDS. HE HID HIS MAT WHERE NOBODY LOOKS. THERE. I MARKED IT.',
+  done: 'YOU FOUND THE OPEN HAND. GOOD. NOW YOU KNOW MORE THAN I DO. DON\'T TELL HIM I SAID SO.',
+  idle: ['THE BLADE IS THE SMALL PART. WHERE YOUR FEET ARE IS THE REST.', 'I CAME UP HERE TO BE FORGOTTEN. YOU ARE MAKING THAT HARD.', 'LISTEN TO THE STORM. IT NEVER STRIKES TWICE IN THE SAME PLACE. NEITHER SHOULD YOU.'],
+};
+// what the master says when someone walks into the Ascent (game/sim.js rotateTalk)
+Content.talkFns = Content.talkFns || {};
+Content.talkFns.master = (sim, e) => {
+  const M = Content.master, t = sim.team; if (!t.taken['climb:roost']) return M.wait;
+  if (!(t.said && t.said.masterTaught)) return { t: M.taught, said: 'masterTaught' };
+  const has = (id) => Object.values(sim.players).some(p => p.items && p.items[id]);
+  const k = t.talk[e.talkKey] = t.talk[e.talkKey] == null ? 0 : t.talk[e.talkKey] + 1;
+  if (k % 2) return M.idle[(k >> 1) % M.idle.length];
+  const miss = M.hints.find(([id]) => !has(id)); if (miss) return miss[1];
+  return has('fists') ? M.done : { t: M.dojo, mark: 'dojo' };
 };
 
 })();
@@ -3398,7 +3448,7 @@ defineEnemy({
     if (sim.time >= e.shriekAt) { e.shriekAt = sim.time + NW.shriekEvery; sim.sfx('shriek', e.lvl, e.x, e.y); const n = sim.ents.filter(o => o.k === 'en' && !o.dead && o.type === 'bat' && o.lvl === e.lvl).length; for (let i = n; i < Math.min(NW.brood, n + 3); i++) sim.spawnMinion(e, 'bat'); }
     if (sim.time >= e.diveAt) { e.st = 1; e.goAt = sim.time + NW.windup; e.tx = p.x; e.ty = p.y; }
   },
-  onDeath(sim, e) { sim.team.taken['climb:roost'] = true; for (const o of sim.ents) if (o.k === 'npc' && o.after === 'climb:roost') o.text = o.textAfter; sim.msg('THE ROOST FALLS SILENT.'); },
+  onDeath(sim, e) { sim.team.taken['climb:roost'] = true; for (const o of sim.ents) if (o.k === 'npc' && o.after === 'climb:roost') { o.text = o.textAfter; o.heard = { said: 'masterTaught' }; } sim.msg('THE ROOST FALLS SILENT.'); },
   anim: { fps: 8, frames: (s, kit) => [s, kit.shiftCols(kit.shiftCols(s, 0, 4, -3), 11, 15, -3), kit.shiftCols(kit.shiftCols(s, 0, 4, 2), 11, 15, 2)] },
   pal: { P: '#3a2440', p: '#7a4a6a' },
   sprite: [
@@ -5934,7 +5984,7 @@ function genClimb(W, rnd) {
     const r = main[N - ROOST]; fight.links[r.id] = r.links[fight.id] = 1; const si = L.idx(gx + 1, gy + 2); L.props[si] = PR.SIGN; L.signText[si] = 'THE GATE OPENS ONLY WHEN IT IS NOT SEEN.'; }
   // the master's cave: a cracked wall off the climb (a bomb opens it), hard to spot
   { const r = main[N - 5], cy = r.ry * DSY + 4, ci = L.idx(3 * DSX, cy); L.set(3 * DSX, cy, TL.CLIFFCRACK); L.wallZ[ci] = r.base; master.links[r.id] = r.links[master.id] = 1;
-    const mx0 = master.rx * DSX, my0 = master.ry * DSY; L.npcs.push({ x: mx0 + 8.5, y: my0 + 3.5, spr: 'swordmaster', text: Content.master.wait, after: 'climb:roost', textAfter: Content.master.taught });
+    const mx0 = master.rx * DSX, my0 = master.ry * DSY; L.npcs.push({ x: mx0 + 8.5, y: my0 + 3.5, spr: 'swordmaster', text: Content.master.wait, after: 'climb:roost', textAfter: Content.master.taught, talk: 'master' }); // what he says next: Content.talkFns.master
     L.shop.push({ x: mx0 + 5.5, y: my0 + 4.5, item: 'lunge', price: 0, gift: true, cond: 'roost', condShow: true, condText: Content.master.locked });
     for (const [dx, dy] of [[2, 2], [9, 6]]) L.props[L.idx(mx0 + dx, my0 + dy)] = PR.FLAME; }
   // who's on the way up: bats all the way, magmites where the lava runs, frostlings where it's frozen, a snow wolf near the top
@@ -6378,7 +6428,10 @@ function genCave(W, id, kind, exit, rnd) {
     const item = Array.isArray(s.item) ? rnd.pick(s.item) : s.item; // a list means "one of these, chosen per world"
     L.shop.push({ x: s.x + 0.5, y: 4.5, item, price: s.price, gift: s.gift, needHearts: s.needHearts, unique: s.unique, cond: s.cond, choose: s.choose ? 'h' + id : undefined });
   }
-  if (c.npc) L.npcs.push({ x: 6.5, y: 2.5, spr: c.npc, text: c.text || rnd.pick(c.lore && Content.lore ? Content.lore : Content.hints) }); // lore: a line of the land's passing talk (content/grottos.js)
+  if (c.npc) { // lore: a line of the land's passing talk (content/grottos.js). lines: what they say on later visits (sim.rotateTalk)
+    const src = c.lore && Content.lore ? Content.lore : Content.hints; const text = c.text || rnd.pick(src);
+    const lines = c.noTalk ? null : c.text ? [c.text, ...(c.talk || []), ...((Content.talkPool || {})[c.npc] || (/^oldman|^hermit/.test(c.npc) ? Content.talkPool.oldman : []) || [])] : [...src.slice(src.indexOf(text)), ...src.slice(0, src.indexOf(text))];
+    L.npcs.push({ x: 6.5, y: 2.5, spr: c.npc, text, lines }); }
 }
 
 // ---------- DUNGEONS ----------
@@ -6784,8 +6837,8 @@ class Sim {
   }
   // ---- teleport ----
   teleport(p, lvl, x, y, a) {
-    p.lvl = lvl; p.x = x; p.y = y; p.a = a; p.webbed = null; this.ev({ t: 'tp', pid: p.id, lvl, x, y, a });
-    this.initLevel(lvl);
+    const from = p.lvl; p.lvl = lvl; p.x = x; p.y = y; p.a = a; p.webbed = null; this.ev({ t: 'tp', pid: p.id, lvl, x, y, a });
+    this.initLevel(lvl); if (from !== lvl && !Object.values(this.players).some(o => o !== p && o.lvl === lvl)) this.rotateTalk(lvl);
     if (this.W.levels[lvl] && this.W.levels[lvl].kind === 'tunnel') { const T = this.W.levels[lvl]; this.ev({ t: 'title', pid: p.id, text: T.label, sub: T.sub || (T.tunnelBiome === 'snow' ? 'TO THE FROZEN REACH' : 'TO THE CINDER WASTES') }); }
     if (lvl === 'dbg') { this.ev({ t: 'title', pid: p.id, text: 'TEST ZONE', sub: 'DEBUG' }); // and its training dummies (world.js genTestZone L.dummies)
       for (const [type, x, y] of (this.W.levels.dbg.dummies || [])) if (!this.ents.some(e => e.k === 'en' && e.lvl === 'dbg' && e.type === type && !e.dead)) { const d = this.spawnEnemy(type, 'dbg', x, y, {}); d.spawnFx = 0; d.f = Math.PI / 2; } }
@@ -6907,11 +6960,30 @@ class Sim {
     if (this.levelInit[L.id]) { for (const n of L.npcs) this.spawn({ k: 'npc', lvl: L.id, x: n.x, y: n.y, spr: n.spr, text: n.text, sc: 0.95 }); this.layWardShield(L); }
   }
   layWardShield(L) { const tk = L.id + ':wardshield'; if (this.team.taken[tk] || this.ents.some(e => e.tk === tk && !e.dead)) return; this.spawn({ k: 'pick', lvl: L.id, x: 8.3, y: 2.8, item: 'wardshield', tk, perm: true, spr: 'wardshield', sc: 0.6, z: 0.02, team: true }); }
+  // ---- ROTATING TALK: keepers and old men move on to their next line each time someone walks in (content/caves.js talk,
+  // world.js genCave lines; team.talk counts visits, saved). One-off lines (the Wardhold line, the grudge, refills) win.
+  // A line { t, mark } marks a place on the Wilds map once someone has stood beside them while it's being said (updateHeard).
+  rotateTalk(lvl) {
+    const tk = this.team.talk = this.team.talk || {};
+    for (const e of this.ents) {
+      if (e.k !== 'npc' || e.lvl !== lvl || e.dead || e.restoreAt || this.team.taken['refill:' + lvl] || !e.talkKey) continue;
+      let line = null;
+      if (e.talk && Content.talkFns && Content.talkFns[e.talk]) line = Content.talkFns[e.talk](this, e);
+      else if (e.lines && e.lines.length > 1) { const k = tk[e.talkKey] = tk[e.talkKey] == null ? 0 : tk[e.talkKey] + 1; line = e.lines[k % e.lines.length]; }
+      if (!line) continue; if (typeof line === 'string') line = { t: line };
+      e.text = line.t; e.heard = (line.mark || line.said) ? { mark: line.mark, said: line.said } : null;
+    }
+  }
+  updateHeard(plist) {
+    for (const e of this.ents) { if (e.k !== 'npc' || !e.heard || e.dead) continue; const p = plist.find(q => q.alive && q.lvl === e.lvl && dist2(q.x, q.y, e.x, e.y) < 2.45 * 2.45); if (!p) continue;
+      const h = e.heard; e.heard = null; if (h.said) (this.team.said = this.team.said || {})[h.said] = true;
+      if (h.mark) { const m = this.team.marks = this.team.marks || []; if (!m.includes(h.mark)) { m.push(h.mark); this.sfx('secret', e.lvl); this.ev({ t: 'hint', pid: p.id, text: 'MARKED ON YOUR MAP' }); } } }
+  }
   // ---- level init (static entities) ----
   initLevel(id) {
     if (this.levelInit[id]) return; this.levelInit[id] = true;
     const L = this.W.levels[id];
-    for (const n of L.npcs) this.spawn({ k: 'npc', lvl: id, x: n.x, y: n.y, spr: n.spr, text: this.team.taken['refill:' + id] ? Content.refillText : n.after && this.team.taken[n.after] ? n.textAfter : n.text, after: n.after, textAfter: n.textAfter, sc: 0.95 });
+    L.npcs.forEach((n, ni) => this.spawn({ k: 'npc', lvl: id, x: n.x, y: n.y, spr: n.spr, text: this.team.taken['refill:' + id] ? Content.refillText : n.after && this.team.taken[n.after] ? n.textAfter : n.text, after: n.after, textAfter: n.textAfter, lines: n.lines, talk: n.talk, talkKey: id + ':' + ni, sc: 0.95 }));
     if (id === this.W.startCave && this.team.fallen) this.layWardShield(L);
     if (this.team.taken['refill:' + id]) this.openRefill(id);
     L.shop.forEach((s, i) => {
@@ -6953,7 +7025,7 @@ class Sim {
     // groups activation
     for (const p of plist) if (p.alive) this.activateGroupFor(p);
     this.updateGroups(dt, plist);
-    this.updateFirstDoor(plist); this.coolGrudge(dt);
+    this.updateFirstDoor(plist); this.updateHeard(plist); this.coolGrudge(dt);
     // entities
     for (const e of this.ents) { if (!active.has(e.lvl)) continue; this.updateEnt(e, dt); }
     this.ents = this.ents.filter(e => !e.dead);
@@ -7667,7 +7739,7 @@ class Sim {
     const en = []; for (const e of this.ents) if (e.lvl === p.lvl) en.push(this.entView(e, p));
     const pl = []; for (const o of Object.values(this.players)) pl.push([o.id, o.lvl, Math.round(o.x * 100) / 100, Math.round(o.y * 100) / 100, Math.round(o.a * 100) / 100, o.color, o.armor, o.cls, o.alive ? 1 : 0, o.atk, o.name, Math.round(o.revive / REVIVE_TIME * 100) / 100, o.hp, o.maxHp, o.reviver || 0, o.z || 0]); // [15] z: feet height (ledges, the cloak's lift)
     const me = {}; for (const k of ['lvl', 'hp', 'maxHp', 'gems', 'bombs', 'maxBombs', 'arrows', 'maxArrows', 'swordMax', 'armorMax', 'arrowType', 'wandEl', 'sword', 'armor', 'items', 'favs', 'ring', 'armMode', 'potions', 'alive', 'cls', 'sel', 'color', 'name', 'dbg', 'god']) me[k] = p[k]; me.spellCd = Math.max(0, Math.round(((p.spellReady || 0) - this.time) * 10) / 10); me.chill = p.chill > 0 ? 1 : 0; me.mirror = this.reflectOpen(p) ? 1 : 0; me.webbed = p.webbed ? Math.round((this.time - p.webbed.at) * 10) / 10 : -1; me.silk = p.silk > 0 ? 1 : 0; me.armReady = this.time >= (p.armSwapAt || 0) ? 1 : 0; me.ward = this.wardReady(p) ? 1 : 0; me.poison = p.poisonTicks > 0 ? p.poisonTicks : 0; me.fly = this.flying(p) ? Math.round((p.flyUntil - this.time) * 10) / 10 : 0; me.respawnIn = p.alive ? 0 : Math.max(0, Math.ceil(RESPAWN_WAIT - (this.time - (p.downAt || 0))));
-    return { t: 's', paused: !!this.paused, pausedBy: this.pausedBy, me, pl, en, team: { keys: this.team.keys, maps: this.team.maps, comps: this.team.comps, shards: this.team.shards, done: this.team.done, relics: this.team.relics, fallen: !!this.team.fallen, grudge: this.team.grudge || 0, refills: Object.keys(this.team.taken).filter(k => k.startsWith('refill:') && this.team.taken[k]).map(k => k.slice(7)) }, vp: this.ventPhase(), rg: this.rigCodes(p.lvl), fz: this.frozenList(p.lvl), mv: this.modVer, over: this.over > 0 };
+    return { t: 's', paused: !!this.paused, pausedBy: this.pausedBy, me, pl, en, team: { keys: this.team.keys, maps: this.team.maps, comps: this.team.comps, shards: this.team.shards, done: this.team.done, relics: this.team.relics, fallen: !!this.team.fallen, grudge: this.team.grudge || 0, marks: this.team.marks || [], refills: Object.keys(this.team.taken).filter(k => k.startsWith('refill:') && this.team.taken[k]).map(k => k.slice(7)) }, vp: this.ventPhase(), rg: this.rigCodes(p.lvl), fz: this.frozenList(p.lvl), mv: this.modVer, over: this.over > 0 };
   }
   // ---- save ----
   makeSave() {
@@ -7677,7 +7749,7 @@ class Sim {
     const tileNames = []; for (const k in TL) tileNames[TL[k]] = k;
     let mods = this.mods; if (this.tempTiles.length) { mods = JSON.parse(JSON.stringify(this.mods)); for (const t of this.tempTiles) if (mods[t.lvl] && mods[t.lvl][t.i]) mods[t.lvl][t.i][0] = t.orig; } // temporary tiles are saved as they'll end up
     const propNames = PROPS.slice();
-    return { v: SAVE_VERSION, tileNames, propNames, seed: this.W.seed, mode: this.W.mode, team: { keys: this.team.keys, maps: this.team.maps, comps: this.team.comps, shards: this.team.shards, done: this.team.done, relics: this.team.relics, taken: this.team.taken, cleared: cl, fallen: !!this.team.fallen, wardLine: !!this.team.wardLine, grudge: this.team.grudge || 0, grudgePeak: this.team.grudgePeak || 0, said: this.team.said || {} }, mods, players, time: Date.now() };
+    return { v: SAVE_VERSION, tileNames, propNames, seed: this.W.seed, mode: this.W.mode, team: { keys: this.team.keys, maps: this.team.maps, comps: this.team.comps, shards: this.team.shards, done: this.team.done, relics: this.team.relics, taken: this.team.taken, cleared: cl, fallen: !!this.team.fallen, wardLine: !!this.team.wardLine, grudge: this.team.grudge || 0, grudgePeak: this.team.grudgePeak || 0, said: this.team.said || {}, talk: this.team.talk || {}, marks: this.team.marks || [] }, mods, players, time: Date.now() };
   }
   loadSave(s) {
     s = migrateSave(s);
@@ -8368,6 +8440,14 @@ function drawBigMap(st) {
       const px0 = x0 + f.x * sc - 2, py0 = y0 + f.y * sc - 9; const K = rgb(20, 16, 24), Rd = rgb(240, 60, 90), Gl = rgb(200, 220, 240);
       rect(px0 + 1, py0, 3, 1, rgb(150, 100, 60)); rect(px0 + 1, py0 + 1, 3, 2, Gl); rect(px0, py0 + 3, 5, 4, Rd); px(px0 + 1, py0 + 4, rgb(255, 200, 220)); frame(px0 - 1, py0 + 2, 7, 6, K);
     }
+  }
+  // places someone told you about (team.marks, content/caves.js Content.mapMarks): drawn even where you haven't been
+  for (const m of st.team.marks || []) {
+    let at = null; if (m === 'master' && st.world.climb) { const c = st.world.climb.mouth; at = [Math.floor(c.x) + 3, Math.floor(c.y) + 1]; } // beside the foot of the stair up the mountain
+    if (m === 'dojo') for (const r of Lo.regions) for (const f of r.features) if (f.type === 'cave' && f.kind === 'dojo') at = [f.x, f.y];
+    if (!at) continue; const px0 = x0 + at[0] * sc - 2, py0 = Math.max(y0 + 1, y0 + at[1] * sc - 9), K = rgb(20, 16, 24), blink = Math.floor(R.time * 2) & 1;
+    if (m === 'master') { rect(px0 + 2, py0, 1, 6, rgb(230, 236, 250)); rect(px0, py0 + 4, 5, 1, rgb(200, 160, 60)); rect(px0 + 2, py0 + 5, 1, 2, rgb(120, 70, 30)); frame(px0 - 1, py0 - 1, 7, 9, blink ? K : rgb(255, 220, 120)); }
+    else { rect(px0, py0 + 1, 5, 4, rgb(232, 184, 140)); rect(px0, py0 + 1, 5, 1, rgb(250, 210, 170)); px(px0 + 1, py0 + 3, rgb(150, 100, 70)); px(px0 + 3, py0 + 3, rgb(150, 100, 70)); frame(px0 - 1, py0, 7, 6, blink ? K : rgb(255, 220, 120)); }
   }
   for (const p of st.players) {
     const pos = owSpot(st.world, p); if (!pos) continue; const c = p[0] === st.myId ? rgb(255, 255, 255) : c32(hexToRgb((PCOLORS.find(c => c.name === p[5]) || PCOLORS[0]).c));
@@ -9365,7 +9445,7 @@ function updatePauseInfo() {
     { const o = document.createElement('option'); o.value = ''; o.textContent = 'NORMAL'; $('pDbgElite').appendChild(o); } for (const el of Content.elites) { const o = document.createElement('option'); o.value = el.id; o.textContent = el.name; $('pDbgElite').appendChild(o); }
     for (let d = 1; d <= NDUNGEONS(); d++) { const b = document.createElement('button'); b.textContent = d <= 9 ? 'BOSS ' + d : 'BOSS ' + (Content.dungeons[d].mapLabel || d); b.onclick = () => { sendAction({ t: 'dbgboss', d }); resume(); }; $('pDbgBosses').appendChild(b); }
   }
-  if (dOn && !$('pWarps').childElementCount) { const mk = (label, to) => { const b = document.createElement('button'); b.textContent = label; b.onclick = () => { sendAction({ t: 'warp', to }); resume(); }; $('pWarps').appendChild(b); }; mk('WILDS', 'ow'); if (G.world && G.world.levels.isle) mk('ISLE', 'isle'); for (let d = 1; d <= NDUNGEONS(); d++) if (G.world && G.world.levels['d' + d]) mk(d <= 9 ? 'L' + d : (Content.dungeons[d].mapLabel || 'L' + d), 'd' + d); }
+  if (dOn && !$('pWarps').childElementCount) { const mk = (label, to) => { const b = document.createElement('button'); b.textContent = label; b.onclick = () => { sendAction({ t: 'warp', to }); resume(); }; $('pWarps').appendChild(b); }; mk('WILDS', 'ow'); if (G.world && G.world.levels.climb) mk('ASCENT', 'climb'); if (G.world && G.world.levels.isle) mk('ISLE', 'isle'); for (let d = 1; d <= NDUNGEONS(); d++) if (G.world && G.world.levels['d' + d]) mk(d <= 9 ? 'L' + d : (Content.dungeons[d].mapLabel || 'L' + d), 'd' + d); }
   const kinds = NET.role === 'host' ? Object.values(NET.conns).map(c => c.kind).filter(Boolean) : NET.kind ? [NET.kind] : [];
   $('pInfo').title = kinds.length ? 'Connection: ' + kinds.join(', ') : '';
   $('pInfo').textContent = (NET.role === 'host' ? 'HOSTING' : NET.role === 'client' ? 'CONNECTED' : 'SOLO') + ' - ' + n + ' PLAYER' + (n > 1 ? 'S' : '') + (me ? ' - ' + (me.cls === 'monk' ? 'MARTIAL ARTIST' : 'SWORD') : '') + (kinds.length ? ' - ' + [...new Set(kinds)].join('/') : '');

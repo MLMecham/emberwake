@@ -96,11 +96,10 @@ Not built yet. Parked here so they don't get lost. Newest at the bottom.
   Orb), each bringing adepts, replacing the repeated Orb boss there.
 
 ## The master and the hidden teachers (agreed, not built yet)
-- **The master's hints.** After the Lunge, the mountain master hints at the other techniques, one at a time; once you have every
-  combat skill he tells you where the monks' teacher (the hidden dojo) is. "THE LIVING WENT UNDER THE ROOTS": other hermits hide
-  underground.
-- **The first shop's merchant** gets a rotating line hinting at "an old blade up the mountain" and marks the master on the map.
-- **Rotating dialog** for every shopkeeper and old man (a few lines each, cycling); one-off story lines stay one-off.
+- BUILT: the master's hints (Wide Throw, Loaded Shot, Loaded Shot 2, then the dojo, marked), the first shop's line that marks
+  the master, and rotating talk for every keeper and old man. When the Heavy Pommel gets its place (the Iron Cathedral knight),
+  add it to `Content.master.hints`; same for any technique that gets placed later. "THE LIVING WENT UNDER THE ROOTS": other
+  hermits hide underground.
 - **The Iron Cathedral knight (Heavy Pommel).** A knight with his helmet off, a skull face, asks you to put his brothers to rest
   (about 8 knights in dungeon 7). Then he kneels: "STRIKE THE HILT HOME." You pommel him and he leaves the Heavy Pommel scroll. He
   never names the Wardhold or explains the crest.

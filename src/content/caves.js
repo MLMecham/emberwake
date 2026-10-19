@@ -2,6 +2,9 @@
 // name: shown on the map while you're inside. npc: sprite id. text: what they say. stock: items on the counter, each { x (column 1-11), item, price }.
 //   gift: free.  needHearts: requires that many hearts.  choose: picking one removes the others with the same tag.
 //   unique: the martial artist can't take it.
+//   talk: more lines. Every time someone walks into the cave the keeper moves on to the next one: text first, then talk, then
+//   the common lines for their kind (Content.talkPool). A line can be { t, mark } to mark a place on the map once heard
+//   (Content.mapMarks). noTalk: always the same line. Hint and lore caves go round their whole list.
 // Which caves appear on the map is the CAVE_MIX list in game/world.js.
 'use strict';
 defineCave('sword0', { name: 'OLD MAN', npc: 'oldman', text: 'THE DARK IS LONG, WAYFARER. STEEL IS BETTER COMPANY THAN COURAGE ALONE.', stock: [{ x: 6, item: 'sword1', price: 0, gift: true }] });
@@ -25,3 +28,26 @@ defineHints([
   'KNIGHTS GUARD THEIR FRONT. STRIKE THEM FROM THE SIDE.',
   'IN THE MOUNTAINS, A MASTER WAITS BEHIND STONE. SEEK THE ONE WHO FIGHTS WITH OPEN HANDS.',
 ]);
+
+// ---- rotating talk (game/sim.js rotateTalk) ----
+const talk = (kind, lines) => { Content.caves[kind].talk = lines; };
+talk('sword0', ['SWING, STEP BACK, SWING AGAIN. THAT IS ALL A SWORD IS.', 'THE WILDS GET COLDER EVERY YEAR. NOBODY SAYS WHY.']);
+talk('sword1', ['A BLADE THAT HEAVY WANTS A HEART TO MATCH IT. COME BACK STRONGER.']);
+talk('sword2', ['THE MYTHRIL REMEMBERS EVERY HAND THAT FAILED IT. DON\'T BE ONE MORE.']);
+talk('shop1', [{ t: 'THERE\'S AN OLD SWORDSMAN UP THE STORM MOUNTAIN, PAST THE HIGH WOOD AT THE TOP OF THE WILDS. TAUGHT ME TO HOLD A KNIFE. HERE, I\'LL MARK IT ON YOUR MAP. NOW BUY SOMETHIN\'!', mark: 'master' },
+  'BOMBS CRACK WALLS. CANDLES BURN BUSHES. HEARTS... WELL, HEARTS ARE HEARTS.']);
+talk('shop2', ['ARROWS DON\'T GROW ON TREES. WELL. THE STICKS DO.', 'THE POTION\'S DEAR, I KNOW. SO\'S A FUNERAL.']);
+talk('armor', ['CHAIN TURNS A BITE INTO A BRUISE. MOSTLY.', 'PLATE? HAH. FIND IT YOURSELF. I SELL TO PEOPLE WHO COME BACK.']);
+talk('potion', ['RED FOR ONE GULP, BLUE FOR TWO. DON\'T ASK WHAT\'S IN THEM.', 'IF YOU FEEL THE COLD IN YOUR BONES, DRINK. IF YOU FEEL NOTHING, DRINK FASTER.']);
+talk('heart', ['ONLY ONE. THE OTHER WAITS FOR WHOEVER FINDS ME NEXT.']);
+talk('gift', ['YOU AGAIN? THE SECRET\'S BEEN KEPT. GO ON, GET.', 'I\'D GIVE YOU MORE, BUT THEN IT WOULDN\'T BE A SECRET. IT\'D BE A SHOP.']);
+talk('bombshop', ['DIGGING\'S HONEST WORK. BLOWING THINGS UP IS MORE FUN.', 'WATCH THE CEILING ON YOUR WAY OUT. I DID SAY BOMBS.']);
+talk('dojo', ['OPEN HANDS, OPEN EYES. THE REST IS BREATHING.', 'THE OLD BLADE ON THE MOUNTAIN SENT YOU? HOH! HE STILL OWES ME A FIGHT.']);
+// the common lines, by who's talking
+Content.talkPool = {
+  merchant: ['COME BACK WHEN YOU\'RE RICHER. OR NOW. NOW\'S GOOD TOO.', 'GEMS SPEND THE SAME, NO MATTER WHOSE POCKET THEY FELL OUT OF.'],
+  oldman: ['IT\'S DANGEROUS OUT THERE. YOU KNOW THAT BY NOW.', 'SIT A WHILE. NO? NOBODY EVER SITS.'],
+};
+// places a line can mark on the Wilds map (engine/render.js draws them; team.marks)
+Content.mapMarks = ['master', 'dojo'];
+

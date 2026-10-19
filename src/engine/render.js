@@ -674,6 +674,14 @@ function drawBigMap(st) {
       rect(px0 + 1, py0, 3, 1, rgb(150, 100, 60)); rect(px0 + 1, py0 + 1, 3, 2, Gl); rect(px0, py0 + 3, 5, 4, Rd); px(px0 + 1, py0 + 4, rgb(255, 200, 220)); frame(px0 - 1, py0 + 2, 7, 6, K);
     }
   }
+  // places someone told you about (team.marks, content/caves.js Content.mapMarks): drawn even where you haven't been
+  for (const m of st.team.marks || []) {
+    let at = null; if (m === 'master' && st.world.climb) { const c = st.world.climb.mouth; at = [Math.floor(c.x) + 3, Math.floor(c.y) + 1]; } // beside the foot of the stair up the mountain
+    if (m === 'dojo') for (const r of Lo.regions) for (const f of r.features) if (f.type === 'cave' && f.kind === 'dojo') at = [f.x, f.y];
+    if (!at) continue; const px0 = x0 + at[0] * sc - 2, py0 = Math.max(y0 + 1, y0 + at[1] * sc - 9), K = rgb(20, 16, 24), blink = Math.floor(R.time * 2) & 1;
+    if (m === 'master') { rect(px0 + 2, py0, 1, 6, rgb(230, 236, 250)); rect(px0, py0 + 4, 5, 1, rgb(200, 160, 60)); rect(px0 + 2, py0 + 5, 1, 2, rgb(120, 70, 30)); frame(px0 - 1, py0 - 1, 7, 9, blink ? K : rgb(255, 220, 120)); }
+    else { rect(px0, py0 + 1, 5, 4, rgb(232, 184, 140)); rect(px0, py0 + 1, 5, 1, rgb(250, 210, 170)); px(px0 + 1, py0 + 3, rgb(150, 100, 70)); px(px0 + 3, py0 + 3, rgb(150, 100, 70)); frame(px0 - 1, py0, 7, 6, blink ? K : rgb(255, 220, 120)); }
+  }
   for (const p of st.players) {
     const pos = owSpot(st.world, p); if (!pos) continue; const c = p[0] === st.myId ? rgb(255, 255, 255) : c32(hexToRgb((PCOLORS.find(c => c.name === p[5]) || PCOLORS[0]).c));
     const bx = x0 + pos.x * sc, by = y0 + pos.y * sc;

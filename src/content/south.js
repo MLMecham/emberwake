@@ -50,4 +50,25 @@ Content.master = {
   wait: 'YOU CLIMBED. GOOD. I TEACH THE BLADE, BUT NOT WITH THAT THING SCREAMING OVER MY HEAD. IT ROOSTS ABOVE, BEHIND THE GATE THAT WON\'T BE WATCHED. MAKE IT QUIET.',
   taught: 'QUIET AT LAST. HOLD THE GRIP UNTIL IT RINGS, THEN GO. ...THE LIVING WENT UNDER THE ROOTS, YOU KNOW. THERE ARE OTHERS LIKE ME, HIDING. FIND THEM.',
   locked: 'HE WAVES YOU OFF. "NOT WITH THAT SHRIEKING. MAKE IT QUIET FIRST."',
+  // after the Lunge, every other visit he points you at the first technique nobody has yet, in this order; with all of
+  // them he gives up his old friend's hidden dojo (and marks it); in between, he just talks
+  hints: [
+    ['widethrow', 'THE THING THAT ROOSTED ABOVE ME HOARDED A SCROLL. A THROW THAT CUTS A WIDE ARC. IF YOU LEFT IT IN HER NEST, GO BACK UP.'],
+    ['loadedshot', 'A BOW CAN HOLD MORE THAN ONE ARROW, IF YOU ARE PATIENT. THE KEEP OF BRAMBLES HIDES THE TRICK IN ITS LAST ROOM, BEHIND AN EYE.'],
+    ['tripleshot', 'PATIENCE TWICE OVER. ON THE COLD ROAD A WING SITS BEHIND A GATE THAT HATES BEING WATCHED. WHAT GUARDS IT GUARDS THE THIRD ARROW.'],
+  ],
+  dojo: 'YOU KNOW WHAT I KNOW, AND WHERE THE REST WAS HIDDEN. ONE MORE: AN OLD FRIEND WHO FIGHTS WITH OPEN HANDS. HE HID HIS MAT WHERE NOBODY LOOKS. THERE. I MARKED IT.',
+  done: 'YOU FOUND THE OPEN HAND. GOOD. NOW YOU KNOW MORE THAN I DO. DON\'T TELL HIM I SAID SO.',
+  idle: ['THE BLADE IS THE SMALL PART. WHERE YOUR FEET ARE IS THE REST.', 'I CAME UP HERE TO BE FORGOTTEN. YOU ARE MAKING THAT HARD.', 'LISTEN TO THE STORM. IT NEVER STRIKES TWICE IN THE SAME PLACE. NEITHER SHOULD YOU.'],
+};
+// what the master says when someone walks into the Ascent (game/sim.js rotateTalk)
+Content.talkFns = Content.talkFns || {};
+Content.talkFns.master = (sim, e) => {
+  const M = Content.master, t = sim.team; if (!t.taken['climb:roost']) return M.wait;
+  if (!(t.said && t.said.masterTaught)) return { t: M.taught, said: 'masterTaught' };
+  const has = (id) => Object.values(sim.players).some(p => p.items && p.items[id]);
+  const k = t.talk[e.talkKey] = t.talk[e.talkKey] == null ? 0 : t.talk[e.talkKey] + 1;
+  if (k % 2) return M.idle[(k >> 1) % M.idle.length];
+  const miss = M.hints.find(([id]) => !has(id)); if (miss) return miss[1];
+  return has('fists') ? M.done : { t: M.dojo, mark: 'dojo' };
 };
