@@ -45,7 +45,7 @@ const AI = {
         const L = sim.W.levels[e.lvl];
         for (let i = 0; i < 20; i++) { const a = Math.random() * TAU, r = 2.5 + Math.random() * 2; const x = p.x + Math.cos(a) * r, y = p.y + Math.sin(a) * r; if (AI.safeAt(L, x, y) && (!e.b || (x > e.b.x0 && x < e.b.x1 && y > e.b.y0 && y < e.b.y1))) { sim.puff(e, 0.8); e.x = x; e.y = y; break; } }
         e.st = 1; e.tm = 0.7;
-      } else if (e.st === 1 && p) { sim.fireProj(proj, e.lvl, e.x, e.y, Math.atan2(p.y - e.y, p.x - e.x), 'e', null, { dmg: dmg * e.dmgMul }); sim.sfx('magic', e.lvl, e.x, e.y); e.st = 0; e.tm = 1.6 + Math.random(); }
+      } else if (e.st === 1 && p) { const a = Math.atan2(p.y - e.y, p.x - e.x); if (typeof proj === 'function') proj(sim, e, a); else { sim.fireProj(proj, e.lvl, e.x, e.y, a, 'e', null, { dmg: dmg * e.dmgMul }); sim.sfx(proj === 'fire' ? 'fire' : proj === 'stormbolt' ? 'zap' : 'magic', e.lvl, e.x, e.y); } e.st = 0; e.tm = 1.6 + Math.random(); }
       else e.tm = 1;
     };
   },

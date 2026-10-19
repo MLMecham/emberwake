@@ -464,6 +464,7 @@ class Sim {
         if (dryRoom) { const alt = room.enemies.filter(t => enemyDef(t) && !enemyDef(t).swim); type = alt.length ? alt[ei % alt.length] : 'slime'; }
         else if (type === 'frog' && rnd() < POISON_FROG_CHANCE) type = 'frog_poison';
       }
+      { const d0 = enemyDef(type); if (d0 && d0.rare && rnd() < d0.rare.chance) type = d0.rare.type; } // e.g. 1 mage in 50 is a bone mage (enemies/wizard.js)
       const def = enemyDef(type); if (!def) return;
       let x, y, tries = 0;
       const at = room.at && room.at[ei]; // a hand-built room can pin where each enemy appears

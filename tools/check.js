@@ -898,6 +898,17 @@ attempt('sealed rooms are one-way', () => {
   const edgeX = dx === x0 ? x0 + 1.23 : dx === x0 + DSX ? x0 + DSX - 0.23 : dx + 0.5, edgeY = dy === y0 ? y0 + 1.23 : dy === y0 + DSY ? y0 + DSY - 0.23 : dy + 0.5;
   __ok(D.solidAt(dx + 0.5, dy + 0.5, { mx: edgeX, my: edgeY }), 'pressed right up against it from inside, still a wall');
 });
+attempt('skeleton mages', () => {
+  const sim = freshSim(); const p = sim.players.p1; p.god = true; sim.teleport(p, 'dbg', 20.5, 20.5, 0);
+  const cast = (type) => { for (const e of sim.ents) if (e.k !== 'pl') e.dead = true; sim.ents = sim.ents.filter(e => !e.dead); const m = sim.spawnEnemy(type, 'dbg', 23.5, 20.5, {}); m.spawnFx = 0; m.st = 1; m.tm = 0; m.dmgMul = 1; enemyDef(type).ai(sim, m, 1 / 60, { p }); return [m, sim.ents.filter(e => e.k === 'proj' && !e.dead).map(e => e.type || e.id)]; };
+  for (const [type, shot] of [['wizard', 'magic'], ['wizard_fire', 'fire'], ['wizard_storm', 'stormbolt']]) { const [, shots] = cast(type); __ok(shots.length === 1 && JSON.stringify(sim.ents.find(e => e.k === 'proj')).includes(shot), type + ' casts ' + shot); }
+  const [bm, bs] = cast('wizard_bone'); __ok(bs.length === 3, 'a bone mage throws three shards'); __ok(Content.projectiles.boneshard.blockable && !Content.projectiles.stormbolt.blockable, 'bone shards can be blocked, storm bolts cannot');
+  for (let i = 0; i < 2; i++) { bm.st = 1; bm.tm = 0; enemyDef('wizard_bone').ai(sim, bm, 1 / 60, { p }); }
+  __ok(sim.ents.filter(e => e.k === 'en' && !e.dead && e.type === 'skeleton' && e.raisedBy === bm.id).length === 1, 'every third cast raises a skeleton');
+  for (let i = 0; i < 6; i++) { bm.st = 1; bm.tm = 0; enemyDef('wizard_bone').ai(sim, bm, 1 / 60, { p }); } __ok(sim.ents.filter(e => e.k === 'en' && !e.dead && e.raisedBy === bm.id).length === 2, 'two raised skeletons at most');
+  __ok(['wizard', 'wizard_fire', 'wizard_storm'].every(t => enemyDef(t).rare && enemyDef(t).rare.type === 'wizard_bone' && enemyDef(t).rare.chance === 0.02) && !enemyDef('wizard_bone').rare, 'one mage in fifty is a bone mage');
+  __ok(['wizard_bare', 'wizard_fire_bare', 'wizard_storm_bare', 'wizard_bone_bare'].every(id => !!SPR[id]), 'every mage has a staffless look');
+});
 attempt('the Silkwood', () => {
   const sim = freshSim(); const p = sim.players.p1; p.god = false; p.hp = p.maxHp = 400; const W = sim.W; const D = W.levels.d13, O = W.levels.ow;
   __ok(!!W.dungeons[13] && !!W.silkMouth && O.tiles[W.silkMouth.idx] === TL.SILKSEAL && D.tiles[D.passSeal] === TL.WEBSEAL && D.exits.length === 2, 'a gate, a sealed far mouth, and a sealed way out beyond the boss');

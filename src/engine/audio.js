@@ -51,6 +51,9 @@ function sfx(name, vol) {
     case 'arrow': noise(0.1, 0.2 * v, 5000); break;
     case 'boomer': tone(700, 0.3, 'triangle', 0.1 * v, 1000); break;
     case 'fire': noise(0.4, 0.25 * v, 1200); break;
+    case 'zap': noise(0.08, 0.22 * v, 6000); tone(1800, 0.08, 'square', 0.08 * v, 400); tone(2400, 0.06, 'square', 0.06 * v, 900, AU.ctx.currentTime + 0.05); break; // a storm mage's bolt
+    case 'bonecast': tone(520, 0.12, 'triangle', 0.1 * v, 260); noise(0.06, 0.14 * v, 3500, AU.ctx.currentTime + 0.04); break; // bone shards
+    case 'rattle': for (let i = 0; i < 6; i++) noise(0.03, 0.16 * v, 2800, AU.ctx.currentTime + i * 0.05); break; // a skeleton climbs out of the floor
     case 'beam': tone(1400, 0.2, 'square', 0.1 * v, 2000); tone(700, 0.2, 'square', 0.06 * v, 1000); break;
     case 'wave': tone(200, 0.6, 'sawtooth', 0.2 * v, 1600); noise(0.5, 0.25 * v, 3000); break;
     case 'clink': tone(2400, 0.08, 'square', 0.1 * v, 1800); break;

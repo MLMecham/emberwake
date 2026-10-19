@@ -2082,7 +2082,7 @@ const AI = {
         const L = sim.W.levels[e.lvl];
         for (let i = 0; i < 20; i++) { const a = Math.random() * TAU, r = 2.5 + Math.random() * 2; const x = p.x + Math.cos(a) * r, y = p.y + Math.sin(a) * r; if (AI.safeAt(L, x, y) && (!e.b || (x > e.b.x0 && x < e.b.x1 && y > e.b.y0 && y < e.b.y1))) { sim.puff(e, 0.8); e.x = x; e.y = y; break; } }
         e.st = 1; e.tm = 0.7;
-      } else if (e.st === 1 && p) { sim.fireProj(proj, e.lvl, e.x, e.y, Math.atan2(p.y - e.y, p.x - e.x), 'e', null, { dmg: dmg * e.dmgMul }); sim.sfx('magic', e.lvl, e.x, e.y); e.st = 0; e.tm = 1.6 + Math.random(); }
+      } else if (e.st === 1 && p) { const a = Math.atan2(p.y - e.y, p.x - e.x); if (typeof proj === 'function') proj(sim, e, a); else { sim.fireProj(proj, e.lvl, e.x, e.y, a, 'e', null, { dmg: dmg * e.dmgMul }); sim.sfx(proj === 'fire' ? 'fire' : proj === 'stormbolt' ? 'zap' : 'magic', e.lvl, e.x, e.y); } e.st = 0; e.tm = 1.6 + Math.random(); }
       else e.tm = 1;
     };
   },
@@ -2633,6 +2633,14 @@ defineProjectile({ id: 'rock', spr: 'rock', spd: 5, dmg: 1, sc: 0.6, blockable: 
 defineProjectile({ id: 'spear', spr: 'arrow', spd: 6, dmg: 1, z: 0.1, blockable: true });
 defineProjectile({ id: 'magic', elem: 'magic', spr: 'magic', spd: 4.5, dmg: 2, sc: 0.6 });
 defineProjectile({ id: 'fire', elem: 'fire', spr: 'fireball', spd: 4.5, dmg: 2 });
+defineProjectile({ id: 'stormbolt', elem: 'magic', spr: 'stormbolt', spd: 8, dmg: 2, sc: 0.6 }); // a storm mage's crackling bolt (enemies/wizard.js)
+defineProjectile({ id: 'boneshard', spr: 'boneshard', spd: 6, dmg: 2, sc: 0.55, blockable: true }); // a bone mage's shard: physical, so a shield stops it
+defineSprite('stormbolt', [
+  '................', '................', '................', '.........y......', '........yw......', '.......ywy......', '......ywwy......', '.....yyyywy.....',
+  '......ywwwy.....', '......yww.......', '......wy........', '......y.........', '................', '................', '................', '................']);
+defineSprite('boneshard', [
+  '................', '................', '................', '................', '................', '.....kk.........', '....kzzk........', '.....kzzk.......',
+  '......kzzk......', '.......kzzk.....', '........kzzk....', '.........kk.....', '................', '................', '................', '................']);
 // chill: seconds the hero is slowed when it hits
 defineProjectile({ id: 'icebolt', elem: 'ice', spr: 'icebolt', spd: 5, dmg: 1, sc: 0.7, chill: 1.5 });
 defineProjectile({ id: 'icebreath', elem: 'ice', spr: 'icebolt', spd: 6.5, dmg: 2, sc: 0.75, chill: 2.5 });
@@ -4371,44 +4379,65 @@ defineHints(['THE THORN-FOLK ARE MORE THAN THORNLINGS. THE BIG ONES THROW TWO SP
 // ---- src/content/enemies/wizard.js ----
 (function () {
 // ===== content/enemies/wizard.js =====
-// Blinks next to you and casts magic bolts.
+// SKELETON MAGES: bone faces and empty sockets under the hat. Each blinks next to you and casts; the robe tells you what:
+//   FORCE MAGE (purple, the old 'wizard' id) - a slow magic bolt
+//   FIRE MAGE (red) - a fireball (it burns what it lands on)
+//   STORM MAGE (blue) - a fast crackling bolt
+//   BONE MAGE (white, rare: WIZ_BONE_CHANCE of any mage that spawns) - a fan of three bone shards (physical: your shield
+//     stops them, unlike the others) and every third cast raises a skeleton beside it (two at most). Twice as tough.
+// A Heavy Pommel strike knocks the staff away (once any armor is off): no more spells, it blinks away and fights up close.
 'use strict';
-defineEnemy({
-  id: 'wizard',
-  hp: 4, spd: 0, dmg: 2, r: 0.32, sc: 0.9,
-  spawns: { dungeons: [6, 7, 8, 9] },
-  ai: AI.blinkCaster('magic', 2),
-  // a Heavy Pommel strike knocks the staff away: no more spells. It blinks away from you instead, and only fights up close.
-  disarm: 'staff_drop', disarmedSprite: 'wizard_bare', disarmText: 'THE STAFF GOES FLYING!',
-  disarmedAi(sim, e, dt, { p }) {
-    if (e.tm > 0 || !p) return; const L = sim.W.levels[e.lvl];
-    for (let i = 0; i < 20; i++) { const a = Math.atan2(e.y - p.y, e.x - p.x) + (Math.random() - 0.5) * 2, r = 3 + Math.random() * 2; const x = p.x + Math.cos(a) * r, y = p.y + Math.sin(a) * r; if (AI.safeAt(L, x, y) && (!e.b || (x > e.b.x0 && x < e.b.x1 && y > e.b.y0 && y < e.b.y1))) { sim.puff(e, 0.8); e.x = x; e.y = y; break; } }
-    e.tm = 1.8 + Math.random();
-  },
+const WIZ_BONE_CHANCE = 0.02;
+const WIZ_ROWS = [
+  '.......kk.......',
+  '......kPPk......',
+  '.....kPPPPk.....',
+  '....kPPyPPPk..y.',
+  '...kkkkkkkkkk.n.',
+  '....kzkzzkzk..n.',
+  '.....kzkkzk...n.',
+  '....kPPPPPPk.kn.',
+  '...kPpPPPPpPkzn.',
+  '...kPpPPPPpk..n.',
+  '...kPpPyyPpk..n.',
+  '...kPpPPPPpk..n.',
+  '..kPPpPPPPpPk...',
+  '..kPPPPPPPPPk...',
+  '...kkkkkkkkk....',
+  '................',
+];
+const WIZ_BARE = WIZ_ROWS.map((r, i) => i === 3 ? '....kPPyPPPk....' : i >= 4 && i <= 11 ? r.slice(0, 13) + '...' : r).map((r, i) => i === 8 ? '...kPpPPPPpPkz..' : r);
+const WIZ_PAL = {
+  wizard: null, // force: the palette's own purple
+  wizard_fire: { P: '#901c14', p: '#e0502c' },
+  wizard_storm: { P: '#1c3e8c', p: '#58b0f0' },
+  wizard_bone: { P: '#e4e0d4', p: '#9c968a', y: '#a0a0a8' },
+};
+const bareSpr = (id) => id + '_bare';
+function disarmedAi(sim, e, dt, { p }) { // staff gone: it blinks away from you and only fights up close
+  if (e.tm > 0 || !p) return; const L = sim.W.levels[e.lvl];
+  for (let i = 0; i < 20; i++) { const a = Math.atan2(e.y - p.y, e.x - p.x) + (Math.random() - 0.5) * 2, r = 3 + Math.random() * 2; const x = p.x + Math.cos(a) * r, y = p.y + Math.sin(a) * r; if (AI.safeAt(L, x, y) && (!e.b || (x > e.b.x0 && x < e.b.x1 && y > e.b.y0 && y < e.b.y1))) { sim.puff(e, x, y); break; } }
+  e.tm = 1.8 + Math.random();
+}
+function boneCast(sim, e, a) { // three shards, and every third cast a skeleton climbs out of the floor
+  AI.fan(sim, e, 'boneshard', a, 3, 0.5, { dmg: 2 * e.dmgMul }); sim.sfx('bonecast', e.lvl, e.x, e.y);
+  e.casts = (e.casts || 0) + 1;
+  if (e.casts % 3 === 0 && sim.ents.filter(o => o.k === 'en' && !o.dead && o.raisedBy === e.id).length < 2) { const s = sim.spawnMinion(e, 'skeleton'); if (s) { s.raisedBy = e.id; sim.sfx('rattle', e.lvl, s.x, s.y); } }
+}
+const mage = (id, title, opts) => defineEnemy(Object.assign({
+  id, title, hp: 4, spd: 0, dmg: 2, r: 0.32, sc: 0.9,
+  disarm: 'staff_drop', disarmedSprite: bareSpr(id), disarmText: 'THE STAFF GOES FLYING!', disarmedAi,
   anim: { fps: 3, frames: (s, kit) => [s, kit.shiftCols(s, 13, 15, -1), kit.shiftCols(s, 13, 15, -2)] },
-  sprite: [
-    '.......kk.......',
-    '......kPPk......',
-    '.....kPPPPk.....',
-    '....kPPyPPPk..y.',
-    '...kkkkkkkkkk.n.',
-    '....kSwSSwSk..n.',
-    '.....kSSSSk...n.',
-    '....kPPPPPPk.kn.',
-    '...kPpPPPPpPksn.',
-    '...kPpPPPPpk..n.',
-    '...kPpPyyPpk..n.',
-    '...kPpPPPPpk..n.',
-    '..kPPpPPPPpPk...',
-    '..kPPPPPPPPPk...',
-    '...kkkkkkkkk....',
-    '................',
-  ],
-});
+  sprite: WIZ_ROWS, pal: WIZ_PAL[id] || undefined,
+  rare: id === 'wizard_bone' ? null : { type: 'wizard_bone', chance: WIZ_BONE_CHANCE },
+}, opts));
+mage('wizard', 'FORCE MAGE', { spawns: { dungeons: [6, 7, 8, 9] }, ai: AI.blinkCaster('magic', 2) });
+mage('wizard_fire', 'FIRE MAGE', { spawns: { dungeons: [7, 9] }, ai: AI.blinkCaster('fire', 2) });
+mage('wizard_storm', 'STORM MAGE', { spawns: { dungeons: [6, 8, 9] }, ai: AI.blinkCaster('stormbolt', 2) });
+mage('wizard_bone', 'BONE MAGE', { hp: 8, spawns: {}, ai: AI.blinkCaster(boneCast, 2) });
+for (const id of Object.keys(WIZ_PAL)) { if (WIZ_PAL[id]) defineSpriteVariant(bareSpr(id), 'wizard_bare', WIZ_PAL[id]); }
+defineSprite('wizard_bare', WIZ_BARE);
 // without its staff (knocked away by a Heavy Pommel strike)
-defineSprite('wizard_bare', [
-  '.......kk.......', '......kPPk......', '.....kPPPPk.....', '....kPPyPPPk....', '...kkkkkkkkkk...', '....kSwSSwSk....', '.....kSSSSk.....', '....kPPPPPPk....',
-  '...kPpPPPPpPks..', '...kPpPPPPpk....', '...kPpPyyPpk....', '...kPpPPPPpk....', '..kPPpPPPPpPk...', '..kPPPPPPPPPk...', '...kkkkkkkkk....', '................']);
 defineSprite('staff_drop', [ // the wizard's staff, tumbling away
   '................', '................', '..........y.....', '.........yny....', '..........n.....', '.........n......', '........n.......', '.......n........',
   '......n.........', '.....n..........', '....n...........', '...n............', '................', '................', '................', '................']);
@@ -6522,6 +6551,7 @@ class Sim {
         if (dryRoom) { const alt = room.enemies.filter(t => enemyDef(t) && !enemyDef(t).swim); type = alt.length ? alt[ei % alt.length] : 'slime'; }
         else if (type === 'frog' && rnd() < POISON_FROG_CHANCE) type = 'frog_poison';
       }
+      { const d0 = enemyDef(type); if (d0 && d0.rare && rnd() < d0.rare.chance) type = d0.rare.type; } // e.g. 1 mage in 50 is a bone mage (enemies/wizard.js)
       const def = enemyDef(type); if (!def) return;
       let x, y, tries = 0;
       const at = room.at && room.at[ei]; // a hand-built room can pin where each enemy appears
@@ -7873,6 +7903,9 @@ function sfx(name, vol) {
     case 'arrow': noise(0.1, 0.2 * v, 5000); break;
     case 'boomer': tone(700, 0.3, 'triangle', 0.1 * v, 1000); break;
     case 'fire': noise(0.4, 0.25 * v, 1200); break;
+    case 'zap': noise(0.08, 0.22 * v, 6000); tone(1800, 0.08, 'square', 0.08 * v, 400); tone(2400, 0.06, 'square', 0.06 * v, 900, AU.ctx.currentTime + 0.05); break; // a storm mage's bolt
+    case 'bonecast': tone(520, 0.12, 'triangle', 0.1 * v, 260); noise(0.06, 0.14 * v, 3500, AU.ctx.currentTime + 0.04); break; // bone shards
+    case 'rattle': for (let i = 0; i < 6; i++) noise(0.03, 0.16 * v, 2800, AU.ctx.currentTime + i * 0.05); break; // a skeleton climbs out of the floor
     case 'beam': tone(1400, 0.2, 'square', 0.1 * v, 2000); tone(700, 0.2, 'square', 0.06 * v, 1000); break;
     case 'wave': tone(200, 0.6, 'sawtooth', 0.2 * v, 1600); noise(0.5, 0.25 * v, 3000); break;
     case 'clink': tone(2400, 0.08, 'square', 0.1 * v, 1800); break;

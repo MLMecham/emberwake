@@ -9,6 +9,14 @@ defineProjectile({ id: 'rock', spr: 'rock', spd: 5, dmg: 1, sc: 0.6, blockable: 
 defineProjectile({ id: 'spear', spr: 'arrow', spd: 6, dmg: 1, z: 0.1, blockable: true });
 defineProjectile({ id: 'magic', elem: 'magic', spr: 'magic', spd: 4.5, dmg: 2, sc: 0.6 });
 defineProjectile({ id: 'fire', elem: 'fire', spr: 'fireball', spd: 4.5, dmg: 2 });
+defineProjectile({ id: 'stormbolt', elem: 'magic', spr: 'stormbolt', spd: 8, dmg: 2, sc: 0.6 }); // a storm mage's crackling bolt (enemies/wizard.js)
+defineProjectile({ id: 'boneshard', spr: 'boneshard', spd: 6, dmg: 2, sc: 0.55, blockable: true }); // a bone mage's shard: physical, so a shield stops it
+defineSprite('stormbolt', [
+  '................', '................', '................', '.........y......', '........yw......', '.......ywy......', '......ywwy......', '.....yyyywy.....',
+  '......ywwwy.....', '......yww.......', '......wy........', '......y.........', '................', '................', '................', '................']);
+defineSprite('boneshard', [
+  '................', '................', '................', '................', '................', '.....kk.........', '....kzzk........', '.....kzzk.......',
+  '......kzzk......', '.......kzzk.....', '........kzzk....', '.........kk.....', '................', '................', '................', '................']);
 // chill: seconds the hero is slowed when it hits
 defineProjectile({ id: 'icebolt', elem: 'ice', spr: 'icebolt', spd: 5, dmg: 1, sc: 0.7, chill: 1.5 });
 defineProjectile({ id: 'icebreath', elem: 'ice', spr: 'icebolt', spd: 6.5, dmg: 2, sc: 0.75, chill: 2.5 });
